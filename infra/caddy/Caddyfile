@@ -1,0 +1,16 @@
+http://sentra.hoya.kim {
+  encode gzip
+
+  handle /api/* {
+    uri strip_prefix /api
+    reverse_proxy api:3000
+  }
+
+  handle /health {
+    reverse_proxy api:3000
+  }
+
+  handle {
+    reverse_proxy web:80
+  }
+}

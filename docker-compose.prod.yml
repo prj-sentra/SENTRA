@@ -1,0 +1,31 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: trading-journal-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - api
+
+  postgres:
+    ports: !reset []
+
+  web:
+    build:
+      args:
+        VITE_API_URL: /api
+    ports: !reset []
+
+  api:
+    ports: !reset []
+
+volumes:
+  caddy-data:
+  caddy-config:

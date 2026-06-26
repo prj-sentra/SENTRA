@@ -1,0 +1,17 @@
+{
+  "name": "trading-journal",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.26.0",
+  "description": "Manual trading journal web service - React FE + NestJS BE",
+  "scripts": {
+    "dev": "pnpm --filter @trading-journal/api dev & pnpm --filter @trading-journal/web dev",
+    "build": "pnpm --filter @trading-journal/shared build && pnpm --filter @trading-journal/api build && pnpm --filter @trading-journal/web build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm --filter @trading-journal/shared typecheck && pnpm --filter @trading-journal/api typecheck && pnpm --filter @trading-journal/web typecheck",
+    "test": "pnpm -r --if-present test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
