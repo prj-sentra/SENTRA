@@ -17,4 +17,5 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 4.5rem); line-height: 1.05; }
 .card h2 { margin-top: 0; }
 pre { overflow: auto; padding: 16px; border-radius: 12px; background: #020617; color: #bae6fd; }
 .muted { color: #94a3b8; }
+.ok { color: #86efac; font-weight: 700; }
 .error { color: #fca5a5; }
