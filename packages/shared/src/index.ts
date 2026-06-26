@@ -1,20 +1,33 @@
 export type TradeSide = 'long' | 'short';
 export type TradeStatus = 'planned' | 'open' | 'closed' | 'cancelled';
 
-export interface TradeEntry {
+export interface CreateTradeRequest {
+  symbol: string;
+  side: TradeSide;
+  timeframe?: string;
+  session?: string;
+  strategy?: string;
+  thesis?: string;
+  note?: string;
+}
+
+export interface TradeEntryRequest {
   price: number;
   quantity?: number;
   occurredAt: string;
   note?: string;
 }
 
-export interface TradeExit {
+export interface TradeExitRequest {
   price: number;
   quantity?: number;
   occurredAt: string;
   reason?: 'target_hit' | 'stop_loss' | 'manual' | 'invalidated' | 'time_exit';
   note?: string;
 }
+
+export interface TradeEntry extends TradeEntryRequest {}
+export interface TradeExit extends TradeExitRequest {}
 
 export interface TradeRecord {
   id: string;
