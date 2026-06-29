@@ -9,6 +9,11 @@ import type {
   TradeLogAssistantActionsResponse,
   TradeRecord,
 } from '@trading-journal/shared';
+import {
+  validateCreateTradeRequest,
+  validateTradeEntryRequest,
+  validateTradeExitRequest,
+} from './trade-log.validation';
 
 @Injectable()
 export class TradeLogService {
@@ -23,6 +28,8 @@ export class TradeLogService {
   }
 
   createTrade(request: CreateTradeRequest): TradeRecord {
+    validateCreateTradeRequest(request);
+
     const now = new Date().toISOString();
     const trade: TradeRecord = {
       id: randomUUID(),
@@ -55,6 +62,8 @@ export class TradeLogService {
   }
 
   recordEntry(id: string, request: TradeEntryRequest): TradeRecord {
+    validateTradeEntryRequest(request);
+
     const trade = this.getTrade(id);
     if (trade.entry) {
       throw new BadRequestException('Trade already has an entry');
@@ -75,6 +84,8 @@ export class TradeLogService {
   }
 
   recordExit(id: string, request: TradeExitRequest): TradeRecord {
+    validateTradeExitRequest(request);
+
     const trade = this.getTrade(id);
     if (!trade.entry) {
       throw new BadRequestException('Cannot exit before entry');

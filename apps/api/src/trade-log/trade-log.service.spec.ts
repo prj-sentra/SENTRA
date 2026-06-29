@@ -251,4 +251,61 @@ describe('TradeLogService', () => {
       note: 'ETH 숏 아이디어. 구조 깨짐.',
     });
   });
+
+  it('rejects trade creation without a non-empty symbol', () => {
+    const service = new TradeLogService();
+
+    expect(() => service.createTrade({ symbol: ' ', side: 'long' })).toThrow('symbol is required');
+  });
+
+  it('rejects trade creation with an invalid side', () => {
+    const service = new TradeLogService();
+
+    expect(() => service.createTrade({ symbol: 'BTCUSDT', side: 'buy' as never })).toThrow(
+      'side must be long or short',
+    );
+  });
+
+  it('rejects non-positive entry price', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+
+    expect(() =>
+      service.recordEntry(trade.id, {
+        price: 0,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:00:00.000Z',
+      }),
+    ).toThrow('entry price must be positive');
+  });
+
+  it('rejects non-positive exit quantity', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+    service.recordEntry(trade.id, {
+      price: 67320,
+      quantity: 0.05,
+      occurredAt: '2026-06-29T00:00:00.000Z',
+    });
+
+    expect(() =>
+      service.recordExit(trade.id, {
+        price: 67400,
+        quantity: 0,
+        occurredAt: '2026-06-29T00:10:00.000Z',
+      }),
+    ).toThrow('exit quantity must be positive');
+  });
+
+  it('rejects invalid entry occurrence timestamps', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+
+    expect(() =>
+      service.recordEntry(trade.id, {
+        price: 67320,
+        occurredAt: 'not-a-date',
+      }),
+    ).toThrow('entry occurredAt must be a valid date');
+  });
 });
