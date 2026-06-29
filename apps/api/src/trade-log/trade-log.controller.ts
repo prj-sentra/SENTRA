@@ -4,6 +4,8 @@ import type {
   HealthResponse,
   TradeEntryRequest,
   TradeExitRequest,
+  TradeLogAssistantActionsRequest,
+  TradeLogAssistantActionsResponse,
   TradeRecord,
 } from '@trading-journal/shared';
 import { TradeLogService } from './trade-log.service';
@@ -15,6 +17,13 @@ export class TradeLogController {
   @Get('health')
   health(): HealthResponse {
     return this.tradeLogService.health();
+  }
+
+  @Post('assistant-actions')
+  applyAssistantActions(
+    @Body() request: TradeLogAssistantActionsRequest,
+  ): TradeLogAssistantActionsResponse {
+    return this.tradeLogService.applyAssistantActions(request);
   }
 
   @Post('trades')
