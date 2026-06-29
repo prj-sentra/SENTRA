@@ -103,4 +103,63 @@ describe('TradeLogService', () => {
       },
     });
   });
+
+  it('rejects exit before entry and keeps trade planned', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+
+    expect(() =>
+      service.recordExit(trade.id, {
+        price: 67400,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:00:00.000Z',
+        reason: 'manual',
+      }),
+    ).toThrow('Cannot exit before entry');
+
+    expect(service.getTrade(trade.id).status).toBe('planned');
+  });
+
+  it('rejects a second entry on the same trade', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+    service.recordEntry(trade.id, {
+      price: 67320,
+      quantity: 0.05,
+      occurredAt: '2026-06-29T00:00:00.000Z',
+    });
+
+    expect(() =>
+      service.recordEntry(trade.id, {
+        price: 67400,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:10:00.000Z',
+      }),
+    ).toThrow('Trade already has an entry');
+  });
+
+  it('rejects a second exit on a closed trade', () => {
+    const service = new TradeLogService();
+    const trade = service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+    service.recordEntry(trade.id, {
+      price: 67320,
+      quantity: 0.05,
+      occurredAt: '2026-06-29T00:00:00.000Z',
+    });
+    service.recordExit(trade.id, {
+      price: 67400,
+      quantity: 0.05,
+      occurredAt: '2026-06-29T00:10:00.000Z',
+      reason: 'manual',
+    });
+
+    expect(() =>
+      service.recordExit(trade.id, {
+        price: 67500,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:20:00.000Z',
+        reason: 'manual',
+      }),
+    ).toThrow('Trade already has an exit');
+  });
 });

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   CreateTradeRequest,
@@ -54,6 +54,13 @@ export class TradeLogService {
 
   recordEntry(id: string, request: TradeEntryRequest): TradeRecord {
     const trade = this.getTrade(id);
+    if (trade.entry) {
+      throw new BadRequestException('Trade already has an entry');
+    }
+    if (trade.status === 'closed') {
+      throw new BadRequestException('Cannot enter a closed trade');
+    }
+
     const updated: TradeRecord = {
       ...trade,
       status: 'open',
@@ -67,6 +74,13 @@ export class TradeLogService {
 
   recordExit(id: string, request: TradeExitRequest): TradeRecord {
     const trade = this.getTrade(id);
+    if (!trade.entry) {
+      throw new BadRequestException('Cannot exit before entry');
+    }
+    if (trade.exit) {
+      throw new BadRequestException('Trade already has an exit');
+    }
+
     const updated: TradeRecord = {
       ...trade,
       status: 'closed',
