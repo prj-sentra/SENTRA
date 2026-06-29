@@ -45,6 +45,40 @@ export interface TradeRecord {
   updatedAt: string;
 }
 
+export interface TradeLogAssistantActionCreateTrade {
+  type: 'create_trade';
+  payload: CreateTradeRequest;
+}
+
+export interface TradeLogAssistantActionRecordEntry {
+  type: 'record_entry';
+  tradeRef?: 'last_created';
+  payload: TradeEntryRequest;
+}
+
+export interface TradeLogAssistantActionRecordExit {
+  type: 'record_exit';
+  tradeId: string;
+  payload: TradeExitRequest;
+}
+
+export type TradeLogAssistantAction =
+  | TradeLogAssistantActionCreateTrade
+  | TradeLogAssistantActionRecordEntry
+  | TradeLogAssistantActionRecordExit;
+
+export interface TradeLogAssistantActionsRequest {
+  rawText: string;
+  source: 'telegram' | 'manual' | 'api';
+  actions: TradeLogAssistantAction[];
+}
+
+export interface TradeLogAssistantActionsResponse {
+  rawText: string;
+  source: 'telegram' | 'manual' | 'api';
+  trades: TradeRecord[];
+}
+
 export interface WikiPageSummary {
   slug: string;
   title: string;

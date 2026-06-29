@@ -5,6 +5,8 @@ import type {
   HealthResponse,
   TradeEntryRequest,
   TradeExitRequest,
+  TradeLogAssistantActionsRequest,
+  TradeLogAssistantActionsResponse,
   TradeRecord,
 } from '@trading-journal/shared';
 
@@ -90,5 +92,51 @@ export class TradeLogService {
 
     this.trades.set(id, updated);
     return updated;
+  }
+
+  applyAssistantActions(request: TradeLogAssistantActionsRequest): TradeLogAssistantActionsResponse {
+    const touchedTrades: TradeRecord[] = [];
+    let lastCreatedTradeId: string | undefined;
+
+    for (const action of request.actions) {
+      if (action.type === 'create_trade') {
+        const trade = this.createTrade({
+          ...action.payload,
+          note: action.payload.note ?? request.rawText,
+        });
+        lastCreatedTradeId = trade.id;
+        touchedTrades.push(trade);
+        continue;
+      }
+
+      if (action.type === 'record_entry') {
+        const tradeId = action.tradeRef === 'last_created' ? lastCreatedTradeId : undefined;
+        if (!tradeId) {
+          throw new BadRequestException('record_entry requires tradeRef last_created');
+        }
+        const updated = this.recordEntry(tradeId, action.payload);
+        const index = touchedTrades.findIndex((trade) => trade.id === updated.id);
+        if (index >= 0) {
+          touchedTrades[index] = updated;
+        } else {
+          touchedTrades.push(updated);
+        }
+        continue;
+      }
+
+      const updated = this.recordExit(action.tradeId, action.payload);
+      const index = touchedTrades.findIndex((trade) => trade.id === updated.id);
+      if (index >= 0) {
+        touchedTrades[index] = updated;
+      } else {
+        touchedTrades.push(updated);
+      }
+    }
+
+    return {
+      rawText: request.rawText,
+      source: request.source,
+      trades: touchedTrades,
+    };
   }
 }
