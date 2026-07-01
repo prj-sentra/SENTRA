@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Trade {
+  id        String      @id @default(uuid())
+  symbol    String
+  side      String
+  status    String
+  timeframe String?
+  session   String?
+  strategy  String?
+  thesis    String?
+  note      String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  entry     TradeEntry?
+  exit      TradeExit?
+
+  @@map("trades")
+}
+
+model TradeEntry {
+  id         String   @id @default(uuid())
+  tradeId    String   @unique
+  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  price      Decimal
+  quantity   Decimal?
+  occurredAt DateTime
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@map("trade_entries")
+}
+
+model TradeExit {
+  id         String   @id @default(uuid())
+  tradeId    String   @unique
+  trade      Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  price      Decimal
+  quantity   Decimal?
+  occurredAt DateTime
+  reason     String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@map("trade_exits")
+}

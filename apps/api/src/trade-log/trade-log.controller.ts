@@ -22,32 +22,32 @@ export class TradeLogController {
   @Post('assistant-actions')
   applyAssistantActions(
     @Body() request: TradeLogAssistantActionsRequest,
-  ): TradeLogAssistantActionsResponse {
+  ): Promise<TradeLogAssistantActionsResponse> {
     return this.tradeLogService.applyAssistantActions(request);
   }
 
   @Post('trades')
-  createTrade(@Body() request: CreateTradeRequest): TradeRecord {
+  createTrade(@Body() request: CreateTradeRequest): Promise<TradeRecord> {
     return this.tradeLogService.createTrade(request);
   }
 
   @Get('trades')
-  trades(): TradeRecord[] {
+  trades(): Promise<TradeRecord[]> {
     return this.tradeLogService.listTrades();
   }
 
   @Get('trades/:id')
-  trade(@Param('id') id: string): TradeRecord {
+  trade(@Param('id') id: string): Promise<TradeRecord> {
     return this.tradeLogService.getTrade(id);
   }
 
   @Post('trades/:id/entry')
-  recordEntry(@Param('id') id: string, @Body() request: TradeEntryRequest): TradeRecord {
+  recordEntry(@Param('id') id: string, @Body() request: TradeEntryRequest): Promise<TradeRecord> {
     return this.tradeLogService.recordEntry(id, request);
   }
 
   @Post('trades/:id/exit')
-  recordExit(@Param('id') id: string, @Body() request: TradeExitRequest): TradeRecord {
+  recordExit(@Param('id') id: string, @Body() request: TradeExitRequest): Promise<TradeRecord> {
     return this.tradeLogService.recordExit(id, request);
   }
 }
