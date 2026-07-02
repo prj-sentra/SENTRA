@@ -11,7 +11,7 @@ function createWikiFixture(): string {
   mkdirSync(join(root, 'raw', 'assets'), { recursive: true });
 
   writeFileSync(join(root, 'SCHEMA.md'), '# Wiki Schema\n');
-  writeFileSync(join(root, 'index.md'), '# Wiki Index\n');
+  writeFileSync(join(root, 'index.md'), '# Wiki Index\n\n## Concepts\n- [[liquidity-sweep]] - Liquidity sweep concept.\n');
   writeFileSync(join(root, 'log.md'), '# Wiki Log\n');
   writeFileSync(
     join(root, 'concepts', 'liquidity-sweep.md'),
@@ -49,6 +49,17 @@ Bitcoin context.
 `,
   );
   writeFileSync(join(root, 'raw', 'assets', 'sweep.png'), 'fake image bytes');
+  mkdirSync(join(root, 'queries'), { recursive: true });
+  writeFileSync(
+    join(root, 'queries', 'incomplete-note.md'),
+    `---
+type: query
+updated: 2026-07-02
+---
+
+Incomplete note.
+`,
+  );
   return root;
 }
 
@@ -93,6 +104,14 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
         tags: ['asset'],
         excerpt: 'Bitcoin context.',
       },
+      {
+        slug: 'queries/incomplete-note',
+        title: 'Incomplete Note',
+        type: 'query',
+        updatedAt: '2026-07-02',
+        tags: [],
+        excerpt: 'Incomplete note.',
+      },
     ]);
   });
 
@@ -131,6 +150,29 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
 
     expect(() => service.getPage('../secrets')).toThrow(BadRequestException);
     expect(() => service.getPage('/etc/passwd')).toThrow(BadRequestException);
+  });
+
+  it('returns lint issues for broken links, orphan pages, missing index entries, and frontmatter gaps', () => {
+    const service = new WikiService({ wikiPath });
+
+    const report = service.lint();
+    const issueCodes = report.issues.map((issue) => issue.code);
+
+    expect(report.summary.totalPages).toBe(3);
+    expect(report.summary.issueCount).toBe(report.issues.length);
+    expect(issueCodes).toEqual(expect.arrayContaining([
+      'broken_link',
+      'orphan_page',
+      'missing_index_entry',
+      'missing_frontmatter_field',
+    ]));
+    expect(report.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'broken_link', path: 'concepts/liquidity-sweep.md', target: 'market-structure' }),
+        expect.objectContaining({ code: 'missing_index_entry', path: 'entities/bitcoin.md' }),
+        expect.objectContaining({ code: 'missing_frontmatter_field', path: 'queries/incomplete-note.md', target: 'title' }),
+      ]),
+    );
   });
 
   it('throws not found for missing pages', () => {

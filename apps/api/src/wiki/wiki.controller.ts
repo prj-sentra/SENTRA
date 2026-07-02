@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Res } from '@nestjs/common';
-import type { HealthResponse, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { HealthResponse, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import type { Response } from 'express';
 import { WikiService } from './wiki.service';
 
@@ -15,6 +15,11 @@ export class WikiController {
   @Get('pages')
   pages(): WikiPageSummary[] {
     return this.wikiService.listPages();
+  }
+
+  @Get('lint')
+  lint(): WikiLintReport {
+    return this.wikiService.lint();
   }
 
   @Get('assets/*assetPath')

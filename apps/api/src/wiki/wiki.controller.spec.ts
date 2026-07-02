@@ -1,4 +1,4 @@
-import type { WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import { WikiController } from './wiki.controller';
 import { WikiService } from './wiki.service';
 
@@ -21,11 +21,17 @@ describe('WikiController', () => {
     assetUrls: [],
   };
 
+  const lintReport: WikiLintReport = {
+    summary: { totalPages: 1, issueCount: 0, generatedAt: '2026-07-01T00:00:00.000Z' },
+    issues: [],
+  };
+
   function createController() {
     const service = {
       health: jest.fn(() => ({ status: 'ok', service: 'sentra-wiki', timestamp: '2026-07-01T00:00:00.000Z', wikiPath: '/data/wiki' })),
       listPages: jest.fn(() => [summary]),
       getPage: jest.fn(() => detail),
+      lint: jest.fn(() => lintReport),
       resolveAssetPath: jest.fn(() => '/data/wiki/raw/assets/demo.svg'),
     } as unknown as WikiService;
 
@@ -43,6 +49,13 @@ describe('WikiController', () => {
 
     expect(controller.page(['concepts', 'liquidity-sweep'])).toEqual(detail);
     expect(service.getPage).toHaveBeenCalledWith('concepts/liquidity-sweep');
+  });
+
+  it('returns lint report', () => {
+    const { controller, service } = createController();
+
+    expect(controller.lint()).toEqual(lintReport);
+    expect(service.lint).toHaveBeenCalledTimes(1);
   });
 
   it('normalizes wildcard asset paths before sending files', () => {

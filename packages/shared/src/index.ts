@@ -105,6 +105,23 @@ export interface WikiPageDetail extends WikiPageSummary {
   assetUrls: string[];
 }
 
+export interface WikiLintIssue {
+  severity: 'error' | 'warning';
+  code: 'broken_link' | 'orphan_page' | 'missing_index_entry' | 'missing_frontmatter_field' | string;
+  message: string;
+  path?: string;
+  target?: string;
+}
+
+export interface WikiLintReport {
+  summary: {
+    totalPages: number;
+    issueCount: number;
+    generatedAt: string;
+  };
+  issues: WikiLintIssue[];
+}
+
 export interface HealthResponse {
   status: 'ok';
   service: string;

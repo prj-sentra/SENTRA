@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { HealthResponse, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { HealthResponse, WikiLintIssue, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, normalize, relative, sep } from 'node:path';
 
@@ -93,6 +93,86 @@ export class WikiService {
     }
 
     return filePath;
+  }
+
+  lint(): WikiLintReport {
+    const pageFiles = existsSync(this.wikiPath)
+      ? this.listMarkdownFiles(this.wikiPath).filter((filePath) => this.isWikiPageFile(filePath))
+      : [];
+    const pageSlugs = pageFiles.map((filePath) => this.slugFromPath(filePath));
+    const slugSet = new Set(pageSlugs);
+    const basenameToSlug = new Map(pageSlugs.map((slug) => [slug.split('/').at(-1)!, slug]));
+    const inboundCounts = new Map(pageSlugs.map((slug) => [slug, 0]));
+    const issues: WikiLintIssue[] = [];
+    const indexLinks = this.readIndexLinks();
+
+    for (const filePath of pageFiles) {
+      const pagePath = this.markdownRelativePath(filePath);
+      const parsed = this.parsePageFile(filePath);
+      const frontmatter = parsed.frontmatter;
+      const pageSlug = this.slugFromPath(filePath);
+
+      for (const field of ['title', 'created', 'updated', 'type', 'tags', 'sources']) {
+        const value = frontmatter[field];
+        const missingArray = (field === 'tags' || field === 'sources') && !Array.isArray(value);
+        const missingScalar = field !== 'tags' && field !== 'sources' && typeof value !== 'string';
+        if (missingArray || missingScalar) {
+          issues.push({
+            severity: 'warning',
+            code: 'missing_frontmatter_field',
+            path: pagePath,
+            target: field,
+            message: `${pagePath} is missing required frontmatter field: ${field}`,
+          });
+        }
+      }
+
+      for (const outboundLink of this.extractWikiLinks(parsed.body)) {
+        const resolvedSlug = this.resolveWikiLink(outboundLink, slugSet, basenameToSlug);
+        if (!resolvedSlug) {
+          issues.push({
+            severity: 'error',
+            code: 'broken_link',
+            path: pagePath,
+            target: outboundLink,
+            message: `${pagePath} links to missing page: ${outboundLink}`,
+          });
+          continue;
+        }
+        inboundCounts.set(resolvedSlug, (inboundCounts.get(resolvedSlug) ?? 0) + 1);
+      }
+
+      if (!this.isIndexed(pageSlug, indexLinks)) {
+        issues.push({
+          severity: 'warning',
+          code: 'missing_index_entry',
+          path: pagePath,
+          target: pageSlug,
+          message: `${pagePath} is missing from index.md`,
+        });
+      }
+    }
+
+    for (const [slug, count] of inboundCounts) {
+      if (count === 0) {
+        issues.push({
+          severity: 'warning',
+          code: 'orphan_page',
+          path: `${slug}.md`,
+          target: slug,
+          message: `${slug}.md has no inbound wiki links`,
+        });
+      }
+    }
+
+    return {
+      summary: {
+        totalPages: pageFiles.length,
+        issueCount: issues.length,
+        generatedAt: new Date().toISOString(),
+      },
+      issues,
+    };
   }
 
   private listMarkdownFiles(root: string): string[] {
@@ -312,6 +392,34 @@ export class WikiService {
 
   private assetUrl(assetPath: string): string {
     return `/api/wiki/assets/${assetPath.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+  }
+
+  private readIndexLinks(): string[] {
+    const indexPath = join(this.wikiPath, 'index.md');
+    if (!existsSync(indexPath)) {
+      return [];
+    }
+    return this.extractWikiLinks(readFileSync(indexPath, 'utf8'));
+  }
+
+  private resolveWikiLink(link: string, slugSet: Set<string>, basenameToSlug: Map<string, string>): string | undefined {
+    const normalizedLink = link.trim().replace(/\.md$/, '');
+    if (slugSet.has(normalizedLink)) {
+      return normalizedLink;
+    }
+    return basenameToSlug.get(normalizedLink);
+  }
+
+  private isIndexed(slug: string, indexLinks: string[]): boolean {
+    const basenameSlug = slug.split('/').at(-1)!;
+    return indexLinks.some((link) => {
+      const normalizedLink = link.trim().replace(/\.md$/, '');
+      return normalizedLink === slug || normalizedLink === basenameSlug;
+    });
+  }
+
+  private markdownRelativePath(filePath: string): string {
+    return this.relativeWikiPath(filePath).split(sep).join('/');
   }
 
   private extractWikiLinks(markdown: string): string[] {
