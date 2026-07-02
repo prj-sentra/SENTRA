@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { TradeRecord, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
@@ -60,6 +60,70 @@ export function App() {
         setError(err instanceof Error ? err.message : 'Unknown wiki API error');
       });
   }, [selectedWikiSlug]);
+
+  function resolveWikiSlug(wikiLink: string): string | undefined {
+    const normalizedLink = wikiLink.replace(/\.md$/, '');
+    return state.wikiPages.find((page) => {
+      const basename = page.slug.split('/').at(-1);
+      return page.slug === normalizedLink || basename === normalizedLink;
+    })?.slug;
+  }
+
+  function activateWikiLink(wikiLink: string): void {
+    const resolvedSlug = resolveWikiSlug(wikiLink);
+    if (!resolvedSlug) {
+      setError(`Wiki link target not found: ${wikiLink}`);
+      return;
+    }
+
+    setError(null);
+    setActiveView('wiki');
+    setSelectedWikiSlug(resolvedSlug);
+  }
+
+  useEffect(() => {
+    function syncWikiHash(): void {
+      if (!window.location.hash.startsWith('#wiki/')) {
+        return;
+      }
+      const wikiLink = decodeURIComponent(window.location.hash.slice('#wiki/'.length));
+      activateWikiLink(wikiLink);
+    }
+
+    syncWikiHash();
+    window.addEventListener('hashchange', syncWikiHash);
+    return () => window.removeEventListener('hashchange', syncWikiHash);
+  }, [state.wikiPages]);
+
+  useEffect(() => {
+    function handleDocumentClick(event: MouseEvent): void {
+      const target = event.target as Element | null;
+      const link = target?.closest<HTMLAnchorElement>('a[data-wiki-link]');
+      const wikiLink = link?.dataset.wikiLink;
+      if (!wikiLink) {
+        return;
+      }
+      activateWikiLink(wikiLink);
+    }
+
+    document.addEventListener('click', handleDocumentClick);
+    return () => document.removeEventListener('click', handleDocumentClick);
+  }, [state.wikiPages]);
+
+  function handleWikiContentClick(event: ReactMouseEvent<HTMLDivElement>): void {
+    const target = event.target as Element | null;
+    const link = target?.closest<HTMLAnchorElement>('a[data-wiki-link]');
+    if (!link) {
+      return;
+    }
+
+    const wikiLink = link.dataset.wikiLink;
+    if (!wikiLink) {
+      return;
+    }
+
+    activateWikiLink(wikiLink);
+  }
 
   return (
     <main className="shell">
@@ -170,6 +234,7 @@ export function App() {
 
                     <div
                       className="wiki-content"
+                      onClick={handleWikiContentClick}
                       dangerouslySetInnerHTML={{ __html: wikiHtmlForCurrentHost(selectedWikiPage.bodyHtml) }}
                     />
 

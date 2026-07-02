@@ -1,4 +1,4 @@
-import type { WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { CreateWikiPageRequest, UpdateWikiPageRequest, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import { WikiController } from './wiki.controller';
 import { WikiService } from './wiki.service';
 
@@ -31,6 +31,8 @@ describe('WikiController', () => {
       health: jest.fn(() => ({ status: 'ok', service: 'sentra-wiki', timestamp: '2026-07-01T00:00:00.000Z', wikiPath: '/data/wiki' })),
       listPages: jest.fn(() => [summary]),
       getPage: jest.fn(() => detail),
+      createPage: jest.fn(() => detail),
+      updatePage: jest.fn(() => detail),
       lint: jest.fn(() => lintReport),
       resolveAssetPath: jest.fn(() => '/data/wiki/raw/assets/demo.svg'),
     } as unknown as WikiService;
@@ -56,6 +58,35 @@ describe('WikiController', () => {
 
     expect(controller.lint()).toEqual(lintReport);
     expect(service.lint).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates wiki pages through the service', () => {
+    const { controller, service } = createController();
+    const request: CreateWikiPageRequest = {
+      slug: 'concepts/risk-control',
+      title: 'Risk Control',
+      type: 'concept',
+      tags: ['risk'],
+      sources: [],
+      bodyMarkdown: 'Risk control body.',
+    };
+
+    expect(controller.createPage(request)).toEqual(detail);
+    expect(service.createPage).toHaveBeenCalledWith(request);
+  });
+
+  it('updates wiki pages through the service', () => {
+    const { controller, service } = createController();
+    const request: UpdateWikiPageRequest = {
+      title: 'Liquidity Sweep',
+      type: 'concept',
+      tags: ['liquidity'],
+      sources: [],
+      bodyMarkdown: 'Updated body.',
+    };
+
+    expect(controller.updatePage(['concepts', 'liquidity-sweep'], request)).toEqual(detail);
+    expect(service.updatePage).toHaveBeenCalledWith('concepts/liquidity-sweep', request);
   });
 
   it('normalizes wildcard asset paths before sending files', () => {

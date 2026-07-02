@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { HealthResponse, WikiLintIssue, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, join, normalize, relative, sep } from 'node:path';
+import type { CreateWikiPageRequest, HealthResponse, UpdateWikiPageRequest, WikiLintIssue, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, normalize, relative, sep } from 'node:path';
 
 interface WikiServiceOptions {
   wikiPath?: string;
@@ -72,6 +72,43 @@ export class WikiService {
       inboundLinks: [],
       assetUrls: this.extractAssetUrls(bodyMarkdown),
     };
+  }
+
+  createPage(request: CreateWikiPageRequest): WikiPageDetail {
+    const filePath = this.resolvePagePath(request.slug);
+    if (existsSync(filePath)) {
+      throw new BadRequestException(`Wiki page already exists: ${request.slug}`);
+    }
+
+    const today = this.today();
+    mkdirSync(dirname(filePath), { recursive: true });
+    this.writePageFile(filePath, {
+      ...request,
+      created: today,
+      updated: today,
+    });
+    this.rebuildIndex(new Map([[request.slug, request.summary]]));
+    this.appendLog('create', request.slug, [`Created \`${this.markdownRelativePath(filePath)}\`.`, 'Updated `index.md`.']);
+    return this.getPage(request.slug);
+  }
+
+  updatePage(slug: string, request: UpdateWikiPageRequest): WikiPageDetail {
+    const filePath = this.resolvePagePath(slug);
+    if (!existsSync(filePath)) {
+      throw new NotFoundException(`Wiki page not found: ${slug}`);
+    }
+
+    const parsed = this.parsePageFile(filePath);
+    const today = this.today();
+    this.writePageFile(filePath, {
+      slug,
+      ...request,
+      created: this.stringField(parsed.frontmatter.created) ?? today,
+      updated: today,
+    });
+    this.rebuildIndex(new Map([[slug, request.summary]]));
+    this.appendLog('update', slug, [`Updated \`${this.markdownRelativePath(filePath)}\`.`, 'Updated `index.md`.']);
+    return this.getPage(slug);
   }
 
   resolveAssetPath(assetPath: string): string {
@@ -173,6 +210,80 @@ export class WikiService {
       },
       issues,
     };
+  }
+
+  private writePageFile(
+    filePath: string,
+    input: CreateWikiPageRequest & { created: string; updated: string },
+  ): void {
+    const lines = [
+      '---',
+      `title: ${input.title}`,
+      `created: ${input.created}`,
+      `updated: ${input.updated}`,
+      `type: ${input.type}`,
+      `tags: ${this.formatArray(input.tags)}`,
+      `sources: ${this.formatArray(input.sources)}`,
+    ];
+    if (input.confidence) {
+      lines.push(`confidence: ${input.confidence}`);
+    }
+    lines.push('---', '', input.bodyMarkdown.trim(), '');
+    writeFileSync(filePath, lines.join('\n'));
+  }
+
+  private rebuildIndex(summaryOverrides: Map<string, string | undefined> = new Map()): void {
+    const pages = this.listPages();
+    const sections: Array<{ title: string; types: string[] }> = [
+      { title: 'Entities', types: ['entity'] },
+      { title: 'Concepts', types: ['concept'] },
+      { title: 'Comparisons', types: ['comparison'] },
+      { title: 'Queries', types: ['query'] },
+    ];
+    const lines = [
+      '# Wiki Index',
+      '',
+      '> S.E.N.T.R.A. LLM Wiki catalog.',
+      `> Last updated: ${this.today()} | Total pages: ${pages.length}`,
+      '',
+    ];
+
+    for (const section of sections) {
+      lines.push(`## ${section.title}`);
+      const sectionPages = pages
+        .filter((page) => section.types.includes(page.type))
+        .sort((a, b) => a.title.localeCompare(b.title));
+      for (const page of sectionPages) {
+        const basenameSlug = page.slug.split('/').at(-1)!;
+        const summary = summaryOverrides.get(page.slug) ?? page.excerpt ?? '';
+        lines.push(`- [[${basenameSlug}]] - ${summary}`.trimEnd());
+      }
+      lines.push('');
+    }
+
+    writeFileSync(join(this.wikiPath, 'index.md'), lines.join('\n'));
+  }
+
+  private appendLog(action: 'create' | 'update', slug: string, bullets: string[]): void {
+    const logPath = join(this.wikiPath, 'log.md');
+    const existing = existsSync(logPath)
+      ? readFileSync(logPath, 'utf8').trimEnd()
+      : '# Wiki Log\n\n> Chronological record of all wiki actions. Append-only.';
+    const entry = [
+      '',
+      `## [${this.today()}] ${action} | ${slug}`,
+      ...bullets.map((bullet) => `- ${bullet}`),
+      '',
+    ].join('\n');
+    writeFileSync(logPath, `${existing}${entry}`);
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private formatArray(values: string[]): string {
+    return `[${values.join(', ')}]`;
   }
 
   private listMarkdownFiles(root: string): string[] {

@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WikiService } from './wiki.service';
@@ -173,6 +173,69 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
         expect.objectContaining({ code: 'missing_frontmatter_field', path: 'queries/incomplete-note.md', target: 'title' }),
       ]),
     );
+  });
+
+  it('creates a wiki page and automatically updates index and log', () => {
+    const service = new WikiService({ wikiPath });
+
+    const created = service.createPage({
+      slug: 'concepts/risk-control',
+      title: 'Risk Control',
+      type: 'concept',
+      tags: ['risk', 'operations'],
+      sources: [],
+      confidence: 'medium',
+      bodyMarkdown: '# Risk Control\n\nRisk control limits downside before execution. Related to [[liquidity-sweep]].',
+      summary: 'Risk control limits downside before execution.',
+    });
+
+    expect(created).toMatchObject({ slug: 'concepts/risk-control', title: 'Risk Control', updatedAt: expect.any(String) });
+    expect(existsSync(join(wikiPath, 'concepts', 'risk-control.md'))).toBe(true);
+    expect(readFileSync(join(wikiPath, 'concepts', 'risk-control.md'), 'utf8')).toContain('title: Risk Control');
+    expect(readFileSync(join(wikiPath, 'index.md'), 'utf8')).toContain('- [[risk-control]] - Risk control limits downside before execution.');
+    expect(readFileSync(join(wikiPath, 'log.md'), 'utf8')).toContain('create | concepts/risk-control');
+  });
+
+  it('updates a wiki page and appends log without duplicating index entries', () => {
+    const service = new WikiService({ wikiPath });
+
+    const updated = service.updatePage('concepts/liquidity-sweep', {
+      title: 'Liquidity Sweep',
+      type: 'concept',
+      tags: ['price-action', 'liquidity'],
+      sources: ['raw/articles/liquidity-note.md'],
+      confidence: 'medium',
+      bodyMarkdown: '# Liquidity Sweep\n\nUpdated body. Related to [[bitcoin]].',
+      summary: 'Updated body.',
+    });
+
+    const index = readFileSync(join(wikiPath, 'index.md'), 'utf8');
+    expect(updated.bodyMarkdown).toContain('Updated body');
+    expect(index.match(/\[\[liquidity-sweep\]\]/g)).toHaveLength(1);
+    expect(index).toContain('- [[liquidity-sweep]] - Updated body.');
+    expect(readFileSync(join(wikiPath, 'log.md'), 'utf8')).toContain('update | concepts/liquidity-sweep');
+  });
+
+  it('rejects unsafe or duplicate page writes', () => {
+    const service = new WikiService({ wikiPath });
+
+    expect(() => service.createPage({
+      slug: '../bad',
+      title: 'Bad',
+      type: 'concept',
+      tags: [],
+      sources: [],
+      bodyMarkdown: 'Bad',
+    })).toThrow(BadRequestException);
+
+    expect(() => service.createPage({
+      slug: 'concepts/liquidity-sweep',
+      title: 'Duplicate',
+      type: 'concept',
+      tags: [],
+      sources: [],
+      bodyMarkdown: 'Duplicate',
+    })).toThrow(BadRequestException);
   });
 
   it('throws not found for missing pages', () => {

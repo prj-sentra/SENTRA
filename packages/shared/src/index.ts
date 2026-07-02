@@ -105,6 +105,27 @@ export interface WikiPageDetail extends WikiPageSummary {
   assetUrls: string[];
 }
 
+export interface CreateWikiPageRequest {
+  slug: string;
+  title: string;
+  type: WikiPageType;
+  tags: string[];
+  sources: string[];
+  bodyMarkdown: string;
+  summary?: string;
+  confidence?: WikiConfidence;
+}
+
+export interface UpdateWikiPageRequest {
+  title: string;
+  type: WikiPageType;
+  tags: string[];
+  sources: string[];
+  bodyMarkdown: string;
+  summary?: string;
+  confidence?: WikiConfidence;
+}
+
 export interface WikiLintIssue {
   severity: 'error' | 'warning';
   code: 'broken_link' | 'orphan_page' | 'missing_index_entry' | 'missing_frontmatter_field' | string;
