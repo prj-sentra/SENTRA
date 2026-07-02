@@ -67,11 +67,32 @@ export class WikiService {
       contested: this.booleanField(parsed.frontmatter.contested),
       contradictions: this.arrayField(parsed.frontmatter.contradictions),
       bodyMarkdown,
-      bodyHtml: '',
+      bodyHtml: this.renderMarkdown(bodyMarkdown),
       outboundLinks: this.extractWikiLinks(bodyMarkdown),
       inboundLinks: [],
       assetUrls: this.extractAssetUrls(bodyMarkdown),
     };
+  }
+
+  resolveAssetPath(assetPath: string): string {
+    if (!assetPath || assetPath.startsWith('/') || assetPath.includes('..') || assetPath.includes('\\')) {
+      throw new BadRequestException(`Unsafe wiki asset path: ${assetPath}`);
+    }
+
+    const normalizedAssetPath = normalize(assetPath);
+    const assetRoot = join(this.wikiPath, 'raw', 'assets');
+    const filePath = join(assetRoot, normalizedAssetPath);
+    const relativePath = relative(assetRoot, filePath);
+
+    if (relativePath.startsWith('..') || relativePath.includes(`..${sep}`)) {
+      throw new BadRequestException(`Unsafe wiki asset path: ${assetPath}`);
+    }
+
+    if (!existsSync(filePath)) {
+      throw new NotFoundException(`Wiki asset not found: ${assetPath}`);
+    }
+
+    return filePath;
   }
 
   private listMarkdownFiles(root: string): string[] {
@@ -109,7 +130,7 @@ export class WikiService {
     const firstParagraph = body
       .split(/\n\s*\n/)
       .map((paragraph) => paragraph.trim())
-      .find((paragraph) => paragraph.length > 0);
+      .find((paragraph) => paragraph.length > 0 && !paragraph.startsWith('#'));
 
     return {
       slug,
@@ -235,6 +256,64 @@ export class WikiService {
     return value === 'high' || value === 'medium' || value === 'low' ? value : undefined;
   }
 
+  private renderMarkdown(markdown: string): string {
+    const blocks = markdown.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+
+    return blocks
+      .map((block) => {
+        if (block.startsWith('### ')) {
+          return `<h3>${this.renderInline(block.slice(4))}</h3>`;
+        }
+        if (block.startsWith('## ')) {
+          return `<h2>${this.renderInline(block.slice(3))}</h2>`;
+        }
+        if (block.startsWith('# ')) {
+          return `<h1>${this.renderInline(block.slice(2))}</h1>`;
+        }
+        if (block.split('\n').every((line) => line.trim().startsWith('- '))) {
+          const items = block
+            .split('\n')
+            .map((line) => `<li>${this.renderInline(line.trim().slice(2))}</li>`)
+            .join('');
+          return `<ul>${items}</ul>`;
+        }
+        return `<p>${this.renderInline(block).replace(/\n/g, '<br>')}</p>`;
+      })
+      .join('\n');
+  }
+
+  private renderInline(text: string): string {
+    return this.escapeHtml(text)
+      .replace(/!\[\[([^\]]+)\]\]/g, (_match, assetPath: string) => {
+        const trimmedAssetPath = String(assetPath).trim();
+        if (!trimmedAssetPath || trimmedAssetPath.startsWith('/') || trimmedAssetPath.includes('..')) {
+          return '';
+        }
+        const src = this.assetUrl(trimmedAssetPath);
+        const alt = this.escapeHtml(basename(trimmedAssetPath));
+        return `<img src="${src}" alt="${alt}" loading="lazy">`;
+      })
+      .replace(/(?<!!)\[\[([^\]]+)\]\]/g, (_match, slug: string) => {
+        const trimmedSlug = String(slug).trim();
+        const label = this.escapeHtml(this.titleFromSlug(trimmedSlug));
+        const href = `#wiki/${encodeURI(trimmedSlug)}`;
+        return `<a href="${href}" data-wiki-link="${this.escapeHtml(trimmedSlug)}">${label}</a>`;
+      });
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private assetUrl(assetPath: string): string {
+    return `/api/wiki/assets/${assetPath.split('/').map((part) => encodeURIComponent(part)).join('/')}`;
+  }
+
   private extractWikiLinks(markdown: string): string[] {
     return Array.from(markdown.matchAll(/(?<!!)\[\[([^\]]+)\]\]/g)).map((match) => match[1].trim());
   }
@@ -243,6 +322,6 @@ export class WikiService {
     return Array.from(markdown.matchAll(/!\[\[([^\]]+)\]\]/g))
       .map((match) => match[1].trim())
       .filter((assetPath) => assetPath && !assetPath.startsWith('/') && !assetPath.includes('..'))
-      .map((assetPath) => `/api/wiki/assets/${assetPath}`);
+      .map((assetPath) => this.assetUrl(assetPath));
   }
 }

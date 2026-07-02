@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TradeRecord, WikiPageSummary } from '@trading-journal/shared';
+import type { TradeRecord, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 type View = 'trade-log' | 'wiki';
@@ -14,9 +14,18 @@ const initialState: ApiState = {
   wikiPages: [],
 };
 
+function wikiHtmlForCurrentHost(bodyHtml: string): string {
+  if (apiUrl === '/api') {
+    return bodyHtml;
+  }
+  return bodyHtml.replaceAll('src="/api/', `src="${apiUrl}/`);
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<View>('trade-log');
   const [state, setState] = useState<ApiState>(initialState);
+  const [selectedWikiSlug, setSelectedWikiSlug] = useState<string | null>(null);
+  const [selectedWikiPage, setSelectedWikiPage] = useState<WikiPageDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,11 +35,31 @@ export function App() {
     ])
       .then(([trades, wikiPages]) => {
         setState({ trades, wikiPages });
+        setSelectedWikiSlug((current) => current ?? wikiPages[0]?.slug ?? null);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Unknown API error');
       });
   }, []);
+
+  useEffect(() => {
+    if (!selectedWikiSlug) {
+      setSelectedWikiPage(null);
+      return;
+    }
+
+    fetch(`${apiUrl}/wiki/pages/${selectedWikiSlug}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Wiki page request failed: ${res.status}`);
+        }
+        return res.json() as Promise<WikiPageDetail>;
+      })
+      .then(setSelectedWikiPage)
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Unknown wiki API error');
+      });
+  }, [selectedWikiSlug]);
 
   return (
     <main className="shell">
@@ -72,7 +101,7 @@ export function App() {
           {state.trades.length === 0 ? (
             <div className="empty-state">
               <h3>아직 기록된 매매가 없습니다.</h3>
-              <p>다음 단계에서 진입과 청산이 분리된 trade 기록 API를 붙입니다.</p>
+              <p>텔레그램 대화를 통해 진입과 청산이 분리된 trade를 기록할 수 있습니다.</p>
             </div>
           ) : (
             <div className="list">
@@ -90,7 +119,7 @@ export function App() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="section-label">Trading Wiki</p>
+              <p className="section-label">LLM Wiki</p>
               <h2>트레이딩 지식 베이스</h2>
             </div>
             <span className="count">{state.wikiPages.length} pages</span>
@@ -98,18 +127,56 @@ export function App() {
 
           {state.wikiPages.length === 0 ? (
             <div className="empty-state">
-              <h3>위키는 아직 준비 영역입니다.</h3>
-              <p>매매일지 기능을 먼저 쌓은 뒤, 대화 기반 지식 정리와 뷰어를 붙입니다.</p>
+              <h3>위키 페이지가 아직 없습니다.</h3>
+              <p>이제 markdown 기반 LLM Wiki 페이지를 웹에서 읽을 수 있습니다.</p>
             </div>
           ) : (
-            <div className="list">
-              {state.wikiPages.map((page) => (
-                <article className="list-item" key={page.slug}>
-                  <strong>{page.title}</strong>
-                  <span>{page.type}</span>
-                  <span>{page.updatedAt}</span>
-                </article>
-              ))}
+            <div className="wiki-layout">
+              <aside className="wiki-sidebar" aria-label="Wiki pages">
+                {state.wikiPages.map((page) => (
+                  <button
+                    className={selectedWikiSlug === page.slug ? 'wiki-nav-item active' : 'wiki-nav-item'}
+                    key={page.slug}
+                    type="button"
+                    onClick={() => setSelectedWikiSlug(page.slug)}
+                  >
+                    <strong>{page.title}</strong>
+                    <span>{page.type} · {page.updatedAt}</span>
+                    {page.excerpt ? <small>{page.excerpt}</small> : null}
+                  </button>
+                ))}
+              </aside>
+
+              <article className="wiki-reader">
+                {selectedWikiPage ? (
+                  <>
+                    <header className="wiki-reader-header">
+                      <p className="section-label">{selectedWikiPage.type}</p>
+                      <h3>{selectedWikiPage.title}</h3>
+                      <div className="tag-row">
+                        {selectedWikiPage.tags.map((tag) => (
+                          <span className="tag" key={tag}>{tag}</span>
+                        ))}
+                      </div>
+                    </header>
+
+                    <div
+                      className="wiki-content"
+                      dangerouslySetInnerHTML={{ __html: wikiHtmlForCurrentHost(selectedWikiPage.bodyHtml) }}
+                    />
+
+                    <footer className="wiki-meta">
+                      <span>slug: {selectedWikiPage.slug}</span>
+                      <span>links: {selectedWikiPage.outboundLinks.length}</span>
+                      <span>assets: {selectedWikiPage.assetUrls.length}</span>
+                    </footer>
+                  </>
+                ) : (
+                  <div className="empty-state compact">
+                    <h3>페이지를 선택하세요.</h3>
+                  </div>
+                )}
+              </article>
             </div>
           )}
         </section>

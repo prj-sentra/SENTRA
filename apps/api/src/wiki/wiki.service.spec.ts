@@ -25,6 +25,8 @@ sources: [raw/articles/liquidity-note.md]
 confidence: medium
 ---
 
+# Liquidity Sweep
+
 A liquidity sweep is a trading setup concept.
 
 Related to [[market-structure]] and [[stop-hunt]].
@@ -94,7 +96,7 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
     ]);
   });
 
-  it('returns a page detail with frontmatter, markdown body, links, and asset URLs', () => {
+  it('returns a page detail with frontmatter, markdown body, rendered HTML, links, and asset URLs', () => {
     const service = new WikiService({ wikiPath });
 
     expect(service.getPage('concepts/liquidity-sweep')).toMatchObject({
@@ -109,7 +111,19 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
       outboundLinks: ['market-structure', 'stop-hunt'],
       assetUrls: ['/api/wiki/assets/sweep.png'],
     });
-    expect(service.getPage('concepts/liquidity-sweep').bodyMarkdown).toContain('A liquidity sweep');
+    const page = service.getPage('concepts/liquidity-sweep');
+    expect(page.bodyMarkdown).toContain('A liquidity sweep');
+    expect(page.bodyHtml).toContain('<p>A liquidity sweep is a trading setup concept.</p>');
+    expect(page.bodyHtml).toContain('<a href="#wiki/market-structure"');
+    expect(page.bodyHtml).toContain('<img src="/api/wiki/assets/sweep.png" alt="sweep.png"');
+  });
+
+  it('resolves asset files only from raw/assets', () => {
+    const service = new WikiService({ wikiPath });
+
+    expect(service.resolveAssetPath('sweep.png')).toBe(join(wikiPath, 'raw', 'assets', 'sweep.png'));
+    expect(() => service.resolveAssetPath('../SCHEMA.md')).toThrow(BadRequestException);
+    expect(() => service.resolveAssetPath('/etc/passwd')).toThrow(BadRequestException);
   });
 
   it('rejects unsafe page slugs', () => {

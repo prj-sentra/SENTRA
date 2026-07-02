@@ -26,6 +26,7 @@ describe('WikiController', () => {
       health: jest.fn(() => ({ status: 'ok', service: 'sentra-wiki', timestamp: '2026-07-01T00:00:00.000Z', wikiPath: '/data/wiki' })),
       listPages: jest.fn(() => [summary]),
       getPage: jest.fn(() => detail),
+      resolveAssetPath: jest.fn(() => '/data/wiki/raw/assets/demo.svg'),
     } as unknown as WikiService;
 
     return { controller: new WikiController(service), service };
@@ -42,5 +43,15 @@ describe('WikiController', () => {
 
     expect(controller.page(['concepts', 'liquidity-sweep'])).toEqual(detail);
     expect(service.getPage).toHaveBeenCalledWith('concepts/liquidity-sweep');
+  });
+
+  it('normalizes wildcard asset paths before sending files', () => {
+    const { controller, service } = createController();
+    const response = { sendFile: jest.fn() };
+
+    controller.asset(['charts', 'demo.svg'], response as never);
+
+    expect(service.resolveAssetPath).toHaveBeenCalledWith('charts/demo.svg');
+    expect(response.sendFile).toHaveBeenCalledWith('/data/wiki/raw/assets/demo.svg');
   });
 });

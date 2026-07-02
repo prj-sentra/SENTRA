@@ -1,5 +1,6 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Res } from '@nestjs/common';
 import type { HealthResponse, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { Response } from 'express';
 import { WikiService } from './wiki.service';
 
 @Controller('wiki')
@@ -14,6 +15,12 @@ export class WikiController {
   @Get('pages')
   pages(): WikiPageSummary[] {
     return this.wikiService.listPages();
+  }
+
+  @Get('assets/*assetPath')
+  asset(@Param('assetPath') assetPath: string | string[], @Res() response: Response): void {
+    const normalizedAssetPath = Array.isArray(assetPath) ? assetPath.join('/') : assetPath;
+    response.sendFile(this.wikiService.resolveAssetPath(normalizedAssetPath));
   }
 
   @Get('pages/*slug')
