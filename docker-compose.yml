@@ -27,11 +27,14 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
       DATABASE_URL: ${DATABASE_URL:-postgresql://trading:trading_dev_password@postgres:5432/trading_journal}
+      WIKI_PATH: ${WIKI_PATH:-/data/wiki}
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - wiki-data:/data/wiki
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -54,3 +57,4 @@ services:
 
 volumes:
   postgres-data:
+  wiki-data:

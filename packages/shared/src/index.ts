@@ -79,11 +79,30 @@ export interface TradeLogAssistantActionsResponse {
   trades: TradeRecord[];
 }
 
+export type WikiPageType = 'entity' | 'concept' | 'comparison' | 'query' | 'summary' | 'raw' | string;
+export type WikiConfidence = 'high' | 'medium' | 'low';
+
 export interface WikiPageSummary {
   slug: string;
   title: string;
-  type: 'concept' | 'strategy' | 'setup' | 'mistake' | 'playbook' | 'query';
+  type: WikiPageType;
   updatedAt: string;
+  tags: string[];
+  excerpt?: string;
+}
+
+export interface WikiPageDetail extends WikiPageSummary {
+  created?: string;
+  updated?: string;
+  sources: string[];
+  confidence?: WikiConfidence;
+  contested?: boolean;
+  contradictions?: string[];
+  bodyMarkdown: string;
+  bodyHtml: string;
+  outboundLinks: string[];
+  inboundLinks: string[];
+  assetUrls: string[];
 }
 
 export interface HealthResponse {
