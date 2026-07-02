@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Res, UnauthorizedException } from '@nestjs/common';
 import type { CreateWikiPageRequest, HealthResponse, UpdateWikiPageRequest, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import type { Response } from 'express';
 import { WikiService } from './wiki.service';
@@ -6,6 +6,13 @@ import { WikiService } from './wiki.service';
 @Controller('wiki')
 export class WikiController {
   constructor(private readonly wikiService: WikiService) {}
+
+  private assertWriteToken(providedToken: string | undefined): void {
+    const expectedToken = process.env.WIKI_WRITE_TOKEN;
+    if (!expectedToken || !providedToken || providedToken !== expectedToken) {
+      throw new UnauthorizedException('Valid wiki write token required');
+    }
+  }
 
   @Get('health')
   health(): HealthResponse & { wikiPath: string } {
@@ -23,12 +30,21 @@ export class WikiController {
   }
 
   @Post('pages')
-  createPage(@Body() request: CreateWikiPageRequest): WikiPageDetail {
+  createPage(
+    @Body() request: CreateWikiPageRequest,
+    @Headers('x-wiki-write-token') writeToken: string | undefined,
+  ): WikiPageDetail {
+    this.assertWriteToken(writeToken);
     return this.wikiService.createPage(request);
   }
 
   @Put('pages/*slug')
-  updatePage(@Param('slug') slug: string | string[], @Body() request: UpdateWikiPageRequest): WikiPageDetail {
+  updatePage(
+    @Param('slug') slug: string | string[],
+    @Body() request: UpdateWikiPageRequest,
+    @Headers('x-wiki-write-token') writeToken: string | undefined,
+  ): WikiPageDetail {
+    this.assertWriteToken(writeToken);
     const normalizedSlug = Array.isArray(slug) ? slug.join('/') : slug;
     return this.wikiService.updatePage(normalizedSlug, request);
   }

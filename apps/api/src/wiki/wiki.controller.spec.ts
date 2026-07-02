@@ -1,8 +1,23 @@
+import { UnauthorizedException } from '@nestjs/common';
 import type { CreateWikiPageRequest, UpdateWikiPageRequest, WikiLintReport, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 import { WikiController } from './wiki.controller';
 import { WikiService } from './wiki.service';
 
 describe('WikiController', () => {
+  const originalWikiWriteToken = process.env.WIKI_WRITE_TOKEN;
+
+  beforeEach(() => {
+    process.env.WIKI_WRITE_TOKEN = 'test-write-token';
+  });
+
+  afterAll(() => {
+    if (originalWikiWriteToken === undefined) {
+      delete process.env.WIKI_WRITE_TOKEN;
+    } else {
+      process.env.WIKI_WRITE_TOKEN = originalWikiWriteToken;
+    }
+  });
+
   const summary: WikiPageSummary = {
     slug: 'concepts/liquidity-sweep',
     title: 'Liquidity Sweep',
@@ -71,8 +86,24 @@ describe('WikiController', () => {
       bodyMarkdown: 'Risk control body.',
     };
 
-    expect(controller.createPage(request)).toEqual(detail);
+    expect(controller.createPage(request, 'test-write-token')).toEqual(detail);
     expect(service.createPage).toHaveBeenCalledWith(request);
+  });
+
+  it('rejects wiki page creation without the configured write token', () => {
+    const { controller, service } = createController();
+    const request: CreateWikiPageRequest = {
+      slug: 'concepts/risk-control',
+      title: 'Risk Control',
+      type: 'concept',
+      tags: ['risk'],
+      sources: [],
+      bodyMarkdown: 'Risk control body.',
+    };
+
+    expect(() => controller.createPage(request, undefined)).toThrow(UnauthorizedException);
+    expect(() => controller.createPage(request, 'wrong-token')).toThrow(UnauthorizedException);
+    expect(service.createPage).not.toHaveBeenCalled();
   });
 
   it('updates wiki pages through the service', () => {
@@ -85,8 +116,23 @@ describe('WikiController', () => {
       bodyMarkdown: 'Updated body.',
     };
 
-    expect(controller.updatePage(['concepts', 'liquidity-sweep'], request)).toEqual(detail);
+    expect(controller.updatePage(['concepts', 'liquidity-sweep'], request, 'test-write-token')).toEqual(detail);
     expect(service.updatePage).toHaveBeenCalledWith('concepts/liquidity-sweep', request);
+  });
+
+  it('rejects wiki page updates without the configured write token', () => {
+    const { controller, service } = createController();
+    const request: UpdateWikiPageRequest = {
+      title: 'Liquidity Sweep',
+      type: 'concept',
+      tags: ['liquidity'],
+      sources: [],
+      bodyMarkdown: 'Updated body.',
+    };
+
+    expect(() => controller.updatePage(['concepts', 'liquidity-sweep'], request, undefined)).toThrow(UnauthorizedException);
+    expect(() => controller.updatePage(['concepts', 'liquidity-sweep'], request, 'wrong-token')).toThrow(UnauthorizedException);
+    expect(service.updatePage).not.toHaveBeenCalled();
   });
 
   it('normalizes wildcard asset paths before sending files', () => {
