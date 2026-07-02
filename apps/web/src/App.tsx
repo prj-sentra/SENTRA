@@ -64,26 +64,34 @@ export function App() {
   return (
     <main className="shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">S.E.N.T.R.A.</p>
+        <div className="brand-block">
+          <p className="eyebrow">S.E.N.T.R.A. / OPERATIONS CONSOLE</p>
           <h1>Trading Journal</h1>
+          <p className="subhead">Structured trade records and field-maintained LLM wiki.</p>
         </div>
-        <nav className="tabs" aria-label="Sentra sections">
-          <button
-            className={activeView === 'trade-log' ? 'tab active' : 'tab'}
-            type="button"
-            onClick={() => setActiveView('trade-log')}
-          >
-            매매일지
-          </button>
-          <button
-            className={activeView === 'wiki' ? 'tab active' : 'tab'}
-            type="button"
-            onClick={() => setActiveView('wiki')}
-          >
-            위키
-          </button>
-        </nav>
+        <div className="control-stack">
+          <div className="system-status" aria-label="System status">
+            <span>API ONLINE</span>
+            <span>{state.trades.length} TRADES</span>
+            <span>{state.wikiPages.length} WIKI PAGES</span>
+          </div>
+          <nav className="tabs" aria-label="Sentra sections">
+            <button
+              className={activeView === 'trade-log' ? 'tab active' : 'tab'}
+              type="button"
+              onClick={() => setActiveView('trade-log')}
+            >
+              매매일지
+            </button>
+            <button
+              className={activeView === 'wiki' ? 'tab active' : 'tab'}
+              type="button"
+              onClick={() => setActiveView('wiki')}
+            >
+              위키
+            </button>
+          </nav>
+        </div>
       </header>
 
       {error ? <p className="error">API error: {error}</p> : null}
@@ -95,12 +103,12 @@ export function App() {
               <p className="section-label">Trade Log</p>
               <h2>독립 포지션 기록</h2>
             </div>
-            <span className="count">{state.trades.length} trades</span>
+            <span className="count">{state.trades.length} records</span>
           </div>
 
           {state.trades.length === 0 ? (
             <div className="empty-state">
-              <h3>아직 기록된 매매가 없습니다.</h3>
+              <h3>기록 대기 상태</h3>
               <p>텔레그램 대화를 통해 진입과 청산이 분리된 trade를 기록할 수 있습니다.</p>
             </div>
           ) : (
@@ -128,7 +136,7 @@ export function App() {
           {state.wikiPages.length === 0 ? (
             <div className="empty-state">
               <h3>위키 페이지가 아직 없습니다.</h3>
-              <p>이제 markdown 기반 LLM Wiki 페이지를 웹에서 읽을 수 있습니다.</p>
+              <p>Markdown 기반 LLM Wiki 페이지를 웹에서 읽을 수 있습니다.</p>
             </div>
           ) : (
             <div className="wiki-layout">
