@@ -22,6 +22,7 @@ updated: 2026-07-01
 type: concept
 tags: [price-action, liquidity]
 sources: [raw/articles/liquidity-note.md]
+order: 20
 confidence: medium
 ---
 
@@ -43,6 +44,7 @@ updated: 2026-07-02
 type: entity
 tags: [asset]
 sources: []
+order: 10
 ---
 
 Bitcoin context.
@@ -89,20 +91,22 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
 
     expect(service.listPages()).toEqual([
       {
-        slug: 'concepts/liquidity-sweep',
-        title: 'Liquidity Sweep',
-        type: 'concept',
-        updatedAt: '2026-07-01',
-        tags: ['price-action', 'liquidity'],
-        excerpt: 'A liquidity sweep is a trading setup concept.',
-      },
-      {
         slug: 'entities/bitcoin',
         title: 'Bitcoin',
         type: 'entity',
         updatedAt: '2026-07-02',
         tags: ['asset'],
+        order: 10,
         excerpt: 'Bitcoin context.',
+      },
+      {
+        slug: 'concepts/liquidity-sweep',
+        title: 'Liquidity Sweep',
+        type: 'concept',
+        updatedAt: '2026-07-01',
+        tags: ['price-action', 'liquidity'],
+        order: 20,
+        excerpt: 'A liquidity sweep is a trading setup concept.',
       },
       {
         slug: 'queries/incomplete-note',
@@ -124,6 +128,7 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
       type: 'concept',
       created: '2026-07-01',
       updated: '2026-07-01',
+      order: 20,
       tags: ['price-action', 'liquidity'],
       sources: ['raw/articles/liquidity-note.md'],
       confidence: 'medium',
@@ -211,15 +216,19 @@ This keeps ~~deprecated text~~, **strong text**, *emphasis*, and \`inline-code\`
       type: 'concept',
       tags: ['risk', 'operations'],
       sources: [],
+      order: 15,
       confidence: 'medium',
       bodyMarkdown: '# Risk Control\n\nRisk control limits downside before execution. Related to [[liquidity-sweep]].',
       summary: 'Risk control limits downside before execution.',
     });
 
-    expect(created).toMatchObject({ slug: 'concepts/risk-control', title: 'Risk Control', updatedAt: expect.any(String) });
+    expect(created).toMatchObject({ slug: 'concepts/risk-control', title: 'Risk Control', order: 15, updatedAt: expect.any(String) });
     expect(existsSync(join(wikiPath, 'concepts', 'risk-control.md'))).toBe(true);
     expect(readFileSync(join(wikiPath, 'concepts', 'risk-control.md'), 'utf8')).toContain('title: Risk Control');
-    expect(readFileSync(join(wikiPath, 'index.md'), 'utf8')).toContain('- [[risk-control]] - Risk control limits downside before execution.');
+    expect(readFileSync(join(wikiPath, 'concepts', 'risk-control.md'), 'utf8')).toContain('order: 15');
+    const index = readFileSync(join(wikiPath, 'index.md'), 'utf8');
+    expect(index).toContain('- [[risk-control]] - Risk control limits downside before execution.');
+    expect(index.indexOf('[[risk-control]]')).toBeLessThan(index.indexOf('[[liquidity-sweep]]'));
     expect(readFileSync(join(wikiPath, 'log.md'), 'utf8')).toContain('create | concepts/risk-control');
   });
 
@@ -231,6 +240,7 @@ This keeps ~~deprecated text~~, **strong text**, *emphasis*, and \`inline-code\`
       type: 'concept',
       tags: ['price-action', 'liquidity'],
       sources: ['raw/articles/liquidity-note.md'],
+      order: 5,
       confidence: 'medium',
       bodyMarkdown: '# Liquidity Sweep\n\nUpdated body. Related to [[bitcoin]].',
       summary: 'Updated body.',
@@ -238,8 +248,10 @@ This keeps ~~deprecated text~~, **strong text**, *emphasis*, and \`inline-code\`
 
     const index = readFileSync(join(wikiPath, 'index.md'), 'utf8');
     expect(updated.bodyMarkdown).toContain('Updated body');
+    expect(updated.order).toBe(5);
     expect(index.match(/\[\[liquidity-sweep\]\]/g)).toHaveLength(1);
     expect(index).toContain('- [[liquidity-sweep]] - Updated body.');
+    expect(readFileSync(join(wikiPath, 'concepts', 'liquidity-sweep.md'), 'utf8')).toContain('order: 5');
     expect(readFileSync(join(wikiPath, 'log.md'), 'utf8')).toContain('update | concepts/liquidity-sweep');
   });
 

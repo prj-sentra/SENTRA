@@ -40,7 +40,7 @@ export class WikiService {
     return this.listMarkdownFiles(this.wikiPath)
       .filter((filePath) => this.isWikiPageFile(filePath))
       .map((filePath) => this.toPageSummary(filePath))
-      .sort((a, b) => a.slug.localeCompare(b.slug));
+      .sort((a, b) => this.comparePageOrder(a, b));
   }
 
   getPage(slug: string): WikiPageDetail {
@@ -62,6 +62,7 @@ export class WikiService {
       updated: this.stringField(parsed.frontmatter.updated),
       updatedAt: this.stringField(parsed.frontmatter.updated) ?? '',
       tags: this.arrayField(parsed.frontmatter.tags),
+      order: this.numberField(parsed.frontmatter.order),
       sources: this.arrayField(parsed.frontmatter.sources),
       confidence: this.confidenceField(parsed.frontmatter.confidence),
       contested: this.booleanField(parsed.frontmatter.contested),
@@ -225,6 +226,9 @@ export class WikiService {
       `tags: ${this.formatArray(input.tags)}`,
       `sources: ${this.formatArray(input.sources)}`,
     ];
+    if (input.order !== undefined) {
+      lines.push(`order: ${input.order}`);
+    }
     if (input.confidence) {
       lines.push(`confidence: ${input.confidence}`);
     }
@@ -251,8 +255,7 @@ export class WikiService {
     for (const section of sections) {
       lines.push(`## ${section.title}`);
       const sectionPages = pages
-        .filter((page) => section.types.includes(page.type))
-        .sort((a, b) => a.title.localeCompare(b.title));
+        .filter((page) => section.types.includes(page.type));
       for (const page of sectionPages) {
         const basenameSlug = page.slug.split('/').at(-1)!;
         const summary = summaryOverrides.get(page.slug) ?? page.excerpt ?? '';
@@ -329,8 +332,24 @@ export class WikiService {
       type: this.stringField(parsed.frontmatter.type) ?? 'concept',
       updatedAt: this.stringField(parsed.frontmatter.updated) ?? '',
       tags: this.arrayField(parsed.frontmatter.tags),
+      order: this.numberField(parsed.frontmatter.order),
       excerpt: firstParagraph,
     };
+  }
+
+  private comparePageOrder(a: WikiPageSummary, b: WikiPageSummary): number {
+    const aOrder = a.order ?? Number.MAX_SAFE_INTEGER;
+    const bOrder = b.order ?? Number.MAX_SAFE_INTEGER;
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+
+    const titleCompare = a.title.localeCompare(b.title);
+    if (titleCompare !== 0) {
+      return titleCompare;
+    }
+
+    return a.slug.localeCompare(b.slug);
   }
 
   private parsePageFile(filePath: string): ParsedWikiPage {
@@ -384,6 +403,18 @@ export class WikiService {
       return inner.split(',').map((item) => this.stripQuotes(item.trim()));
     }
     return this.stripQuotes(rawValue);
+  }
+
+  private numberField(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value !== 'string' || value.trim() === '') {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 
   private stripQuotes(value: string): string {

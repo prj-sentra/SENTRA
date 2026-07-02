@@ -88,6 +88,7 @@ export interface WikiPageSummary {
   type: WikiPageType;
   updatedAt: string;
   tags: string[];
+  order?: number;
   excerpt?: string;
 }
 
@@ -112,6 +113,7 @@ export interface CreateWikiPageRequest {
   tags: string[];
   sources: string[];
   bodyMarkdown: string;
+  order?: number;
   summary?: string;
   confidence?: WikiConfidence;
 }
@@ -122,6 +124,7 @@ export interface UpdateWikiPageRequest {
   tags: string[];
   sources: string[];
   bodyMarkdown: string;
+  order?: number;
   summary?: string;
   confidence?: WikiConfidence;
 }
