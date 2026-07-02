@@ -312,9 +312,28 @@ h3 {
 .wiki-content li { margin: 0 0 0.4em; }
 .wiki-content a { color: var(--blue); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .wiki-content a:hover { color: var(--blue-hover); }
+.wiki-content strong { font-weight: 600; }
+.wiki-content em { font-style: italic; }
+.wiki-content del {
+  color: var(--text-secondary);
+  text-decoration-thickness: 1.5px;
+}
 .wiki-content code,
 .wiki-content p:has(code) {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.wiki-content code {
+  padding: 0.08rem 0.32rem;
+  border: 1px solid var(--border);
+  background: var(--layer-01);
+  font-size: 0.92em;
+}
+.wiki-content .wiki-provenance {
+  margin-left: 0.18rem;
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72em;
+  vertical-align: super;
 }
 .wiki-content img {
   display: block;

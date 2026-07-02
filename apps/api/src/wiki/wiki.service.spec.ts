@@ -137,6 +137,33 @@ describe('WikiService filesystem-backed llm-wiki reader', () => {
     expect(page.bodyHtml).toContain('<img src="/api/wiki/assets/sweep.png" alt="sweep.png"');
   });
 
+  it('renders strikethrough, emphasis, code, and provenance markers in wiki pages', () => {
+    writeFileSync(
+      join(wikiPath, 'concepts', 'rendering-check.md'),
+      `---
+title: Rendering Check
+created: 2026-07-02
+updated: 2026-07-02
+type: concept
+tags: [rendering]
+sources: [raw/transcripts/rendering-check.md]
+---
+
+This keeps ~~deprecated text~~, **strong text**, *emphasis*, and \`inline-code\`.^[raw/transcripts/rendering-check.md]
+`,
+    );
+
+    const service = new WikiService({ wikiPath });
+    const page = service.getPage('concepts/rendering-check');
+
+    expect(page.bodyHtml).toContain('<del>deprecated text</del>');
+    expect(page.bodyHtml).toContain('<strong>strong text</strong>');
+    expect(page.bodyHtml).toContain('<em>emphasis</em>');
+    expect(page.bodyHtml).toContain('<code>inline-code</code>');
+    expect(page.bodyHtml).toContain('<sup class="wiki-provenance"');
+    expect(page.bodyHtml).toContain('[raw/transcripts/rendering-check.md]</sup>');
+  });
+
   it('resolves asset files only from raw/assets', () => {
     const service = new WikiService({ wikiPath });
 

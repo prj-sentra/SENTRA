@@ -474,7 +474,8 @@ export class WikiService {
   }
 
   private renderInline(text: string): string {
-    return this.escapeHtml(text)
+    return this.applyInlineFormatting(
+      this.escapeHtml(text)
       .replace(/!\[\[([^\]]+)\]\]/g, (_match, assetPath: string) => {
         const trimmedAssetPath = String(assetPath).trim();
         if (!trimmedAssetPath || trimmedAssetPath.startsWith('/') || trimmedAssetPath.includes('..')) {
@@ -489,7 +490,23 @@ export class WikiService {
         const label = this.escapeHtml(this.titleFromSlug(trimmedSlug));
         const href = `#wiki/${encodeURI(trimmedSlug)}`;
         return `<a href="${href}" data-wiki-link="${this.escapeHtml(trimmedSlug)}">${label}</a>`;
-      });
+      }),
+    );
+  }
+
+  private applyInlineFormatting(html: string): string {
+    return html
+      .replace(/\^\[([^\]]+)\]/g, (_match, source: string) => {
+        const trimmedSource = String(source).trim();
+        if (!trimmedSource) {
+          return '';
+        }
+        return `<sup class="wiki-provenance" data-provenance="${trimmedSource}" title="Source: ${trimmedSource}">[${trimmedSource}]</sup>`;
+      })
+      .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
   }
 
   private escapeHtml(value: string): string {
