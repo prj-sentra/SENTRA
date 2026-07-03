@@ -116,15 +116,19 @@ export class TradeLogService {
       throw new BadRequestException('Cannot enter a closed trade');
     }
 
+    const occurredAt = new Date(request.occurredAt);
+    const detectedSession = this.detectSessionFromOccurredAt(occurredAt);
+
     const updated = await this.prisma.trade.update({
       where: { id },
       data: {
         status: 'open',
+        session: detectedSession,
         entry: {
           create: {
             price: request.price,
             quantity: request.quantity,
-            occurredAt: new Date(request.occurredAt),
+            occurredAt,
             note: request.note,
           },
         },
@@ -262,7 +266,32 @@ export class TradeLogService {
     return this.compactTradeJournal(journal as TradeJournalContext);
   }
 
-  private toPrismaJson(journal: TradeJournalContext | undefined): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
+  private detectSessionFromOccurredAt(occurredAt: Date): string {
+    if (this.isWithinSessionHours(occurredAt, 'America/New_York', 8, 17)) {
+      return 'New York';
+    }
+    if (this.isWithinSessionHours(occurredAt, 'Europe/London', 8, 17)) {
+      return 'London';
+    }
+    if (this.isWithinSessionHours(occurredAt, 'Asia/Seoul', 9, 15)) {
+      return 'Asia';
+    }
+    return 'Off session';
+  }
+
+  private isWithinSessionHours(occurredAt: Date, timeZone: string, startHour: number, endHourExclusive: number): boolean {
+    const hour = Number(
+      new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        hour12: false,
+        timeZone,
+      }).format(occurredAt),
+    );
+
+    return hour >= startHour && hour < endHourExclusive;
+  }
+
+  private toPrismaJson(journal: TradeJournalContext | undefined): Prisma.InputJsonValue | undefined {
     if (!journal) {
       return undefined;
     }
@@ -271,13 +300,15 @@ export class TradeLogService {
   }
 
   private toTradeRecord(trade: TradeWithEvents): TradeRecord {
+    const inferredSession = trade.entry ? this.detectSessionFromOccurredAt(trade.entry.occurredAt) : undefined;
+
     return {
       id: trade.id,
       symbol: trade.symbol,
       side: trade.side as TradeRecord['side'],
       status: trade.status as TradeRecord['status'],
       timeframe: trade.timeframe ?? undefined,
-      session: trade.session ?? undefined,
+      session: trade.session ?? inferredSession,
       strategy: trade.strategy ?? undefined,
       thesis: trade.thesis ?? undefined,
       note: trade.note ?? undefined,

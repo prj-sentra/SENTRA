@@ -42,6 +42,7 @@ function createTestService(): TradeLogService {
         const updated = {
           ...trade,
           status: data.status ?? trade.status,
+          session: data.session ?? trade.session,
           journal: data.journal ?? trade.journal,
           updatedAt: new Date('2026-06-29T00:01:00.000Z'),
         };
@@ -230,6 +231,51 @@ describe('TradeLogService', () => {
         note: 'Initial short entry',
       },
     });
+  });
+
+  it('auto-detects Asia session from entry time in Korea morning', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({ symbol: 'XAUUSD', side: 'short' });
+
+    const updated = await service.recordEntry(trade.id, {
+      price: 4182.86,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T02:45:55.000Z',
+    });
+
+    expect(updated.session).toBe('Asia');
+  });
+
+  it('auto-detects London and New York sessions with DST-aware market hours, otherwise off session', async () => {
+    const service = createTestService();
+
+    const london = await service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+    const ny = await service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+    const off = await service.createTrade({ symbol: 'BTCUSDT', side: 'long' });
+
+    await expect(
+      service.recordEntry(london.id, {
+        price: 100,
+        quantity: 1,
+        occurredAt: '2026-07-03T07:30:00.000Z',
+      }),
+    ).resolves.toMatchObject({ session: 'London' });
+
+    await expect(
+      service.recordEntry(ny.id, {
+        price: 101,
+        quantity: 1,
+        occurredAt: '2026-07-03T12:30:00.000Z',
+      }),
+    ).resolves.toMatchObject({ session: 'New York' });
+
+    await expect(
+      service.recordEntry(off.id, {
+        price: 102,
+        quantity: 1,
+        occurredAt: '2026-07-03T21:00:00.000Z',
+      }),
+    ).resolves.toMatchObject({ session: 'Off session' });
   });
 
   it('records exit separately from entry and closes the trade', async () => {
