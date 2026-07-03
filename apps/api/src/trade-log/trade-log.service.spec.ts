@@ -23,6 +23,7 @@ function createTestService(): TradeLogService {
           strategy: data.strategy ?? null,
           thesis: data.thesis ?? null,
           note: data.note ?? null,
+          journal: data.journal ?? null,
           createdAt: now,
           updatedAt: now,
           entry: null,
@@ -41,6 +42,7 @@ function createTestService(): TradeLogService {
         const updated = {
           ...trade,
           status: data.status ?? trade.status,
+          journal: data.journal ?? trade.journal,
           updatedAt: new Date('2026-06-29T00:01:00.000Z'),
         };
         if (data.entry?.create) {
@@ -120,6 +122,91 @@ describe('TradeLogService', () => {
     });
     expect(first.id).not.toBe(second.id);
     await expect(service.listTrades()).resolves.toHaveLength(2);
+  });
+
+  it('stores structured journal context derived from the trading wiki', async () => {
+    const service = createTestService();
+
+    const trade = await service.createTrade({
+      symbol: 'XAUUSD',
+      side: 'short',
+      timeframe: '1h',
+      session: 'New York',
+      thesis: '추세 하락 + 투볼 + 저항 확인',
+      journal: {
+        plan: {
+          setupType: '투볼',
+          entryModel: '하락 추세 continuation',
+          confirmations: ['볼린저 밴드', '추세', '지지·저항'],
+          stopLossPrice: 4190.5,
+          takeProfitPrice: 4160.0,
+          plannedLossAmount: 3.5,
+          dailyLossLimit: 20,
+          calmState: true,
+        },
+        management: {
+          breakevenRule: '직전 고점 기준으로 보호 손절 이동',
+          exitTriggers: ['볼린저 밴드 수축', '반대 꼬리 강함'],
+        },
+      },
+    });
+
+    expect(trade).toMatchObject({
+      symbol: 'XAUUSD',
+      journal: {
+        plan: {
+          setupType: '투볼',
+          confirmations: ['볼린저 밴드', '추세', '지지·저항'],
+          stopLossPrice: 4190.5,
+          dailyLossLimit: 20,
+          calmState: true,
+        },
+        management: {
+          breakevenRule: '직전 고점 기준으로 보호 손절 이동',
+          exitTriggers: ['볼린저 밴드 수축', '반대 꼬리 강함'],
+        },
+      },
+    });
+  });
+
+  it('patches journal context after the trade to add management and review data', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({
+      symbol: 'XAUUSD',
+      side: 'short',
+      journal: {
+        plan: {
+          setupType: '정볼',
+          confirmations: ['추세', '20MA'],
+        },
+      },
+    });
+
+    const updated = await service.patchTradeJournal(trade.id, {
+      management: {
+        breakevenRule: '1 point 이하 수익권은 본절 취급',
+      },
+      review: {
+        resultLabel: '본절 청산',
+        processVerdict: 'observe',
+        realizedPnlText: '$0.06',
+      },
+    });
+
+    expect(updated.journal).toMatchObject({
+      plan: {
+        setupType: '정볼',
+        confirmations: ['추세', '20MA'],
+      },
+      management: {
+        breakevenRule: '1 point 이하 수익권은 본절 취급',
+      },
+      review: {
+        resultLabel: '본절 청산',
+        processVerdict: 'observe',
+        realizedPnlText: '$0.06',
+      },
+    });
   });
 
   it('records entry separately from trade creation and opens the trade', async () => {
@@ -309,6 +396,38 @@ describe('TradeLogService', () => {
         expect.objectContaining({ entry: expect.objectContaining({ price: 67400 }) }),
       ]),
     );
+  });
+
+  it('applies assistant journal patches for review-stage metadata', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({ symbol: 'XAUUSD', side: 'short' });
+
+    const response = await service.applyAssistantActions({
+      rawText: '본절 청산. 실제 이익은 $0.06',
+      source: 'telegram',
+      actions: [
+        {
+          type: 'patch_trade_journal',
+          tradeId: trade.id,
+          payload: {
+            review: {
+              resultLabel: '본절 청산',
+              realizedPnlText: '$0.06',
+              reviewNotes: '1 point 이하 수익권은 본절 취급',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(response.trades).toHaveLength(1);
+    expect(response.trades[0].journal).toMatchObject({
+      review: {
+        resultLabel: '본절 청산',
+        realizedPnlText: '$0.06',
+        reviewNotes: '1 point 이하 수익권은 본절 취급',
+      },
+    });
   });
 
   it('preserves rawText in the created trade note when note is otherwise absent', async () => {

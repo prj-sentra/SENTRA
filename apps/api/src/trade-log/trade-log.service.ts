@@ -4,18 +4,23 @@ import type {
   HealthResponse,
   TradeEntryRequest,
   TradeExitRequest,
+  TradeJournalContext,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
   TradeRecord,
+  UpdateTradeJournalRequest,
 } from '@trading-journal/shared';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   validateCreateTradeRequest,
   validateTradeEntryRequest,
   validateTradeExitRequest,
+  validateTradeJournalPatchRequest,
 } from './trade-log.validation';
 
 type TradeWithEvents = Awaited<ReturnType<PrismaService['trade']['findFirstOrThrow']>> & {
+  journal?: unknown;
   entry?: {
     price: { toNumber(): number };
     quantity: { toNumber(): number } | null;
@@ -56,6 +61,7 @@ export class TradeLogService {
         strategy: request.strategy,
         thesis: request.thesis,
         note: request.note,
+        journal: this.toPrismaJson(request.journal),
       },
       include: { entry: true, exit: true },
     });
@@ -80,6 +86,23 @@ export class TradeLogService {
       throw new NotFoundException(`Trade not found: ${id}`);
     }
     return this.toTradeRecord(trade);
+  }
+
+  async patchTradeJournal(id: string, request: UpdateTradeJournalRequest): Promise<TradeRecord> {
+    validateTradeJournalPatchRequest(request);
+
+    const trade = await this.getTrade(id);
+    const mergedJournal = this.mergeTradeJournal(trade.journal, request);
+
+    const updated = await this.prisma.trade.update({
+      where: { id },
+      data: {
+        journal: this.toPrismaJson(mergedJournal),
+      },
+      include: { entry: true, exit: true },
+    });
+
+    return this.toTradeRecord(updated);
   }
 
   async recordEntry(id: string, request: TradeEntryRequest): Promise<TradeRecord> {
@@ -170,6 +193,12 @@ export class TradeLogService {
         continue;
       }
 
+      if (action.type === 'patch_trade_journal') {
+        const updated = await this.patchTradeJournal(action.tradeId, action.payload);
+        this.upsertTouchedTrade(touchedTrades, updated);
+        continue;
+      }
+
       const updated = await this.recordExit(action.tradeId, action.payload);
       this.upsertTouchedTrade(touchedTrades, updated);
     }
@@ -190,6 +219,57 @@ export class TradeLogService {
     }
   }
 
+  private mergeTradeJournal(
+    existing: TradeJournalContext | undefined,
+    patch: UpdateTradeJournalRequest,
+  ): TradeJournalContext | undefined {
+    const merged: TradeJournalContext = {
+      plan: patch.plan ? { ...(existing?.plan ?? {}), ...patch.plan } : existing?.plan,
+      management: patch.management
+        ? { ...(existing?.management ?? {}), ...patch.management }
+        : existing?.management,
+      review: patch.review ? { ...(existing?.review ?? {}), ...patch.review } : existing?.review,
+    };
+
+    return this.compactTradeJournal(merged);
+  }
+
+  private compactTradeJournal(journal: TradeJournalContext | undefined): TradeJournalContext | undefined {
+    if (!journal) {
+      return undefined;
+    }
+
+    const compacted: TradeJournalContext = {};
+
+    if (journal.plan && Object.keys(journal.plan).length > 0) {
+      compacted.plan = journal.plan;
+    }
+    if (journal.management && Object.keys(journal.management).length > 0) {
+      compacted.management = journal.management;
+    }
+    if (journal.review && Object.keys(journal.review).length > 0) {
+      compacted.review = journal.review;
+    }
+
+    return Object.keys(compacted).length > 0 ? compacted : undefined;
+  }
+
+  private normalizeTradeJournal(journal: unknown): TradeJournalContext | undefined {
+    if (!journal || typeof journal !== 'object' || Array.isArray(journal)) {
+      return undefined;
+    }
+
+    return this.compactTradeJournal(journal as TradeJournalContext);
+  }
+
+  private toPrismaJson(journal: TradeJournalContext | undefined): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
+    if (!journal) {
+      return undefined;
+    }
+
+    return journal as Prisma.InputJsonValue;
+  }
+
   private toTradeRecord(trade: TradeWithEvents): TradeRecord {
     return {
       id: trade.id,
@@ -201,6 +281,7 @@ export class TradeLogService {
       strategy: trade.strategy ?? undefined,
       thesis: trade.thesis ?? undefined,
       note: trade.note ?? undefined,
+      journal: this.normalizeTradeJournal(trade.journal),
       entry: trade.entry
         ? {
             price: trade.entry.price.toNumber(),

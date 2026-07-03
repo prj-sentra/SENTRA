@@ -1,5 +1,43 @@
 export type TradeSide = 'long' | 'short';
 export type TradeStatus = 'planned' | 'open' | 'closed' | 'cancelled';
+export type TradeProcessVerdict = 'good' | 'bad' | 'repeat-ban' | 'observe';
+
+export interface TradeJournalPlan {
+  setupType?: string;
+  entryModel?: string;
+  confirmations?: string[];
+  invalidation?: string;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  plannedLossAmount?: number;
+  dailyLossLimit?: number;
+  calmState?: boolean;
+  checklistNotes?: string;
+}
+
+export interface TradeJournalManagement {
+  breakevenRule?: string;
+  additionRule?: string;
+  exitTriggers?: string[];
+  managementNotes?: string;
+}
+
+export interface TradeJournalReview {
+  resultLabel?: string;
+  processVerdict?: TradeProcessVerdict;
+  ruleViolations?: string[];
+  lessons?: string[];
+  realizedPnlText?: string;
+  reviewNotes?: string;
+}
+
+export interface TradeJournalContext {
+  plan?: TradeJournalPlan;
+  management?: TradeJournalManagement;
+  review?: TradeJournalReview;
+}
+
+export interface UpdateTradeJournalRequest extends TradeJournalContext {}
 
 export interface CreateTradeRequest {
   symbol: string;
@@ -9,6 +47,7 @@ export interface CreateTradeRequest {
   strategy?: string;
   thesis?: string;
   note?: string;
+  journal?: TradeJournalContext;
 }
 
 export interface TradeEntryRequest {
@@ -39,6 +78,7 @@ export interface TradeRecord {
   strategy?: string;
   thesis?: string;
   note?: string;
+  journal?: TradeJournalContext;
   entry?: TradeEntry;
   exit?: TradeExit;
   createdAt: string;
@@ -62,10 +102,17 @@ export interface TradeLogAssistantActionRecordExit {
   payload: TradeExitRequest;
 }
 
+export interface TradeLogAssistantActionPatchJournal {
+  type: 'patch_trade_journal';
+  tradeId: string;
+  payload: UpdateTradeJournalRequest;
+}
+
 export type TradeLogAssistantAction =
   | TradeLogAssistantActionCreateTrade
   | TradeLogAssistantActionRecordEntry
-  | TradeLogAssistantActionRecordExit;
+  | TradeLogAssistantActionRecordExit
+  | TradeLogAssistantActionPatchJournal;
 
 export interface TradeLogAssistantActionsRequest {
   rawText: string;

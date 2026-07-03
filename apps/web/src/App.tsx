@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import type { TradeRecord, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type { TradeJournalContext, TradeRecord, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 type View = 'trade-log' | 'wiki';
@@ -19,6 +19,61 @@ function wikiHtmlForCurrentHost(bodyHtml: string): string {
     return bodyHtml;
   }
   return bodyHtml.replaceAll('src="/api/', `src="${apiUrl}/`);
+}
+
+function formatTradeTimestamp(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return new Date(value).toLocaleString('ko-KR', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+    hour12: false,
+  });
+}
+
+function tradeSummaryChips(trade: TradeRecord): string[] {
+  return [trade.timeframe, trade.session, trade.strategy].filter((value): value is string => Boolean(value));
+}
+
+function tradeJournalBlocks(journal: TradeJournalContext | undefined): Array<{ title: string; rows: Array<[string, string]> }> {
+  if (!journal) {
+    return [];
+  }
+
+  const blocks: Array<{ title: string; rows: Array<[string, string]> }> = [];
+
+  const planRows: Array<[string, string]> = [];
+  if (journal.plan?.setupType) planRows.push(['setup', journal.plan.setupType]);
+  if (journal.plan?.entryModel) planRows.push(['entry model', journal.plan.entryModel]);
+  if (journal.plan?.confirmations?.length) planRows.push(['confirmations', journal.plan.confirmations.join(' · ')]);
+  if (journal.plan?.invalidation) planRows.push(['invalidation', journal.plan.invalidation]);
+  if (journal.plan?.stopLossPrice) planRows.push(['stop loss', String(journal.plan.stopLossPrice)]);
+  if (journal.plan?.takeProfitPrice) planRows.push(['take profit', String(journal.plan.takeProfitPrice)]);
+  if (journal.plan?.plannedLossAmount) planRows.push(['planned loss', String(journal.plan.plannedLossAmount)]);
+  if (journal.plan?.dailyLossLimit) planRows.push(['daily loss limit', String(journal.plan.dailyLossLimit)]);
+  if (journal.plan?.calmState !== undefined) planRows.push(['calm state', journal.plan.calmState ? 'yes' : 'no']);
+  if (journal.plan?.checklistNotes) planRows.push(['checklist notes', journal.plan.checklistNotes]);
+  if (planRows.length > 0) blocks.push({ title: 'Setup / Risk', rows: planRows });
+
+  const managementRows: Array<[string, string]> = [];
+  if (journal.management?.breakevenRule) managementRows.push(['breakeven rule', journal.management.breakevenRule]);
+  if (journal.management?.additionRule) managementRows.push(['addition rule', journal.management.additionRule]);
+  if (journal.management?.exitTriggers?.length) managementRows.push(['exit triggers', journal.management.exitTriggers.join(' · ')]);
+  if (journal.management?.managementNotes) managementRows.push(['management notes', journal.management.managementNotes]);
+  if (managementRows.length > 0) blocks.push({ title: 'Management', rows: managementRows });
+
+  const reviewRows: Array<[string, string]> = [];
+  if (journal.review?.resultLabel) reviewRows.push(['result label', journal.review.resultLabel]);
+  if (journal.review?.processVerdict) reviewRows.push(['process verdict', journal.review.processVerdict]);
+  if (journal.review?.ruleViolations?.length) reviewRows.push(['rule violations', journal.review.ruleViolations.join(' · ')]);
+  if (journal.review?.lessons?.length) reviewRows.push(['lessons', journal.review.lessons.join(' · ')]);
+  if (journal.review?.realizedPnlText) reviewRows.push(['realized pnl', journal.review.realizedPnlText]);
+  if (journal.review?.reviewNotes) reviewRows.push(['review notes', journal.review.reviewNotes]);
+  if (reviewRows.length > 0) blocks.push({ title: 'Review', rows: reviewRows });
+
+  return blocks;
 }
 
 export function App() {
@@ -177,13 +232,74 @@ export function App() {
             </div>
           ) : (
             <div className="list">
-              {state.trades.map((trade) => (
-                <article className="list-item" key={trade.id}>
-                  <strong>{trade.symbol}</strong>
-                  <span>{trade.side}</span>
-                  <span>{trade.status}</span>
-                </article>
-              ))}
+              {state.trades.map((trade) => {
+                const journalBlocks = tradeJournalBlocks(trade.journal);
+                const summaryChips = tradeSummaryChips(trade);
+                const entryAt = formatTradeTimestamp(trade.entry?.occurredAt);
+                const exitAt = formatTradeTimestamp(trade.exit?.occurredAt);
+
+                return (
+                  <article className="list-item trade-card" key={trade.id}>
+                    <div className="trade-card-header">
+                      <div>
+                        <strong>{trade.symbol}</strong>
+                        <div className="trade-chip-row">
+                          <span>{trade.side}</span>
+                          <span>{trade.status}</span>
+                          {summaryChips.map((chip) => (
+                            <span key={`${trade.id}-${chip}`}>{chip}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <span className="trade-id">{trade.id.slice(0, 8)}</span>
+                    </div>
+
+                    <div className="trade-stat-grid">
+                      {trade.entry ? (
+                        <div className="trade-stat-block">
+                          <small>entry</small>
+                          <strong>{trade.entry.price}</strong>
+                          <span>
+                            {trade.entry.quantity ? `qty ${trade.entry.quantity}` : 'qty -'}
+                            {entryAt ? ` · ${entryAt}` : ''}
+                          </span>
+                        </div>
+                      ) : null}
+                      {trade.exit ? (
+                        <div className="trade-stat-block">
+                          <small>exit</small>
+                          <strong>{trade.exit.price}</strong>
+                          <span>
+                            {trade.exit.quantity ? `qty ${trade.exit.quantity}` : 'qty -'}
+                            {exitAt ? ` · ${exitAt}` : ''}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {trade.thesis ? <p className="trade-thesis">{trade.thesis}</p> : null}
+                    {trade.note ? <p className="trade-note">raw: {trade.note}</p> : null}
+
+                    {journalBlocks.length > 0 ? (
+                      <div className="trade-journal-grid">
+                        {journalBlocks.map((block) => (
+                          <section className="trade-journal-block" key={`${trade.id}-${block.title}`}>
+                            <h3>{block.title}</h3>
+                            <dl>
+                              {block.rows.map(([label, value]) => (
+                                <div key={`${block.title}-${label}`}>
+                                  <dt>{label}</dt>
+                                  <dd>{value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </section>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

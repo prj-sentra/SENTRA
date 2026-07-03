@@ -17,6 +17,7 @@ model Trade {
   strategy  String?
   thesis    String?
   note      String?
+  journal   Json?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   entry     TradeEntry?

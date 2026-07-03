@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import type {
   CreateTradeRequest,
   HealthResponse,
@@ -7,6 +7,7 @@ import type {
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
   TradeRecord,
+  UpdateTradeJournalRequest,
 } from '@trading-journal/shared';
 import { TradeLogService } from './trade-log.service';
 
@@ -39,6 +40,11 @@ export class TradeLogController {
   @Get('trades/:id')
   trade(@Param('id') id: string): Promise<TradeRecord> {
     return this.tradeLogService.getTrade(id);
+  }
+
+  @Patch('trades/:id/journal')
+  patchJournal(@Param('id') id: string, @Body() request: UpdateTradeJournalRequest): Promise<TradeRecord> {
+    return this.tradeLogService.patchTradeJournal(id, request);
   }
 
   @Post('trades/:id/entry')

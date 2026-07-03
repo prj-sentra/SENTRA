@@ -1,4 +1,9 @@
-import type { TradeLogAssistantActionsRequest, TradeLogAssistantActionsResponse } from '@trading-journal/shared';
+import type {
+  TradeLogAssistantActionsRequest,
+  TradeLogAssistantActionsResponse,
+  TradeRecord,
+  UpdateTradeJournalRequest,
+} from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
 
 describe('TradeLogController', () => {
@@ -66,6 +71,46 @@ describe('TradeLogController', () => {
           },
         },
       ],
+    });
+  });
+
+  it('exposes journal patching over HTTP controller contract', async () => {
+    const response: TradeRecord = {
+      id: 'trade-1',
+      symbol: 'XAUUSD',
+      side: 'short',
+      status: 'closed',
+      journal: {
+        review: {
+          resultLabel: '본절 청산',
+          realizedPnlText: '$0.06',
+        },
+      },
+      createdAt: '2026-07-03T00:00:00.000Z',
+      updatedAt: '2026-07-03T00:10:00.000Z',
+    };
+    const service = {
+      patchTradeJournal: jest.fn<Promise<TradeRecord>, [string, UpdateTradeJournalRequest]>(() =>
+        Promise.resolve(response),
+      ),
+    };
+    const controller = new TradeLogController(service as never);
+
+    await expect(
+      controller.patchJournal('trade-1', {
+        review: {
+          resultLabel: '본절 청산',
+          realizedPnlText: '$0.06',
+        },
+      }),
+    ).resolves.toMatchObject({
+      id: 'trade-1',
+      journal: {
+        review: {
+          resultLabel: '본절 청산',
+          realizedPnlText: '$0.06',
+        },
+      },
     });
   });
 });

@@ -199,11 +199,7 @@ h3 {
 
 .list { display: grid; gap: 1px; padding: 0; background: var(--border); }
 .list-item {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 16px;
-  align-items: center;
-  padding: 18px 32px;
+  padding: 24px 32px;
   background: var(--surface);
 }
 
@@ -213,6 +209,115 @@ h3 {
   font-size: 0.78rem;
   color: var(--text-secondary);
   text-transform: uppercase;
+}
+
+.trade-card {
+  display: grid;
+  gap: 18px;
+}
+
+.trade-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.trade-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trade-chip-row span,
+.trade-id {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  background: var(--layer-01);
+}
+
+.trade-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.trade-stat-block {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--layer-01);
+}
+
+.trade-stat-block small {
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.trade-stat-block strong {
+  font-size: 1.15rem;
+}
+
+.trade-stat-block span {
+  text-transform: none;
+}
+
+.trade-thesis,
+.trade-note {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.trade-note {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.trade-journal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.trade-journal-block {
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.trade-journal-block h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.trade-journal-block dl {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.trade-journal-block dl div {
+  display: grid;
+  gap: 4px;
+}
+
+.trade-journal-block dt {
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.trade-journal-block dd {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.45;
 }
 
 .wiki-layout {
@@ -388,4 +493,6 @@ h3 {
   .system-status span:last-child { border-bottom: 0; }
   .panel-header { flex-direction: column; }
   .empty-state { margin: 20px; }
+  .list-item { padding: 20px; }
+  .trade-card-header { flex-direction: column; }
 }
