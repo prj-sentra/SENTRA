@@ -246,6 +246,31 @@ describe('TradeLogService', () => {
     expect(updated.session).toBe('Asia');
   });
 
+  it('treats pre-London late Asia entries as Asia based on entry time', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({ symbol: 'XAUUSD', side: 'long' });
+
+    const updated = await service.recordEntry(trade.id, {
+      price: 4165.23,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T06:29:58.000Z',
+    });
+
+    expect(updated.session).toBe('Asia');
+  });
+
+  it('prefers inferred entry-time session over a stale stored session label', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({ symbol: 'XAUUSD', side: 'long', session: 'Off session' });
+    await service.recordEntry(trade.id, {
+      price: 4165.23,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T06:29:58.000Z',
+    });
+
+    await expect(service.getTrade(trade.id)).resolves.toMatchObject({ session: 'Asia' });
+  });
+
   it('auto-detects London and New York sessions with DST-aware market hours, otherwise off session', async () => {
     const service = createTestService();
 

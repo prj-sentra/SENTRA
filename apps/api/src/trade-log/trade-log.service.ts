@@ -273,7 +273,7 @@ export class TradeLogService {
     if (this.isWithinSessionHours(occurredAt, 'Europe/London', 8, 17)) {
       return 'London';
     }
-    if (this.isWithinSessionHours(occurredAt, 'Asia/Seoul', 9, 15)) {
+    if (this.isWithinSessionHours(occurredAt, 'Asia/Seoul', 9, 16)) {
       return 'Asia';
     }
     return 'Off session';
@@ -308,7 +308,7 @@ export class TradeLogService {
       side: trade.side as TradeRecord['side'],
       status: trade.status as TradeRecord['status'],
       timeframe: trade.timeframe ?? undefined,
-      session: trade.session ?? inferredSession,
+      session: inferredSession ?? trade.session ?? undefined,
       strategy: trade.strategy ?? undefined,
       thesis: trade.thesis ?? undefined,
       note: trade.note ?? undefined,
