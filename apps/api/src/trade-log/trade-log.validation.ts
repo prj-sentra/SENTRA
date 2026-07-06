@@ -66,10 +66,7 @@ function assertValidOccurredAt(value: string, message: string): void {
   }
 }
 
-function assertOptionalTradeTagField(value: unknown, message: string): void {
-  if (value === undefined) {
-    return;
-  }
+function assertTradeTagField(value: unknown, message: string): void {
   const allowed: TradeTagField[] = ['setup', 'rule-violation', 'lesson', 'result-label'];
   if (typeof value !== 'string' || !allowed.includes(value as TradeTagField)) {
     throw new BadRequestException(message);
@@ -189,6 +186,9 @@ export function validateUpdateTradeExitRequest(request: UpdateTradeExitRequest):
 }
 
 export function validateCreateTradeTagRequest(request: CreateTradeTagRequest): void {
-  assertOptionalTradeTagField(request.field, 'field must be one of setup, rule-violation, lesson, result-label');
+  if (request.field === undefined) {
+    throw new BadRequestException('field is required');
+  }
+  assertTradeTagField(request.field, 'field must be one of setup, rule-violation, lesson, result-label');
   assertTrimmedString(request.label, 'label must be a non-empty string');
 }

@@ -91,25 +91,33 @@ const SETUP_TAG_ALIASES: Record<string, string> = {
 const REVIEW_TAG_ALIASES: Record<string, string> = {
   timeframeinconsistency: '기준봉/관리봉 불일치',
   targetplanninggap: '목표 계획 정합성 부족',
+  targetalignmentmissing: '목표 계획 정합성 부족',
   lowertimeframeoverweight: '하위 타임프레임 과신',
   stoptootight: '손절 폭 과도하게 짧음',
   prematurestopadjustment: 'SL 조기 이동',
+  prematurestopmove: 'SL 조기 이동',
   trendmisread: '추세 해석 오류',
   resistanceignored: '상위 저항 반영 부족',
   managementmodelmismatch: 'setup 대비 관리 방식 불일치',
   reentrywithoutrevalidation: '재진입 전 재검증 부족',
   decisionqualitydegradedinposition: '보유 중 판단 품질 저하',
   nocloseconfirmation: '봉마감 확인 없이 진입',
+  entrybeforerequiredclose: '봉마감 확인 없이 진입',
   missingentryconfirmation: '필수 진입 확인 부재',
   noindependentsetupvalidation: '하위 setup 독립 검증 부재',
+  nodependentsetupvalidation: '하위 setup 독립 검증 부재',
   invalidstoplocation: '손절 위치 부적절',
   capitalprotectionpriority: '자본 보호 우선 관리',
   usestructuralstop: '구조 기준 손절 사용',
   keepmanagementtimeframe: '진입 기준봉으로 관리 유지',
   definetargetwithconfluence: '목표를 구조 합치로 정의',
+  keepentryconfirmationrequirements: '필수 진입 확인 조건 유지',
   requireentryconfirmation: '필수 진입 확인 조건 유지',
+  revalidatebeforereentry: '재진입 전 추세 재검증',
   revalidatetrendbeforereentry: '재진입 전 추세 재검증',
+  splitindependenttrades: '독립 trade 분리 유지',
   preserveindependenttrades: '독립 trade 분리 유지',
+  isolatetesttrades: '테스트성 거래 분리 관리',
   separatetesttrades: '테스트성 거래 분리 관리',
   fastprofitoncountertrend: '역추세는 빠른 익절 우선',
   avoidresultbasedjustification: '결과로 나쁜 프로세스 정당화 금지',
@@ -268,25 +276,30 @@ export class TradeLogService {
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await this.findTradeOrThrow(tx, id);
-      const nextTimeframe = request.timeframe !== undefined ? request.timeframe : existing.timeframe ?? undefined;
-      const nextThesis = request.thesis !== undefined ? request.thesis : existing.thesis ?? undefined;
-      const nextNote = request.note !== undefined ? request.note : existing.note ?? undefined;
-      const normalizedJournal =
-        request.journal !== undefined
-          ? this.normalizeTradeJournal(request.journal, {
-              timeframe: nextTimeframe,
-              thesis: nextThesis,
-              note: nextNote,
-            })
-          : this.normalizeTradeJournal(existing.journal, {
-              timeframe: nextTimeframe,
-              thesis: nextThesis,
-              note: nextNote,
-            });
-      const tagRefs = await this.resolveTradeTagRefs(tx, normalizedJournal, {
-        thesis: nextThesis,
-        note: nextNote,
-      });
+      let journalUpdateData = {};
+
+      if (request.journal !== undefined) {
+        const nextTimeframe = request.timeframe !== undefined ? request.timeframe : existing.timeframe ?? undefined;
+        const nextThesis = request.thesis !== undefined ? request.thesis : existing.thesis ?? undefined;
+        const nextNote = request.note !== undefined ? request.note : existing.note ?? undefined;
+        const normalizedJournal = this.normalizeTradeJournal(request.journal, {
+          timeframe: nextTimeframe,
+          thesis: nextThesis,
+          note: nextNote,
+        });
+        const tagRefs = await this.resolveTradeTagRefs(tx, normalizedJournal, {
+          thesis: nextThesis,
+          note: nextNote,
+        });
+
+        journalUpdateData = {
+          journal: this.toPrismaJson(this.stripStoredTradeJournal(normalizedJournal)),
+          resultLabelTagId: tagRefs.resultLabel?.id ?? null,
+          setupTagLinks: this.toSetupTagLinkReplace(tagRefs.setupTags),
+          ruleViolationTagLinks: this.toRuleViolationTagLinkReplace(tagRefs.ruleViolationTags),
+          lessonTagLinks: this.toLessonTagLinkReplace(tagRefs.lessonTags),
+        };
+      }
 
       const updated = await tx.trade.update({
         where: { id },
@@ -298,11 +311,7 @@ export class TradeLogService {
           strategy: request.strategy !== undefined ? request.strategy : existing.strategy,
           thesis: request.thesis !== undefined ? request.thesis : existing.thesis,
           note: request.note !== undefined ? request.note : existing.note,
-          journal: this.toPrismaJson(this.stripStoredTradeJournal(normalizedJournal)),
-          resultLabelTagId: tagRefs.resultLabel?.id ?? null,
-          setupTagLinks: this.toSetupTagLinkReplace(tagRefs.setupTags),
-          ruleViolationTagLinks: this.toRuleViolationTagLinkReplace(tagRefs.ruleViolationTags),
-          lessonTagLinks: this.toLessonTagLinkReplace(tagRefs.lessonTags),
+          ...journalUpdateData,
         },
         ...tradeWithRelations,
       });

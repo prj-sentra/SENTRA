@@ -540,6 +540,131 @@ describe('TradeLogService', () => {
       },
     });
   });
+  it('preserves setup, review, and result tags on note-only updates when journal is absent', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({
+      symbol: 'XAUUSD',
+      side: 'long',
+      note: '원볼 체크',
+      journal: {
+        plan: {
+          setupTag: '원볼',
+        },
+        review: {
+          resultLabel: '익절',
+          ruleViolationTags: ['targetalignmentmissing'],
+          lessonTags: ['splitindependenttrades'],
+        },
+      },
+    });
+
+    const updated = await service.updateTrade(trade.id, {
+      note: '투볼 메모로 수정',
+    });
+
+    expect(updated.note).toBe('투볼 메모로 수정');
+    expect(updated.journal).toMatchObject({
+      review: {
+        resultLabel: '익절',
+        ruleViolationTags: ['목표 계획 정합성 부족'],
+        lessonTags: ['독립 trade 분리 유지'],
+      },
+    });
+    expect(updated.tags).toMatchObject({
+      setupTags: [expect.objectContaining({ label: '원볼' })],
+      ruleViolationTags: [expect.objectContaining({ label: '목표 계획 정합성 부족' })],
+      lessonTags: [expect.objectContaining({ label: '독립 trade 분리 유지' })],
+      resultLabel: expect.objectContaining({ label: '익절' }),
+    });
+  });
+
+  it('preserves existing tags on thesis-only updates when journal is absent', async () => {
+    const service = createTestService();
+    const trade = await service.createTrade({
+      symbol: 'XAUUSD',
+      side: 'short',
+      thesis: '정볼 아이디어',
+      journal: {
+        plan: {
+          setupTag: '정볼',
+        },
+        review: {
+          resultLabel: '손절',
+          ruleViolationTags: ['prematurestopmove'],
+          lessonTags: ['keepentryconfirmationrequirements'],
+        },
+      },
+    });
+
+    const updated = await service.updateTrade(trade.id, {
+      thesis: '원볼 아이디어로 설명만 수정',
+    });
+
+    expect(updated.thesis).toBe('원볼 아이디어로 설명만 수정');
+    expect(updated.journal).toMatchObject({
+      review: {
+        resultLabel: '손절',
+        ruleViolationTags: ['SL 조기 이동'],
+        lessonTags: ['필수 진입 확인 조건 유지'],
+      },
+    });
+    expect(updated.tags).toMatchObject({
+      setupTags: [expect.objectContaining({ label: '정볼' })],
+      ruleViolationTags: [expect.objectContaining({ label: 'SL 조기 이동' })],
+      lessonTags: [expect.objectContaining({ label: '필수 진입 확인 조건 유지' })],
+      resultLabel: expect.objectContaining({ label: '손절' }),
+    });
+  });
+
+  it('normalizes legacy review slug aliases to canonical Korean labels', async () => {
+    const service = createTestService();
+
+    const trade = await service.createTrade({
+      symbol: 'XAUUSD',
+      side: 'long',
+      journal: {
+        review: {
+          ruleViolationTags: [
+            'targetalignmentmissing',
+            'prematurestopmove',
+            'entrybeforerequiredclose',
+            'nodependentsetupvalidation',
+          ],
+          lessonTags: [
+            'keepentryconfirmationrequirements',
+            'revalidatebeforereentry',
+            'splitindependenttrades',
+            'isolatetesttrades',
+          ],
+        },
+      },
+    });
+
+    expect(trade.journal?.review?.ruleViolationTags).toEqual([
+      '목표 계획 정합성 부족',
+      'SL 조기 이동',
+      '봉마감 확인 없이 진입',
+      '하위 setup 독립 검증 부재',
+    ]);
+    expect(trade.journal?.review?.lessonTags).toEqual([
+      '필수 진입 확인 조건 유지',
+      '재진입 전 추세 재검증',
+      '독립 trade 분리 유지',
+      '테스트성 거래 분리 관리',
+    ]);
+    expect(trade.tags?.ruleViolationTags.map((tag) => tag.label)).toEqual([
+      '목표 계획 정합성 부족',
+      'SL 조기 이동',
+      '봉마감 확인 없이 진입',
+      '하위 setup 독립 검증 부재',
+    ]);
+    expect(trade.tags?.lessonTags.map((tag) => tag.label)).toEqual([
+      '필수 진입 확인 조건 유지',
+      '재진입 전 추세 재검증',
+      '독립 trade 분리 유지',
+      '테스트성 거래 분리 관리',
+    ]);
+  });
 
   it('records entry separately from trade creation and opens the trade', async () => {
     const service = createTestService();
