@@ -7,22 +7,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Trade {
-  id        String      @id @default(uuid())
-  symbol    String
-  side      String
-  status    String
-  timeframe String?
-  session   String?
-  strategy  String?
-  thesis    String?
-  note      String?
-  journal   Json?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  entry     TradeEntry?
-  exit      TradeExit?
+enum TradeSide {
+  LONG  @map("long")
+  SHORT @map("short")
+}
 
+enum TradeStatus {
+  PLANNED   @map("planned")
+  OPEN      @map("open")
+  CLOSED    @map("closed")
+  CANCELLED @map("cancelled")
+}
+
+enum TradeTagField {
+  SETUP          @map("setup")
+  RULE_VIOLATION @map("rule-violation")
+  LESSON         @map("lesson")
+  RESULT_LABEL   @map("result-label")
+}
+
+model Trade {
+  id               String                    @id @default(uuid())
+  symbol           String
+  side             TradeSide
+  status           TradeStatus
+  timeframe        String?
+  session          String?
+  strategy         String?
+  thesis           String?
+  note             String?
+  journal          Json?
+  resultLabelTagId Int?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  entry            TradeEntry?
+  exit             TradeExit?
+  resultLabelTag   ResultLabelTagDefinition? @relation(fields: [resultLabelTagId], references: [id], onDelete: SetNull)
+  setupTagLinks    TradeSetupTagLink[]
+  ruleViolationTagLinks TradeRuleViolationTagLink[]
+  lessonTagLinks   TradeLessonTagLink[]
+
+  @@index([resultLabelTagId])
   @@map("trades")
 }
 
@@ -51,4 +76,103 @@ model TradeExit {
   createdAt  DateTime @default(now())
 
   @@map("trade_exits")
+}
+
+model SetupTagDefinition {
+  id              Int                 @id @default(autoincrement())
+  field           TradeTagField       @default(SETUP)
+  label           String
+  normalizedLabel String              @unique
+  systemDefined   Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  tradeLinks      TradeSetupTagLink[]
+
+  @@unique([field, label])
+  @@index([label])
+  @@map("setup_tag_definitions")
+}
+
+model RuleViolationTagDefinition {
+  id              Int                         @id @default(autoincrement())
+  field           TradeTagField               @default(RULE_VIOLATION)
+  label           String
+  normalizedLabel String                      @unique
+  systemDefined   Boolean                     @default(false)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  tradeLinks      TradeRuleViolationTagLink[]
+
+  @@unique([field, label])
+  @@index([label])
+  @@map("rule_violation_tag_definitions")
+}
+
+model LessonTagDefinition {
+  id              Int                  @id @default(autoincrement())
+  field           TradeTagField        @default(LESSON)
+  label           String
+  normalizedLabel String               @unique
+  systemDefined   Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  tradeLinks      TradeLessonTagLink[]
+
+  @@unique([field, label])
+  @@index([label])
+  @@map("lesson_tag_definitions")
+}
+
+model ResultLabelTagDefinition {
+  id              Int      @id @default(autoincrement())
+  field           TradeTagField @default(RESULT_LABEL)
+  label           String
+  normalizedLabel String   @unique
+  systemDefined   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  trades          Trade[]
+
+  @@unique([field, label])
+  @@index([label])
+  @@map("result_label_tag_definitions")
+}
+
+model TradeSetupTagLink {
+  id        Int                @id @default(autoincrement())
+  tradeId    String
+  tagId      Int
+  createdAt  DateTime          @default(now())
+  trade      Trade             @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag        SetupTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, tagId])
+  @@index([tagId])
+  @@map("trade_setup_tag_links")
+}
+
+model TradeRuleViolationTagLink {
+  id        Int                        @id @default(autoincrement())
+  tradeId    String
+  tagId      Int
+  createdAt  DateTime                  @default(now())
+  trade      Trade                     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag        RuleViolationTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, tagId])
+  @@index([tagId])
+  @@map("trade_rule_violation_tag_links")
+}
+
+model TradeLessonTagLink {
+  id        Int                  @id @default(autoincrement())
+  tradeId    String
+  tagId      Int
+  createdAt  DateTime            @default(now())
+  trade      Trade               @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag        LessonTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, tagId])
+  @@index([tagId])
+  @@map("trade_lesson_tag_links")
 }
