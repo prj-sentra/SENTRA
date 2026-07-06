@@ -195,7 +195,19 @@ function createTestService(): TradeLogService {
         trades.set(trade.id, trade);
         return Promise.resolve(trade);
       }),
-      findMany: jest.fn(() => Promise.resolve(Array.from(trades.values()))),
+      findMany: jest.fn(({ where } = {}) => {
+        let values = Array.from(trades.values());
+        if (where?.status) {
+          values = values.filter((trade) => trade.status === where.status);
+        }
+        if (where?.entry?.isNot === null) {
+          values = values.filter((trade) => trade.entry !== null);
+        }
+        if (where?.exit?.isNot === null) {
+          values = values.filter((trade) => trade.exit !== null);
+        }
+        return Promise.resolve(values);
+      }),
       findUnique: jest.fn(({ where, select }) => {
         const trade = trades.get(where.id ?? where.tradeId) ?? null;
         if (!trade) {

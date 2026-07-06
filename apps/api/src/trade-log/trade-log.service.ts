@@ -235,12 +235,19 @@ export class TradeLogService {
   }
 
   async getStats(): Promise<TradeStatsResponse> {
-    const closedTrades = (await this.listTrades()).filter(
-      (trade) => trade.status === 'closed' && trade.entry && trade.exit,
-    );
-    const realizedPoints = closedTrades.map((trade) => this.calculateRealizedPoints(trade));
-    const totalRealizedPoints = realizedPoints.reduce((sum, value) => sum + value, 0);
-    const winningClosedTrades = realizedPoints.filter((value) => value > 0).length;
+    const closedTradeRows = await this.prisma.trade.findMany({
+      where: {
+        status: PrismaTradeStatus.CLOSED,
+        entry: { isNot: null },
+        exit: { isNot: null },
+      },
+      orderBy: { createdAt: 'asc' },
+      ...tradeWithRelations,
+    });
+    const closedTrades = closedTradeRows.map((trade) => this.toTradeRecord(trade));
+
+    const winningClosedTrades = closedTrades.filter((trade) => this.calculateRealizedPoints(trade) > 0).length;
+    const totalRealizedPoints = closedTrades.reduce((sum, trade) => sum + this.calculateRealizedPoints(trade), 0);
 
     return {
       overview: {
