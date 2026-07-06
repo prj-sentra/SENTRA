@@ -1,18 +1,52 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import type { TradeJournalContext, TradeRecord, WikiPageDetail, WikiPageSummary } from '@trading-journal/shared';
+import type {
+  TradeJournalContext,
+  TradeRecord,
+  TradeStatsBucket,
+  TradeStatsResponse,
+  WikiPageDetail,
+  WikiPageSummary,
+} from '@trading-journal/shared';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
-type View = 'trade-log' | 'wiki';
+type View = 'stats' | 'trade-log' | 'wiki';
 
 interface ApiState {
   trades: TradeRecord[];
+  stats: TradeStatsResponse | null;
   wikiPages: WikiPageSummary[];
 }
 
 const initialState: ApiState = {
   trades: [],
+  stats: null,
   wikiPages: [],
 };
+
+function routeFromPathname(pathname: string): View {
+  if (pathname.startsWith('/trade-log')) return 'trade-log';
+  if (pathname.startsWith('/wiki')) return 'wiki';
+  return 'stats';
+}
+
+function routePath(view: View): string {
+  switch (view) {
+    case 'stats':
+      return '/stats';
+    case 'trade-log':
+      return '/trade-log';
+    case 'wiki':
+      return '/wiki';
+  }
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
 
 function wikiHtmlForCurrentHost(bodyHtml: string): string {
   if (apiUrl === '/api') {
@@ -31,6 +65,19 @@ function formatTradeTimestamp(value: string | undefined): string | null {
     timeStyle: 'medium',
     hour12: false,
   });
+}
+
+function formatMetric(value: number, suffix = ''): string {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  const formatted = Number.isInteger(value) ? value.toLocaleString('ko-KR') : value.toLocaleString('ko-KR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+
+  return `${formatted}${suffix}`;
 }
 
 function tradeSummaryChips(trade: TradeRecord): string[] {
@@ -76,20 +123,72 @@ function tradeJournalBlocks(journal: TradeJournalContext | undefined): Array<{ t
   return blocks;
 }
 
+function BreakdownTable({ buckets }: { buckets: TradeStatsBucket[] }) {
+  if (buckets.length === 0) {
+    return <p className="stats-empty">No data yet.</p>;
+  }
+
+  return (
+    <div className="stats-table-wrap">
+      <table className="stats-table">
+        <thead>
+          <tr>
+            <th>bucket</th>
+            <th>trades</th>
+            <th>win rate</th>
+            <th>realized pts</th>
+            <th>good</th>
+            <th>observe</th>
+            <th>bad/repeat</th>
+          </tr>
+        </thead>
+        <tbody>
+          {buckets.map((bucket) => (
+            <tr key={bucket.key}>
+              <td>{bucket.label}</td>
+              <td>{formatMetric(bucket.count)}</td>
+              <td>{formatMetric(bucket.winRate, '%')}</td>
+              <td>{formatMetric(bucket.realizedPoints)}</td>
+              <td>{formatMetric(bucket.goodCount)}</td>
+              <td>{formatMetric(bucket.observeCount)}</td>
+              <td>{formatMetric(bucket.badCount + bucket.repeatBanCount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function App() {
-  const [activeView, setActiveView] = useState<View>('trade-log');
+  const [activeView, setActiveView] = useState<View>(routeFromPathname(window.location.pathname));
   const [state, setState] = useState<ApiState>(initialState);
   const [selectedWikiSlug, setSelectedWikiSlug] = useState<string | null>(null);
   const [selectedWikiPage, setSelectedWikiPage] = useState<WikiPageDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (window.location.pathname === '/') {
+      window.history.replaceState({}, '', '/stats');
+      setActiveView('stats');
+    }
+
+    function syncRoute(): void {
+      setActiveView(routeFromPathname(window.location.pathname));
+    }
+
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, []);
+
+  useEffect(() => {
     Promise.all([
-      fetch(`${apiUrl}/trade-log/trades`).then((res) => res.json() as Promise<TradeRecord[]>),
-      fetch(`${apiUrl}/wiki/pages`).then((res) => res.json() as Promise<WikiPageSummary[]>),
+      fetchJson<TradeRecord[]>(`${apiUrl}/trade-log/trades`),
+      fetchJson<TradeStatsResponse>(`${apiUrl}/trade-log/stats`),
+      fetchJson<WikiPageSummary[]>(`${apiUrl}/wiki/pages`),
     ])
-      .then(([trades, wikiPages]) => {
-        setState({ trades, wikiPages });
+      .then(([trades, stats, wikiPages]) => {
+        setState({ trades, stats, wikiPages });
         setSelectedWikiSlug((current) => current ?? wikiPages[0]?.slug ?? null);
       })
       .catch((err: unknown) => {
@@ -103,18 +202,21 @@ export function App() {
       return;
     }
 
-    fetch(`${apiUrl}/wiki/pages/${selectedWikiSlug}`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Wiki page request failed: ${res.status}`);
-        }
-        return res.json() as Promise<WikiPageDetail>;
-      })
+    fetchJson<WikiPageDetail>(`${apiUrl}/wiki/pages/${selectedWikiSlug}`)
       .then(setSelectedWikiPage)
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Unknown wiki API error');
       });
   }, [selectedWikiSlug]);
+
+  function navigate(nextView: View): void {
+    const nextPath = routePath(nextView);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+    setActiveView(nextView);
+    setError(null);
+  }
 
   function resolveWikiSlug(wikiLink: string): string | undefined {
     const normalizedLink = wikiLink.replace(/\.md$/, '');
@@ -132,7 +234,7 @@ export function App() {
     }
 
     setError(null);
-    setActiveView('wiki');
+    navigate('wiki');
     setSelectedWikiSlug(resolvedSlug);
   }
 
@@ -180,13 +282,15 @@ export function App() {
     activateWikiLink(wikiLink);
   }
 
+  const stats = state.stats;
+
   return (
     <main className="shell">
       <header className="topbar">
         <div className="brand-block">
           <p className="eyebrow">S.E.N.T.R.A. / OPERATIONS CONSOLE</p>
           <h1>Trading Journal</h1>
-          <p className="subhead">Structured trade records and field-maintained LLM wiki.</p>
+          <p className="subhead">Structured trade records, review-grade process stats, and field-maintained LLM wiki.</p>
         </div>
         <div className="control-stack">
           <div className="system-status" aria-label="System status">
@@ -196,16 +300,23 @@ export function App() {
           </div>
           <nav className="tabs" aria-label="Sentra sections">
             <button
+              className={activeView === 'stats' ? 'tab active' : 'tab'}
+              type="button"
+              onClick={() => navigate('stats')}
+            >
+              통계
+            </button>
+            <button
               className={activeView === 'trade-log' ? 'tab active' : 'tab'}
               type="button"
-              onClick={() => setActiveView('trade-log')}
+              onClick={() => navigate('trade-log')}
             >
               매매일지
             </button>
             <button
               className={activeView === 'wiki' ? 'tab active' : 'tab'}
               type="button"
-              onClick={() => setActiveView('wiki')}
+              onClick={() => navigate('wiki')}
             >
               위키
             </button>
@@ -215,7 +326,139 @@ export function App() {
 
       {error ? <p className="error">API error: {error}</p> : null}
 
-      {activeView === 'trade-log' ? (
+      {activeView === 'stats' ? (
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="section-label">Review Stats</p>
+              <h2>복기 통계</h2>
+            </div>
+            <span className="count">closed trades only</span>
+          </div>
+
+          {stats ? (
+            <section className="stats-section">
+              <div className="stats-header">
+                <div>
+                  <p className="section-label">Review Stats</p>
+                  <h3>Wiki-aligned process dashboard</h3>
+                </div>
+                <span className="count">closed trades only · {stats.overview.totalTrades} records</span>
+              </div>
+
+              <div className="stats-card-grid">
+                <article className="stats-card">
+                  <small>Closed trades</small>
+                  <strong>{formatMetric(stats.overview.totalTrades)}</strong>
+                  <span>statistics exclude planned and open positions</span>
+                </article>
+                <article className="stats-card">
+                  <small>Realized points</small>
+                  <strong>{formatMetric(stats.overview.totalRealizedPoints)}</strong>
+                  <span>avg {formatMetric(stats.overview.averageRealizedPoints)} / closed trade</span>
+                </article>
+                <article className="stats-card">
+                  <small>Win rate</small>
+                  <strong>{formatMetric(stats.overview.winRate, '%')}</strong>
+                  <span>closed-trade basis</span>
+                </article>
+                <article className="stats-card">
+                  <small>Process quality</small>
+                  <strong>{formatMetric(stats.overview.goodCount)}</strong>
+                  <span>good · {stats.overview.observeCount} observe · {stats.overview.badCount + stats.overview.repeatBanCount} bad/repeat</span>
+                </article>
+              </div>
+
+              <div className="stats-split-grid">
+                <section className="stats-block">
+                  <h3>Checklist coverage</h3>
+                  <div className="stats-mini-grid">
+                    <article>
+                      <small>Stop defined</small>
+                      <strong>{formatMetric(stats.checklistRates.stopLossDefinedRate, '%')}</strong>
+                    </article>
+                    <article>
+                      <small>TP defined</small>
+                      <strong>{formatMetric(stats.checklistRates.takeProfitDefinedRate, '%')}</strong>
+                    </article>
+                    <article>
+                      <small>3+ confirmations</small>
+                      <strong>{formatMetric(stats.checklistRates.confirmationsAtLeastThreeRate, '%')}</strong>
+                    </article>
+                    <article>
+                      <small>Calm state tagged</small>
+                      <strong>{formatMetric(stats.checklistRates.calmStateRate, '%')}</strong>
+                    </article>
+                    <article>
+                      <small>Violations tagged</small>
+                      <strong>{formatMetric(stats.checklistRates.ruleViolationTaggedRate, '%')}</strong>
+                    </article>
+                    <article>
+                      <small>Lessons tagged</small>
+                      <strong>{formatMetric(stats.checklistRates.lessonsTaggedRate, '%')}</strong>
+                    </article>
+                  </div>
+                </section>
+
+                <section className="stats-block">
+                  <h3>Most repeated review tags</h3>
+                  <div className="stats-tag-columns">
+                    <div>
+                      <small>Rule violations</small>
+                      {stats.topRuleViolations.length > 0 ? (
+                        <ul className="stats-tag-list">
+                          {stats.topRuleViolations.map((item) => (
+                            <li key={`violation-${item.label}`}><span>{item.label}</span><strong>{item.count}</strong></li>
+                          ))}
+                        </ul>
+                      ) : <p className="stats-empty">No violation tags yet.</p>}
+                    </div>
+                    <div>
+                      <small>Lessons</small>
+                      {stats.topLessons.length > 0 ? (
+                        <ul className="stats-tag-list">
+                          {stats.topLessons.map((item) => (
+                            <li key={`lesson-${item.label}`}><span>{item.label}</span><strong>{item.count}</strong></li>
+                          ))}
+                        </ul>
+                      ) : <p className="stats-empty">No lesson tags yet.</p>}
+                    </div>
+                    <div>
+                      <small>Result labels</small>
+                      {stats.topResultLabels.length > 0 ? (
+                        <ul className="stats-tag-list">
+                          {stats.topResultLabels.map((item) => (
+                            <li key={`result-${item.label}`}><span>{item.label}</span><strong>{item.count}</strong></li>
+                          ))}
+                        </ul>
+                      ) : <p className="stats-empty">No result labels yet.</p>}
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="stats-breakdown-grid">
+                <section className="stats-block">
+                  <h3>By session</h3>
+                  <BreakdownTable buckets={stats.bySession} />
+                </section>
+                <section className="stats-block">
+                  <h3>By timeframe</h3>
+                  <BreakdownTable buckets={stats.byTimeframe} />
+                </section>
+                <section className="stats-block full-width">
+                  <h3>By setup</h3>
+                  <BreakdownTable buckets={stats.bySetupType} />
+                </section>
+              </div>
+            </section>
+          ) : (
+            <div className="empty-state compact">
+              <h3>통계 로딩 중</h3>
+            </div>
+          )}
+        </section>
+      ) : activeView === 'trade-log' ? (
         <section className="panel">
           <div className="panel-header">
             <div>
