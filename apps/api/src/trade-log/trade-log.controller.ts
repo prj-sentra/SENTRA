@@ -1,13 +1,21 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import type {
   CreateTradeRequest,
+  CreateTradeTagRequest,
   HealthResponse,
   TradeEntryRequest,
   TradeExitRequest,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
   TradeRecord,
+  TradeStatsResponse,
+  TradeTagCatalog,
+  TradeTagDefinition,
+  TradeTagField,
+  UpdateTradeEntryRequest,
+  UpdateTradeExitRequest,
   UpdateTradeJournalRequest,
+  UpdateTradeRequest,
 } from '@trading-journal/shared';
 import { TradeLogService } from './trade-log.service';
 
@@ -18,6 +26,16 @@ export class TradeLogController {
   @Get('health')
   health(): HealthResponse {
     return this.tradeLogService.health();
+  }
+
+  @Get('tags')
+  tags(@Query('field') field?: TradeTagField): Promise<TradeTagCatalog | TradeTagDefinition[]> {
+    return field ? this.tradeLogService.listTagsByField(field) : this.tradeLogService.listTags();
+  }
+
+  @Post('tags')
+  createTag(@Body() request: CreateTradeTagRequest): Promise<TradeTagDefinition> {
+    return this.tradeLogService.createTag(request);
   }
 
   @Post('assistant-actions')
@@ -37,9 +55,19 @@ export class TradeLogController {
     return this.tradeLogService.listTrades();
   }
 
+  @Get('stats')
+  stats(): Promise<TradeStatsResponse> {
+    return this.tradeLogService.getStats();
+  }
+
   @Get('trades/:id')
   trade(@Param('id') id: string): Promise<TradeRecord> {
     return this.tradeLogService.getTrade(id);
+  }
+
+  @Patch('trades/:id')
+  updateTrade(@Param('id') id: string, @Body() request: UpdateTradeRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTrade(id, request);
   }
 
   @Patch('trades/:id/journal')
@@ -52,8 +80,18 @@ export class TradeLogController {
     return this.tradeLogService.recordEntry(id, request);
   }
 
+  @Patch('trades/:id/entry')
+  updateEntry(@Param('id') id: string, @Body() request: UpdateTradeEntryRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTradeEntry(id, request);
+  }
+
   @Post('trades/:id/exit')
   recordExit(@Param('id') id: string, @Body() request: TradeExitRequest): Promise<TradeRecord> {
     return this.tradeLogService.recordExit(id, request);
+  }
+
+  @Patch('trades/:id/exit')
+  updateExit(@Param('id') id: string, @Body() request: UpdateTradeExitRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTradeExit(id, request);
   }
 }

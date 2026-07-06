@@ -2,6 +2,7 @@ import type {
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
   TradeRecord,
+  TradeStatsResponse,
   UpdateTradeJournalRequest,
 } from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
@@ -111,6 +112,48 @@ describe('TradeLogController', () => {
           realizedPnlText: '$0.06',
         },
       },
+    });
+  });
+
+  it('exposes trade stats over HTTP controller contract', async () => {
+    const response: TradeStatsResponse = {
+      overview: {
+        totalTrades: 2,
+        totalRealizedPoints: 8.3,
+        averageRealizedPoints: 4.15,
+        winRate: 50,
+        goodCount: 1,
+        observeCount: 0,
+        badCount: 1,
+        repeatBanCount: 0,
+      },
+      checklistRates: {
+        stopLossDefinedRate: 100,
+        takeProfitDefinedRate: 50,
+        confirmationsAtLeastThreeRate: 50,
+        calmStateRate: 50,
+        ruleViolationTaggedRate: 50,
+        lessonsTaggedRate: 100,
+      },
+      topRuleViolations: [{ label: 'timeframe_inconsistency', count: 1 }],
+      topLessons: [{ label: '기준봉 유지', count: 2 }],
+      topResultLabels: [{ label: '손절', count: 1 }],
+      bySession: [{ key: 'asia', label: 'Asia', count: 2, winRate: 50, realizedPoints: 3.2, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
+      byTimeframe: [{ key: '5m', label: '5m', count: 2, winRate: 50, realizedPoints: 8.3, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
+      bySetupType: [{ key: '투볼', label: '투볼', count: 2, winRate: 50, realizedPoints: 8.3, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
+    };
+    const service = {
+      getStats: jest.fn<Promise<TradeStatsResponse>, []>(() => Promise.resolve(response)),
+    };
+    const controller = new TradeLogController(service as never);
+
+    await expect(controller.stats()).resolves.toMatchObject({
+      overview: {
+        totalTrades: 2,
+        totalRealizedPoints: 8.3,
+        goodCount: 1,
+      },
+      topRuleViolations: [{ label: 'timeframe_inconsistency', count: 1 }],
     });
   });
 });

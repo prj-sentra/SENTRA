@@ -6,15 +6,168 @@ function decimal(value: number) {
 
 function createTestService(): TradeLogService {
   const trades = new Map<string, any>();
+  const setupDefinitions = new Map<number, any>();
+  const setupDefinitionsByKey = new Map<string, any>();
+  const ruleViolationDefinitions = new Map<number, any>();
+  const ruleViolationDefinitionsByKey = new Map<string, any>();
+  const lessonDefinitions = new Map<number, any>();
+  const lessonDefinitionsByKey = new Map<string, any>();
+  const resultLabelDefinitions = new Map<number, any>();
+  const resultLabelDefinitionsByKey = new Map<string, any>();
   let sequence = 0;
+  let tagSequence = 0;
 
-  const prisma = {
+  const normalizeKey = (value: string) => value.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const now = () => new Date('2026-06-29T00:00:00.000Z');
+  const updatedNow = () => new Date('2026-06-29T00:01:00.000Z');
+
+  const ensureDefinition = (
+    store: Map<number, any>,
+    byKey: Map<string, any>,
+    field: string,
+    row: { label: string; normalizedLabel: string; systemDefined?: boolean },
+  ) => {
+    const existing = byKey.get(row.normalizedLabel);
+    if (existing) {
+      return existing;
+    }
+    tagSequence += 1;
+    const definition = {
+      id: tagSequence,
+      field,
+      label: row.label,
+      normalizedLabel: row.normalizedLabel,
+      systemDefined: row.systemDefined ?? false,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    store.set(definition.id, definition);
+    byKey.set(definition.normalizedLabel, definition);
+    return definition;
+  };
+
+  const createLinks = (tradeId: string, items: Array<{ tag: { connect: { id: number } } }> | undefined, store: Map<number, any>, prefix: string) =>
+    (items ?? []).map((item, index) => ({
+      id: `${prefix}-${tradeId}-${index + 1}`,
+      tradeId,
+      tagId: item.tag.connect.id,
+      createdAt: updatedNow(),
+      tag: store.get(item.tag.connect.id),
+    }));
+
+  const prisma: any = {
+    $transaction: jest.fn(async (callback: (tx: any) => Promise<any>) => callback(prisma)),
+    setupTagDefinition: {
+      createMany: jest.fn(({ data }) => {
+        for (const row of data) {
+          ensureDefinition(setupDefinitions, setupDefinitionsByKey, 'SETUP', row);
+        }
+        return Promise.resolve({ count: data.length });
+      }),
+      findMany: jest.fn(({ where } = {}) => {
+        const values = Array.from(setupDefinitions.values());
+        if (where?.normalizedLabel?.in) {
+          return Promise.resolve(values.filter((row) => where.normalizedLabel.in.includes(row.normalizedLabel)));
+        }
+        return Promise.resolve(values.sort((a, b) => a.label.localeCompare(b.label)));
+      }),
+    },
+    ruleViolationTagDefinition: {
+      createMany: jest.fn(({ data }) => {
+        for (const row of data) {
+          ensureDefinition(ruleViolationDefinitions, ruleViolationDefinitionsByKey, 'RULE_VIOLATION', row);
+        }
+        return Promise.resolve({ count: data.length });
+      }),
+      findMany: jest.fn(({ where } = {}) => {
+        const values = Array.from(ruleViolationDefinitions.values());
+        if (where?.normalizedLabel?.in) {
+          return Promise.resolve(values.filter((row) => where.normalizedLabel.in.includes(row.normalizedLabel)));
+        }
+        return Promise.resolve(values.sort((a, b) => a.label.localeCompare(b.label)));
+      }),
+    },
+    lessonTagDefinition: {
+      createMany: jest.fn(({ data }) => {
+        for (const row of data) {
+          ensureDefinition(lessonDefinitions, lessonDefinitionsByKey, 'LESSON', row);
+        }
+        return Promise.resolve({ count: data.length });
+      }),
+      findMany: jest.fn(({ where } = {}) => {
+        const values = Array.from(lessonDefinitions.values());
+        if (where?.normalizedLabel?.in) {
+          return Promise.resolve(values.filter((row) => where.normalizedLabel.in.includes(row.normalizedLabel)));
+        }
+        return Promise.resolve(values.sort((a, b) => a.label.localeCompare(b.label)));
+      }),
+    },
+    resultLabelTagDefinition: {
+      createMany: jest.fn(({ data }) => {
+        for (const row of data) {
+          ensureDefinition(resultLabelDefinitions, resultLabelDefinitionsByKey, 'RESULT_LABEL', row);
+        }
+        return Promise.resolve({ count: data.length });
+      }),
+      findMany: jest.fn(({ where } = {}) => {
+        const values = Array.from(resultLabelDefinitions.values());
+        if (where?.normalizedLabel?.in) {
+          return Promise.resolve(values.filter((row) => where.normalizedLabel.in.includes(row.normalizedLabel)));
+        }
+        return Promise.resolve(values.sort((a, b) => a.label.localeCompare(b.label)));
+      }),
+    },
+    tradeEntry: {
+      findUnique: jest.fn(({ where }) => Promise.resolve(trades.get(where.tradeId)?.entry ?? null)),
+      update: jest.fn(({ where, data }) => {
+        const trade = trades.get(where.tradeId);
+        if (!trade?.entry) {
+          return Promise.resolve(null);
+        }
+        trade.entry = {
+          ...trade.entry,
+          price: decimal(typeof data.price?.toNumber === 'function' ? data.price.toNumber() : data.price ?? trade.entry.price.toNumber()),
+          quantity:
+            data.quantity === null
+              ? null
+              : data.quantity === undefined
+                ? trade.entry.quantity
+                : decimal(typeof data.quantity?.toNumber === 'function' ? data.quantity.toNumber() : data.quantity),
+          occurredAt: data.occurredAt ?? trade.entry.occurredAt,
+          note: data.note ?? trade.entry.note,
+        };
+        return Promise.resolve(trade.entry);
+      }),
+    },
+    tradeExit: {
+      findUnique: jest.fn(({ where }) => Promise.resolve(trades.get(where.tradeId)?.exit ?? null)),
+      update: jest.fn(({ where, data }) => {
+        const trade = trades.get(where.tradeId);
+        if (!trade?.exit) {
+          return Promise.resolve(null);
+        }
+        trade.exit = {
+          ...trade.exit,
+          price: decimal(typeof data.price?.toNumber === 'function' ? data.price.toNumber() : data.price ?? trade.exit.price.toNumber()),
+          quantity:
+            data.quantity === null
+              ? null
+              : data.quantity === undefined
+                ? trade.exit.quantity
+                : decimal(typeof data.quantity?.toNumber === 'function' ? data.quantity.toNumber() : data.quantity),
+          occurredAt: data.occurredAt ?? trade.exit.occurredAt,
+          reason: data.reason ?? trade.exit.reason,
+          note: data.note ?? trade.exit.note,
+        };
+        return Promise.resolve(trade.exit);
+      }),
+    },
     trade: {
       create: jest.fn(({ data }) => {
         sequence += 1;
-        const now = new Date('2026-06-29T00:00:00.000Z');
+        const tradeId = `trade-${sequence}`;
         const trade = {
-          id: `trade-${sequence}`,
+          id: tradeId,
           symbol: data.symbol,
           side: data.side,
           status: data.status,
@@ -24,16 +177,35 @@ function createTestService(): TradeLogService {
           thesis: data.thesis ?? null,
           note: data.note ?? null,
           journal: data.journal ?? null,
-          createdAt: now,
-          updatedAt: now,
+          resultLabelTagId: data.resultLabelTagId ?? null,
+          resultLabelTag: data.resultLabelTagId ? resultLabelDefinitions.get(data.resultLabelTagId) ?? null : null,
+          createdAt: now(),
+          updatedAt: now(),
           entry: null,
           exit: null,
+          setupTagLinks: createLinks(tradeId, data.setupTagLinks?.create, setupDefinitions, 'setup-link'),
+          ruleViolationTagLinks: createLinks(
+            tradeId,
+            data.ruleViolationTagLinks?.create,
+            ruleViolationDefinitions,
+            'violation-link',
+          ),
+          lessonTagLinks: createLinks(tradeId, data.lessonTagLinks?.create, lessonDefinitions, 'lesson-link'),
         };
         trades.set(trade.id, trade);
         return Promise.resolve(trade);
       }),
       findMany: jest.fn(() => Promise.resolve(Array.from(trades.values()))),
-      findUnique: jest.fn(({ where }) => Promise.resolve(trades.get(where.id) ?? null)),
+      findUnique: jest.fn(({ where, select }) => {
+        const trade = trades.get(where.id ?? where.tradeId) ?? null;
+        if (!trade) {
+          return Promise.resolve(null);
+        }
+        if (select?.entry) {
+          return Promise.resolve({ entry: trade.entry });
+        }
+        return Promise.resolve(trade);
+      }),
       update: jest.fn(({ where, data }) => {
         const trade = trades.get(where.id);
         if (!trade) {
@@ -41,10 +213,35 @@ function createTestService(): TradeLogService {
         }
         const updated = {
           ...trade,
+          symbol: data.symbol ?? trade.symbol,
+          side: data.side ?? trade.side,
           status: data.status ?? trade.status,
+          timeframe: data.timeframe ?? trade.timeframe,
           session: data.session ?? trade.session,
+          strategy: data.strategy ?? trade.strategy,
+          thesis: data.thesis ?? trade.thesis,
+          note: data.note ?? trade.note,
           journal: data.journal ?? trade.journal,
-          updatedAt: new Date('2026-06-29T00:01:00.000Z'),
+          resultLabelTagId: data.resultLabelTagId ?? trade.resultLabelTagId,
+          resultLabelTag:
+            data.resultLabelTagId !== undefined
+              ? data.resultLabelTagId === null
+                ? null
+                : resultLabelDefinitions.get(data.resultLabelTagId) ?? null
+              : trade.resultLabelTag,
+          updatedAt: updatedNow(),
+          setupTagLinks:
+            data.setupTagLinks
+              ? createLinks(where.id, data.setupTagLinks.create, setupDefinitions, 'setup-link')
+              : trade.setupTagLinks,
+          ruleViolationTagLinks:
+            data.ruleViolationTagLinks
+              ? createLinks(where.id, data.ruleViolationTagLinks.create, ruleViolationDefinitions, 'violation-link')
+              : trade.ruleViolationTagLinks,
+          lessonTagLinks:
+            data.lessonTagLinks
+              ? createLinks(where.id, data.lessonTagLinks.create, lessonDefinitions, 'lesson-link')
+              : trade.lessonTagLinks,
         };
         if (data.entry?.create) {
           updated.entry = {
@@ -89,6 +286,136 @@ describe('TradeLogService', () => {
     const service = createTestService();
 
     await expect(service.listTrades()).resolves.toEqual([]);
+  });
+
+  it('derives wiki-aligned trade stats for review and process dashboards', async () => {
+    const service = createTestService();
+
+    const asiaGood = await service.createTrade({
+      symbol: 'GOLD',
+      side: 'long',
+      timeframe: '5m',
+      journal: {
+        plan: {
+          setupType: '투볼',
+          setupTag: '투볼',
+          confirmations: ['추세', '지지', '볼추이지캔'],
+          stopLossPrice: 4171,
+          takeProfitPrice: 4191,
+          calmState: true,
+        },
+      },
+    });
+    await service.recordEntry(asiaGood.id, {
+      price: 4175,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T04:30:00.000Z',
+    });
+    await service.recordExit(asiaGood.id, {
+      price: 4178,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T04:40:00.000Z',
+      reason: 'manual',
+    });
+    await service.patchTradeJournal(asiaGood.id, {
+      review: {
+        processVerdict: 'good',
+        resultLabel: '익절',
+        lessons: ['기준봉 유지'],
+        lessonTags: ['keep-management-timeframe'],
+      },
+    });
+
+    const nyBad = await service.createTrade({
+      symbol: 'GOLD',
+      side: 'long',
+      timeframe: '5m',
+      journal: {
+        plan: {
+          setupType: '투볼',
+          setupTag: '투볼',
+          confirmations: ['추세'],
+          stopLossPrice: 4157,
+        },
+      },
+    });
+    await service.recordEntry(nyBad.id, {
+      price: 4164.46,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T14:00:29.000Z',
+    });
+    await service.recordExit(nyBad.id, {
+      price: 4156.9,
+      quantity: 0.01,
+      occurredAt: '2026-07-03T14:08:58.000Z',
+      reason: 'stop_loss',
+    });
+    await service.patchTradeJournal(nyBad.id, {
+      review: {
+        processVerdict: 'bad',
+        resultLabel: '손절',
+        ruleViolations: ['볼추이지캔 없음', '기준봉 불일치'],
+        ruleViolationTags: ['missing-entry-confirmation', 'timeframe-inconsistency'],
+        lessons: ['기준봉 유지'],
+        lessonTags: ['keep-management-timeframe'],
+      },
+    });
+
+    await service.createTrade({
+      symbol: 'GOLD',
+      side: 'short',
+      timeframe: '1m',
+      journal: {
+        plan: {
+          setupType: '정볼',
+          setupTag: '정볼',
+          confirmations: ['추세', '저항', '캔들'],
+          takeProfitPrice: 4170,
+        },
+        review: {
+          processVerdict: 'observe',
+          resultLabel: '본절 청산',
+        },
+      },
+    });
+
+    const stats = await service.getStats();
+
+    expect(stats.overview).toMatchObject({
+      totalTrades: 2,
+      totalRealizedPoints: -4.56,
+      averageRealizedPoints: -2.28,
+      winRate: 50,
+      goodCount: 1,
+      observeCount: 0,
+      badCount: 1,
+      repeatBanCount: 0,
+    });
+    expect(stats.checklistRates).toMatchObject({
+      stopLossDefinedRate: 100,
+      takeProfitDefinedRate: 50,
+      confirmationsAtLeastThreeRate: 50,
+      calmStateRate: 50,
+      ruleViolationTaggedRate: 50,
+      lessonsTaggedRate: 100,
+    });
+    expect(stats.topRuleViolations).toEqual([
+      { label: '기준봉/관리봉 불일치', count: 1 },
+      { label: '필수 진입 확인 부재', count: 1 },
+    ]);
+    expect(stats.topLessons).toEqual([{ label: '진입 기준봉으로 관리 유지', count: 2 }]);
+    expect(stats.bySession).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: 'Asia', count: 1, winRate: 100, realizedPoints: 3, goodCount: 1 }),
+        expect.objectContaining({ label: 'New York', count: 1, winRate: 0, realizedPoints: -7.56, badCount: 1 }),
+      ]),
+    );
+    expect(stats.byTimeframe).toEqual([
+      expect.objectContaining({ label: '5m', count: 2, winRate: 50, realizedPoints: -4.56, goodCount: 1, badCount: 1 }),
+    ]);
+    expect(stats.bySetupType).toEqual([
+      expect.objectContaining({ key: '투볼', label: '투볼', count: 2, winRate: 50, realizedPoints: -4.56, goodCount: 1, badCount: 1 }),
+    ]);
   });
 
   it('creates planned independent trades for the same symbol and side', async () => {
@@ -157,6 +484,8 @@ describe('TradeLogService', () => {
       journal: {
         plan: {
           setupType: '투볼',
+          setupTag: '투볼',
+          setupTags: ['투볼'],
           confirmations: ['볼린저 밴드', '추세', '지지·저항'],
           stopLossPrice: 4190.5,
           dailyLossLimit: 20,
@@ -197,6 +526,8 @@ describe('TradeLogService', () => {
     expect(updated.journal).toMatchObject({
       plan: {
         setupType: '정볼',
+        setupTag: '정볼',
+        setupTags: ['정볼'],
         confirmations: ['추세', '20MA'],
       },
       management: {

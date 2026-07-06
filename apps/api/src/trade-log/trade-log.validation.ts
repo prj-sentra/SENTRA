@@ -1,11 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import type {
   CreateTradeRequest,
-  TradeEntryRequest,
-  TradeExitRequest,
+  CreateTradeTagRequest,
   TradeJournalContext,
   TradeProcessVerdict,
+  TradeTagField,
+  UpdateTradeEntryRequest,
+  UpdateTradeExitRequest,
   UpdateTradeJournalRequest,
+  UpdateTradeRequest,
 } from '@trading-journal/shared';
 
 function assertPositive(value: number | undefined, message: string, required: boolean): void {
@@ -32,11 +35,17 @@ function assertOptionalBoolean(value: unknown, message: string): void {
   }
 }
 
+function assertTrimmedString(value: unknown, message: string): void {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new BadRequestException(message);
+  }
+}
+
 function assertOptionalStringArray(value: unknown, message: string): void {
   if (value === undefined) {
     return;
   }
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item.trim().length === 0)) {
     throw new BadRequestException(message);
   }
 }
@@ -57,6 +66,16 @@ function assertValidOccurredAt(value: string, message: string): void {
   }
 }
 
+function assertOptionalTradeTagField(value: unknown, message: string): void {
+  if (value === undefined) {
+    return;
+  }
+  const allowed: TradeTagField[] = ['setup', 'rule-violation', 'lesson', 'result-label'];
+  if (typeof value !== 'string' || !allowed.includes(value as TradeTagField)) {
+    throw new BadRequestException(message);
+  }
+}
+
 function validateTradeJournalContext(journal: TradeJournalContext | undefined, messagePrefix: string): void {
   if (journal === undefined) {
     return;
@@ -66,6 +85,8 @@ function validateTradeJournalContext(journal: TradeJournalContext | undefined, m
 
   if (plan) {
     assertOptionalString(plan.setupType, `${messagePrefix} journal.plan.setupType must be a string`);
+    assertOptionalString(plan.setupTag, `${messagePrefix} journal.plan.setupTag must be a string`);
+    assertOptionalStringArray(plan.setupTags, `${messagePrefix} journal.plan.setupTags must be a non-empty string array`);
     assertOptionalString(plan.entryModel, `${messagePrefix} journal.plan.entryModel must be a string`);
     assertOptionalStringArray(plan.confirmations, `${messagePrefix} journal.plan.confirmations must be a string array`);
     assertOptionalString(plan.invalidation, `${messagePrefix} journal.plan.invalidation must be a string`);
@@ -91,34 +112,83 @@ function validateTradeJournalContext(journal: TradeJournalContext | undefined, m
       `${messagePrefix} journal.review.processVerdict must be one of good, bad, repeat-ban, observe`,
     );
     assertOptionalStringArray(review.ruleViolations, `${messagePrefix} journal.review.ruleViolations must be a string array`);
+    assertOptionalStringArray(review.ruleViolationTags, `${messagePrefix} journal.review.ruleViolationTags must be a string array`);
     assertOptionalStringArray(review.lessons, `${messagePrefix} journal.review.lessons must be a string array`);
+    assertOptionalStringArray(review.lessonTags, `${messagePrefix} journal.review.lessonTags must be a string array`);
     assertOptionalString(review.realizedPnlText, `${messagePrefix} journal.review.realizedPnlText must be a string`);
     assertOptionalString(review.reviewNotes, `${messagePrefix} journal.review.reviewNotes must be a string`);
   }
 }
 
 export function validateCreateTradeRequest(request: CreateTradeRequest): void {
-  if (!request.symbol || request.symbol.trim().length === 0) {
-    throw new BadRequestException('symbol is required');
-  }
+  assertTrimmedString(request.symbol, 'symbol is required');
   if (request.side !== 'long' && request.side !== 'short') {
     throw new BadRequestException('side must be long or short');
   }
   validateTradeJournalContext(request.journal, 'createTrade');
 }
 
+export function validateUpdateTradeRequest(request: UpdateTradeRequest): void {
+  if (Object.keys(request).length === 0) {
+    throw new BadRequestException('updateTrade requires at least one field');
+  }
+  if (request.symbol !== undefined) {
+    assertTrimmedString(request.symbol, 'symbol must be a non-empty string');
+  }
+  if (request.side !== undefined && request.side !== 'long' && request.side !== 'short') {
+    throw new BadRequestException('side must be long or short');
+  }
+  assertOptionalString(request.timeframe, 'timeframe must be a string');
+  assertOptionalString(request.session, 'session must be a string');
+  assertOptionalString(request.strategy, 'strategy must be a string');
+  assertOptionalString(request.thesis, 'thesis must be a string');
+  assertOptionalString(request.note, 'note must be a string');
+  validateTradeJournalContext(request.journal, 'updateTrade');
+}
+
 export function validateTradeJournalPatchRequest(request: UpdateTradeJournalRequest): void {
   validateTradeJournalContext(request, 'patchTradeJournal');
 }
 
-export function validateTradeEntryRequest(request: TradeEntryRequest): void {
+export function validateTradeEntryRequest(request: { price: number; quantity?: number; occurredAt: string }): void {
   assertPositive(request.price, 'entry price must be positive', true);
   assertPositive(request.quantity, 'entry quantity must be positive', false);
   assertValidOccurredAt(request.occurredAt, 'entry occurredAt must be a valid date');
 }
 
-export function validateTradeExitRequest(request: TradeExitRequest): void {
+export function validateTradeExitRequest(request: { price: number; quantity?: number; occurredAt: string; reason?: string }): void {
   assertPositive(request.price, 'exit price must be positive', true);
   assertPositive(request.quantity, 'exit quantity must be positive', false);
   assertValidOccurredAt(request.occurredAt, 'exit occurredAt must be a valid date');
+  assertOptionalString(request.reason, 'exit reason must be a string');
+}
+
+export function validateUpdateTradeEntryRequest(request: UpdateTradeEntryRequest): void {
+  if (Object.keys(request).length === 0) {
+    throw new BadRequestException('updateTradeEntry requires at least one field');
+  }
+  assertPositive(request.price, 'entry price must be positive', false);
+  assertPositive(request.quantity, 'entry quantity must be positive', false);
+  if (request.occurredAt !== undefined) {
+    assertValidOccurredAt(request.occurredAt, 'entry occurredAt must be a valid date');
+  }
+  assertOptionalString(request.note, 'entry note must be a string');
+}
+
+export function validateUpdateTradeExitRequest(request: UpdateTradeExitRequest): void {
+  if (Object.keys(request).length === 0) {
+    throw new BadRequestException('updateTradeExit requires at least one field');
+  }
+  assertPositive(request.price, 'exit price must be positive', false);
+  assertPositive(request.quantity, 'exit quantity must be positive', false);
+  if (request.occurredAt !== undefined) {
+    assertValidOccurredAt(request.occurredAt, 'exit occurredAt must be a valid date');
+  }
+  assertOptionalString(request.reason, 'exit reason must be a string');
+  assertOptionalString(request.note, 'exit note must be a string');
+}
+
+export function validateCreateTradeTagRequest(request: CreateTradeTagRequest): void {
+  assertOptionalTradeTagField(request.field, 'field must be one of setup, rule-violation, lesson, result-label');
+  assertTrimmedString(request.label, 'label must be a non-empty string');
 }
