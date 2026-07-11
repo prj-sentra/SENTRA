@@ -182,18 +182,54 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([
-      fetchJson<TradeRecord[]>(`${apiUrl}/trade-log/trades`),
-      fetchJson<TradeStatsResponse>(`${apiUrl}/trade-log/stats`),
-      fetchJson<WikiPageSummary[]>(`${apiUrl}/wiki/pages`),
-    ])
-      .then(([trades, stats, wikiPages]) => {
-        setState({ trades, stats, wikiPages });
+    let cancelled = false;
+
+    fetchJson<TradeRecord[]>(`${apiUrl}/trade-log/trades`)
+      .then((trades) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => ({ ...current, trades }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setError(err instanceof Error ? `trade-log/trades: ${err.message}` : 'trade-log/trades request failed');
+      });
+
+    fetchJson<TradeStatsResponse>(`${apiUrl}/trade-log/stats`)
+      .then((stats) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => ({ ...current, stats }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setError(err instanceof Error ? `trade-log/stats: ${err.message}` : 'trade-log/stats request failed');
+      });
+
+    fetchJson<WikiPageSummary[]>(`${apiUrl}/wiki/pages`)
+      .then((wikiPages) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => ({ ...current, wikiPages }));
         setSelectedWikiSlug((current) => current ?? wikiPages[0]?.slug ?? null);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Unknown API error');
+        if (cancelled) {
+          return;
+        }
+        setError(err instanceof Error ? `wiki/pages: ${err.message}` : 'wiki/pages request failed');
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -454,7 +490,8 @@ export function App() {
             </section>
           ) : (
             <div className="empty-state compact">
-              <h3>통계 로딩 중</h3>
+              <h3>{error?.startsWith('trade-log/stats:') ? '통계 로드 실패' : '통계 로딩 중'}</h3>
+              {error?.startsWith('trade-log/stats:') ? <p>{error}</p> : null}
             </div>
           )}
         </section>
