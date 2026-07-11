@@ -1,9 +1,12 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type {
   TradeJournalContext,
+  TradeLogAssistantActionsRequest,
   TradeRecord,
   TradeStatsBucket,
   TradeStatsResponse,
+  TradeTagCatalog,
+  TradeTagDefinition,
   WikiPageDetail,
   WikiPageSummary,
 } from '@trading-journal/shared';
@@ -15,12 +18,14 @@ interface ApiState {
   trades: TradeRecord[];
   stats: TradeStatsResponse | null;
   wikiPages: WikiPageSummary[];
+  tagCatalog: TradeTagCatalog | null;
 }
 
 const initialState: ApiState = {
   trades: [],
   stats: null,
   wikiPages: [],
+  tagCatalog: null,
 };
 
 function routeFromPathname(pathname: string): View {
@@ -40,8 +45,8 @@ function routePath(view: View): string {
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -160,6 +165,625 @@ function BreakdownTable({ buckets }: { buckets: TradeStatsBucket[] }) {
   );
 }
 
+
+interface TagChecklistGroupProps {
+  title: string;
+  hint: string;
+  options: TradeTagDefinition[];
+  selected: string[];
+  onToggle: (label: string) => void;
+  emptyMessage: string;
+}
+
+function TagChecklistGroup({ title, hint, options, selected, onToggle, emptyMessage }: TagChecklistGroupProps) {
+  return (
+    <section className="tag-selector-block">
+      <div className="subform-header">
+        <strong>{title}</strong>
+        <small>{hint}</small>
+      </div>
+      {options.length > 0 ? (
+        <div className="tag-selector-grid narrow">
+          {options.map((option) => (
+            <label className="checkbox-tag" key={option.id}>
+              <input
+                checked={selected.includes(option.label)}
+                type="checkbox"
+                onChange={() => onToggle(option.label)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="stats-empty">{emptyMessage}</p>
+      )}
+    </section>
+  );
+}
+
+interface ManualTradeFormState {
+  symbol: string;
+  side: 'long' | 'short';
+  timeframe: string;
+  session: string;
+  strategy: string;
+  thesis: string;
+  note: string;
+  entryPrice: string;
+  entryQuantity: string;
+  entryOccurredAt: string;
+  entryNote: string;
+  exitPrice: string;
+  exitQuantity: string;
+  exitOccurredAt: string;
+  exitReason: '' | 'target_hit' | 'stop_loss' | 'manual' | 'invalidated' | 'time_exit';
+  exitNote: string;
+  setupType: string;
+  setupTags: string[];
+  entryModel: string;
+  confirmations: string;
+  invalidation: string;
+  stopLossPrice: string;
+  takeProfitPrice: string;
+  plannedLossAmount: string;
+  dailyLossLimit: string;
+  calmState: boolean;
+  checklistNotes: string;
+  breakevenRule: string;
+  additionRule: string;
+  exitTriggers: string;
+  managementNotes: string;
+  resultLabel: string;
+  processVerdict: '' | 'good' | 'bad' | 'repeat-ban' | 'observe';
+  ruleViolationTags: string[];
+  ruleViolations: string;
+  lessonTags: string[];
+  lessons: string;
+  realizedPnlText: string;
+  reviewNotes: string;
+}
+
+function toDatetimeLocalValue(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function createManualTradeFormState(): ManualTradeFormState {
+  const now = toDatetimeLocalValue();
+  return {
+    symbol: '',
+    side: 'long',
+    timeframe: '',
+    session: '',
+    strategy: '',
+    thesis: '',
+    note: '',
+    entryPrice: '',
+    entryQuantity: '',
+    entryOccurredAt: now,
+    entryNote: '',
+    exitPrice: '',
+    exitQuantity: '',
+    exitOccurredAt: now,
+    exitReason: 'manual',
+    exitNote: '',
+    setupType: '',
+    setupTags: [],
+    entryModel: '',
+    confirmations: '',
+    invalidation: '',
+    stopLossPrice: '',
+    takeProfitPrice: '',
+    plannedLossAmount: '',
+    dailyLossLimit: '',
+    calmState: false,
+    checklistNotes: '',
+    breakevenRule: '',
+    additionRule: '',
+    exitTriggers: '',
+    managementNotes: '',
+    resultLabel: '',
+    processVerdict: '',
+    ruleViolationTags: [],
+    ruleViolations: '',
+    lessonTags: [],
+    lessons: '',
+    realizedPnlText: '',
+    reviewNotes: '',
+  };
+}
+
+function splitListInput(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function parsePositiveNumberInput(value: string, fieldName: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${fieldName} must be a positive number`);
+  }
+  return parsed;
+}
+
+function buildManualJournal(form: ManualTradeFormState): TradeJournalContext | undefined {
+  const plan: NonNullable<TradeJournalContext['plan']> = {};
+  if (form.setupType.trim()) plan.setupType = form.setupType.trim();
+  if (form.setupTags.length > 0) plan.setupTags = form.setupTags;
+  if (form.entryModel.trim()) plan.entryModel = form.entryModel.trim();
+  const confirmations = splitListInput(form.confirmations);
+  if (confirmations.length > 0) plan.confirmations = confirmations;
+  if (form.invalidation.trim()) plan.invalidation = form.invalidation.trim();
+  const stopLossPrice = parsePositiveNumberInput(form.stopLossPrice, 'stopLossPrice');
+  if (stopLossPrice !== undefined) plan.stopLossPrice = stopLossPrice;
+  const takeProfitPrice = parsePositiveNumberInput(form.takeProfitPrice, 'takeProfitPrice');
+  if (takeProfitPrice !== undefined) plan.takeProfitPrice = takeProfitPrice;
+  const plannedLossAmount = parsePositiveNumberInput(form.plannedLossAmount, 'plannedLossAmount');
+  if (plannedLossAmount !== undefined) plan.plannedLossAmount = plannedLossAmount;
+  const dailyLossLimit = parsePositiveNumberInput(form.dailyLossLimit, 'dailyLossLimit');
+  if (dailyLossLimit !== undefined) plan.dailyLossLimit = dailyLossLimit;
+  if (form.calmState) plan.calmState = true;
+  if (form.checklistNotes.trim()) plan.checklistNotes = form.checklistNotes.trim();
+
+  const management: NonNullable<TradeJournalContext['management']> = {};
+  if (form.breakevenRule.trim()) management.breakevenRule = form.breakevenRule.trim();
+  if (form.additionRule.trim()) management.additionRule = form.additionRule.trim();
+  const exitTriggers = splitListInput(form.exitTriggers);
+  if (exitTriggers.length > 0) management.exitTriggers = exitTriggers;
+  if (form.managementNotes.trim()) management.managementNotes = form.managementNotes.trim();
+
+  const review: NonNullable<TradeJournalContext['review']> = {};
+  if (form.resultLabel.trim()) review.resultLabel = form.resultLabel.trim();
+  if (form.processVerdict) review.processVerdict = form.processVerdict;
+  if (form.ruleViolationTags.length > 0) review.ruleViolationTags = form.ruleViolationTags;
+  const ruleViolations = splitListInput(form.ruleViolations);
+  if (ruleViolations.length > 0) review.ruleViolations = ruleViolations;
+  if (form.lessonTags.length > 0) review.lessonTags = form.lessonTags;
+  const lessons = splitListInput(form.lessons);
+  if (lessons.length > 0) review.lessons = lessons;
+  if (form.realizedPnlText.trim()) review.realizedPnlText = form.realizedPnlText.trim();
+  if (form.reviewNotes.trim()) review.reviewNotes = form.reviewNotes.trim();
+
+  const journal: TradeJournalContext = {};
+  if (Object.keys(plan).length > 0) journal.plan = plan;
+  if (Object.keys(management).length > 0) journal.management = management;
+  if (Object.keys(review).length > 0) journal.review = review;
+  return Object.keys(journal).length > 0 ? journal : undefined;
+}
+
+function toggleSelectedLabel(selected: string[], label: string): string[] {
+  return selected.includes(label) ? selected.filter((item) => item !== label) : [...selected, label];
+}
+
+function buildManualRawText(form: ManualTradeFormState): string {
+  const parts = [
+    `${form.symbol.trim().toUpperCase()} ${form.side}`,
+    form.timeframe.trim() || undefined,
+    form.session.trim() || undefined,
+    form.strategy.trim() || undefined,
+    form.thesis.trim() || undefined,
+  ].filter((item): item is string => Boolean(item));
+
+  return parts.length > 0 ? `manual journal entry: ${parts.join(' · ')}` : 'manual journal entry';
+}
+
+function buildAssistantActions(form: ManualTradeFormState): TradeLogAssistantActionsRequest {
+  const journal = buildManualJournal(form);
+  const actions: TradeLogAssistantActionsRequest['actions'] = [
+    {
+      type: 'create_trade',
+      payload: {
+        symbol: form.symbol.trim(),
+        side: form.side,
+        timeframe: form.timeframe.trim() || undefined,
+        session: form.session.trim() || undefined,
+        strategy: form.strategy.trim() || undefined,
+        thesis: form.thesis.trim() || undefined,
+        note: form.note.trim() || undefined,
+        journal,
+      },
+    },
+  ];
+
+  const entryPrice = parsePositiveNumberInput(form.entryPrice, 'entryPrice');
+  const entryQuantity = parsePositiveNumberInput(form.entryQuantity, 'entryQuantity');
+  const entryOccurredAt = form.entryOccurredAt.trim();
+  const hasEntry = entryPrice !== undefined || entryQuantity !== undefined || entryOccurredAt.length > 0 || form.entryNote.trim().length > 0;
+  if (hasEntry) {
+    if (entryPrice === undefined || entryOccurredAt.length === 0) {
+      throw new Error('entry price and occurredAt are required when an entry is provided');
+    }
+    actions.push({
+      type: 'record_entry',
+      tradeRef: 'last_created',
+      payload: {
+        price: entryPrice,
+        quantity: entryQuantity,
+        occurredAt: new Date(entryOccurredAt).toISOString(),
+        note: form.entryNote.trim() || undefined,
+      },
+    });
+  }
+
+  const exitPrice = parsePositiveNumberInput(form.exitPrice, 'exitPrice');
+  const exitQuantity = parsePositiveNumberInput(form.exitQuantity, 'exitQuantity');
+  const exitOccurredAt = form.exitOccurredAt.trim();
+  const hasExit = exitPrice !== undefined || exitQuantity !== undefined || exitOccurredAt.length > 0 || form.exitNote.trim().length > 0 || form.exitReason !== 'manual';
+  if (hasExit) {
+    if (entryPrice === undefined || entryOccurredAt.length === 0) {
+      throw new Error('exit requires an entry on the same submission');
+    }
+    if (exitPrice === undefined || exitOccurredAt.length === 0) {
+      throw new Error('exit price and occurredAt are required when an exit is provided');
+    }
+    actions.push({
+      type: 'record_exit',
+      tradeId: 'last_created',
+      payload: {
+        price: exitPrice,
+        quantity: exitQuantity,
+        occurredAt: new Date(exitOccurredAt).toISOString(),
+        reason: form.exitReason || 'manual',
+        note: form.exitNote.trim() || undefined,
+      },
+    } as TradeLogAssistantActionsRequest['actions'][number]);
+  }
+
+  return {
+    rawText: buildManualRawText(form),
+    source: 'manual',
+    actions,
+  };
+}
+
+function ManualTradeForm({ tagCatalog, onSaved }: { tagCatalog: TradeTagCatalog | null; onSaved: (updatedTrades: TradeRecord[]) => Promise<void> | void }) {
+  const [form, setForm] = useState<ManualTradeFormState>(() => createManualTradeFormState());
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  function update(patch: Partial<ManualTradeFormState>): void {
+    setForm((current) => ({ ...current, ...patch }));
+  }
+
+  function toggle(field: 'setupTags' | 'ruleViolationTags' | 'lessonTags', label: string): void {
+    setForm((current) => ({
+      ...current,
+      [field]: toggleSelectedLabel(current[field], label),
+    }));
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setStatus(null);
+    setSubmitting(true);
+
+    try {
+      const request = buildAssistantActions(form);
+      const response = await fetchJson<{ rawText: string; source: 'manual'; trades: TradeRecord[] }>(`${apiUrl}/trade-log/assistant-actions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+      await onSaved(response.trades);
+      setForm(createManualTradeFormState());
+      setStatus(`등록 완료 · ${response.trades.length} trade${response.trades.length === 1 ? '' : 's'} updated`);
+    } catch (err: unknown) {
+      setStatus(err instanceof Error ? err.message : 'Manual trade submission failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const setupOptions = tagCatalog?.setup ?? [];
+  const ruleViolationOptions = tagCatalog?.ruleViolation ?? [];
+  const lessonOptions = tagCatalog?.lesson ?? [];
+  const resultLabelOptions = tagCatalog?.resultLabel ?? [];
+
+  return (
+    <section className="manual-console">
+      <div className="manual-console-header">
+        <div>
+          <p className="section-label">Manual Journal</p>
+          <h3>수동 매매일지 등록</h3>
+          <p className="subhead">create / entry / exit / journal 패치를 한 번에 assistant-actions로 보냅니다.</p>
+        </div>
+        <span className="count">manual source</span>
+      </div>
+
+      <form className="journal-form" onSubmit={handleSubmit}>
+        <div className="form-card">
+          <div className="form-card-header">
+            <strong>Execution</strong>
+            <span>trade identity + note</span>
+          </div>
+          <div className="form-grid cols-4">
+            <label>
+              <span>symbol</span>
+              <input value={form.symbol} onChange={(event) => update({ symbol: event.target.value })} placeholder="GOLD / BTCUSDT" required />
+            </label>
+            <label>
+              <span>side</span>
+              <select value={form.side} onChange={(event) => update({ side: event.target.value as ManualTradeFormState['side'] })}>
+                <option value="long">long</option>
+                <option value="short">short</option>
+              </select>
+            </label>
+            <label>
+              <span>timeframe</span>
+              <input value={form.timeframe} onChange={(event) => update({ timeframe: event.target.value })} placeholder="5m / 15m" />
+            </label>
+            <label>
+              <span>session</span>
+              <input value={form.session} onChange={(event) => update({ session: event.target.value })} placeholder="Asia / London / New York" />
+            </label>
+          </div>
+          <div className="form-grid cols-2">
+            <label>
+              <span>strategy</span>
+              <input value={form.strategy} onChange={(event) => update({ strategy: event.target.value })} placeholder="optional strategy label" />
+            </label>
+            <label>
+              <span>thesis</span>
+              <input value={form.thesis} onChange={(event) => update({ thesis: event.target.value })} placeholder="why this trade exists" />
+            </label>
+          </div>
+          <label>
+            <span>note</span>
+            <textarea rows={3} value={form.note} onChange={(event) => update({ note: event.target.value })} placeholder="raw capture or manual summary" />
+          </label>
+        </div>
+
+        <div className="form-card">
+          <div className="form-card-header">
+            <strong>Entry / Exit</strong>
+            <span>optional on planned trades, required for execution</span>
+          </div>
+          <div className="form-split-grid">
+            <div className="subform-block">
+              <div className="subform-header">
+                <strong>Entry</strong>
+                <small>actual opening</small>
+              </div>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>price</span>
+                  <input value={form.entryPrice} onChange={(event) => update({ entryPrice: event.target.value })} placeholder="4175.25" />
+                </label>
+                <label>
+                  <span>quantity</span>
+                  <input value={form.entryQuantity} onChange={(event) => update({ entryQuantity: event.target.value })} placeholder="0.01" />
+                </label>
+              </div>
+              <label>
+                <span>occurred at</span>
+                <input type="datetime-local" value={form.entryOccurredAt} onChange={(event) => update({ entryOccurredAt: event.target.value })} />
+              </label>
+              <label>
+                <span>entry note</span>
+                <textarea rows={3} value={form.entryNote} onChange={(event) => update({ entryNote: event.target.value })} />
+              </label>
+            </div>
+
+            <div className="subform-block">
+              <div className="subform-header">
+                <strong>Exit</strong>
+                <small>only when entry is present in same submission</small>
+              </div>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>price</span>
+                  <input value={form.exitPrice} onChange={(event) => update({ exitPrice: event.target.value })} placeholder="4180.50" />
+                </label>
+                <label>
+                  <span>quantity</span>
+                  <input value={form.exitQuantity} onChange={(event) => update({ exitQuantity: event.target.value })} placeholder="0.01" />
+                </label>
+              </div>
+              <label>
+                <span>occurred at</span>
+                <input type="datetime-local" value={form.exitOccurredAt} onChange={(event) => update({ exitOccurredAt: event.target.value })} />
+              </label>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>reason</span>
+                  <select value={form.exitReason} onChange={(event) => update({ exitReason: event.target.value as ManualTradeFormState['exitReason'] })}>
+                    <option value="manual">manual</option>
+                    <option value="target_hit">target_hit</option>
+                    <option value="stop_loss">stop_loss</option>
+                    <option value="invalidated">invalidated</option>
+                    <option value="time_exit">time_exit</option>
+                  </select>
+                </label>
+                <label>
+                  <span>exit note</span>
+                  <input value={form.exitNote} onChange={(event) => update({ exitNote: event.target.value })} />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="form-card">
+          <div className="form-card-header">
+            <strong>Journal</strong>
+            <span>setup / management / review</span>
+          </div>
+          <div className="form-split-grid">
+            <div className="subform-block">
+              <div className="subform-header">
+                <strong>Setup / Risk</strong>
+                <small>plan context</small>
+              </div>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>setup type</span>
+                  <input value={form.setupType} onChange={(event) => update({ setupType: event.target.value })} placeholder="투볼 / 정볼 / 역볼" />
+                </label>
+                <label>
+                  <span>entry model</span>
+                  <input value={form.entryModel} onChange={(event) => update({ entryModel: event.target.value })} placeholder="continuation / reversal" />
+                </label>
+              </div>
+              <TagChecklistGroup
+                emptyMessage="setup tags not loaded"
+                hint="Korean canonical labels from API"
+                onToggle={(label) => toggle('setupTags', label)}
+                options={setupOptions}
+                selected={form.setupTags}
+                title="Setup tags"
+              />
+              <label>
+                <span>confirmations</span>
+                <textarea rows={3} value={form.confirmations} onChange={(event) => update({ confirmations: event.target.value })} placeholder="one per line or comma separated" />
+              </label>
+              <label>
+                <span>invalidation</span>
+                <textarea rows={3} value={form.invalidation} onChange={(event) => update({ invalidation: event.target.value })} />
+              </label>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>stop loss price</span>
+                  <input value={form.stopLossPrice} onChange={(event) => update({ stopLossPrice: event.target.value })} placeholder="4158.00" />
+                </label>
+                <label>
+                  <span>take profit price</span>
+                  <input value={form.takeProfitPrice} onChange={(event) => update({ takeProfitPrice: event.target.value })} placeholder="4188.00" />
+                </label>
+              </div>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>planned loss amount</span>
+                  <input value={form.plannedLossAmount} onChange={(event) => update({ plannedLossAmount: event.target.value })} placeholder="50" />
+                </label>
+                <label>
+                  <span>daily loss limit</span>
+                  <input value={form.dailyLossLimit} onChange={(event) => update({ dailyLossLimit: event.target.value })} placeholder="100" />
+                </label>
+              </div>
+              <label className="checkbox-tag">
+                <input checked={form.calmState} type="checkbox" onChange={(event) => update({ calmState: event.target.checked })} />
+                <span>calm state</span>
+              </label>
+              <label>
+                <span>checklist notes</span>
+                <textarea rows={3} value={form.checklistNotes} onChange={(event) => update({ checklistNotes: event.target.value })} />
+              </label>
+            </div>
+
+            <div className="subform-block">
+              <div className="subform-header">
+                <strong>Management / Review</strong>
+                <small>post-entry discipline</small>
+              </div>
+              <label>
+                <span>breakeven rule</span>
+                <textarea rows={3} value={form.breakevenRule} onChange={(event) => update({ breakevenRule: event.target.value })} />
+              </label>
+              <label>
+                <span>addition rule</span>
+                <textarea rows={3} value={form.additionRule} onChange={(event) => update({ additionRule: event.target.value })} />
+              </label>
+              <label>
+                <span>exit triggers</span>
+                <textarea rows={3} value={form.exitTriggers} onChange={(event) => update({ exitTriggers: event.target.value })} placeholder="one per line or comma separated" />
+              </label>
+              <label>
+                <span>management notes</span>
+                <textarea rows={3} value={form.managementNotes} onChange={(event) => update({ managementNotes: event.target.value })} />
+              </label>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>result label</span>
+                  <select value={form.resultLabel} onChange={(event) => update({ resultLabel: event.target.value })}>
+                    <option value="">none</option>
+                    {resultLabelOptions.map((option) => (
+                      <option key={option.id} value={option.label}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>process verdict</span>
+                  <select value={form.processVerdict} onChange={(event) => update({ processVerdict: event.target.value as ManualTradeFormState['processVerdict'] })}>
+                    <option value="">none</option>
+                    <option value="good">good</option>
+                    <option value="bad">bad</option>
+                    <option value="repeat-ban">repeat-ban</option>
+                    <option value="observe">observe</option>
+                  </select>
+                </label>
+              </div>
+              <TagChecklistGroup
+                emptyMessage="rule-violation tags not loaded"
+                hint="select all that apply"
+                onToggle={(label) => toggle('ruleViolationTags', label)}
+                options={ruleViolationOptions}
+                selected={form.ruleViolationTags}
+                title="Rule violation tags"
+              />
+              <label>
+                <span>rule violations</span>
+                <textarea rows={3} value={form.ruleViolations} onChange={(event) => update({ ruleViolations: event.target.value })} placeholder="one per line or comma separated" />
+              </label>
+              <TagChecklistGroup
+                emptyMessage="lesson tags not loaded"
+                hint="select all that apply"
+                onToggle={(label) => toggle('lessonTags', label)}
+                options={lessonOptions}
+                selected={form.lessonTags}
+                title="Lesson tags"
+              />
+              <label>
+                <span>lessons</span>
+                <textarea rows={3} value={form.lessons} onChange={(event) => update({ lessons: event.target.value })} placeholder="one per line or comma separated" />
+              </label>
+              <div className="form-grid cols-2">
+                <label>
+                  <span>realized pnl text</span>
+                  <input value={form.realizedPnlText} onChange={(event) => update({ realizedPnlText: event.target.value })} />
+                </label>
+                <label>
+                  <span>review notes</span>
+                  <input value={form.reviewNotes} onChange={(event) => update({ reviewNotes: event.target.value })} />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="manual-console-actions">
+          <div className="manual-console-note">
+            <p>Plan-only submission is allowed. If exit fields are filled, entry fields must also be present in the same submit.</p>
+            <p>{status ?? 'Submit to create a manual trade record.'}</p>
+          </div>
+          <div className="form-actions">
+            <button className="secondary-button" type="button" onClick={() => setForm(createManualTradeFormState())} disabled={submitting}>
+              reset
+            </button>
+            <button className="primary-button" type="submit" disabled={submitting || !form.symbol.trim()}>
+              {submitting ? 'saving...' : 'save manual record'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+  );
+}
 export function App() {
   const [activeView, setActiveView] = useState<View>(routeFromPathname(window.location.pathname));
   const [state, setState] = useState<ApiState>(initialState);
@@ -212,6 +836,19 @@ export function App() {
         setError(err instanceof Error ? `trade-log/stats: ${err.message}` : 'trade-log/stats request failed');
       });
 
+    fetchJson<TradeTagCatalog>(`${apiUrl}/trade-log/tags`)
+      .then((tagCatalog) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => ({ ...current, tagCatalog }));
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          console.warn('trade-log/tags request failed', err);
+        }
+      });
+
     fetchJson<WikiPageSummary[]>(`${apiUrl}/wiki/pages`)
       .then((wikiPages) => {
         if (cancelled) {
@@ -252,6 +889,30 @@ export function App() {
     }
     setActiveView(nextView);
     setError(null);
+  }
+
+  function mergeTrades(updatedTrades: TradeRecord[]): void {
+    setState((current) => {
+      const merged = new Map(current.trades.map((trade) => [trade.id, trade] as const));
+      for (const updated of updatedTrades) {
+        merged.set(updated.id, updated);
+      }
+      return { ...current, trades: Array.from(merged.values()) };
+    });
+  }
+
+  async function refreshStats(): Promise<void> {
+    try {
+      const stats = await fetchJson<TradeStatsResponse>(`${apiUrl}/trade-log/stats`);
+      setState((current) => ({ ...current, stats }));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? `trade-log/stats: ${err.message}` : 'trade-log/stats request failed');
+    }
+  }
+
+  async function handleManualTradeSaved(updatedTrades: TradeRecord[]): Promise<void> {
+    mergeTrades(updatedTrades);
+    await refreshStats();
   }
 
   function resolveWikiSlug(wikiLink: string): string | undefined {
@@ -504,6 +1165,8 @@ export function App() {
             </div>
             <span className="count">{state.trades.length} records</span>
           </div>
+
+          <ManualTradeForm tagCatalog={state.tagCatalog} onSaved={handleManualTradeSaved} />
 
           {state.trades.length === 0 ? (
             <div className="empty-state">
