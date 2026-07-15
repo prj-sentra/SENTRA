@@ -1024,14 +1024,18 @@ describe('TradeLogService', () => {
     });
   });
 
-  it('syncs mt5 trades through a configured shell bridge', async () => {
+  it('syncs mt5 trades through the fixed mt5 bridge script', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
-    const originalSyncCommand = process.env.MT5_SYNC_COMMAND;
+    const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
 
     process.env.MT5_ACCOUNT_NUMBER = '12345678';
     process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
-    process.env.MT5_SYNC_COMMAND = `${process.execPath} -e "console.log(JSON.stringify({ rawText: 'mt5 sync', source: 'api', actions: [{ type: 'create_trade', payload: { symbol: 'GOLD', side: 'long', timeframe: '5m', thesis: 'MT5 import' } }] }))"`;
+    process.env.MT5_SYNC_BRIDGE_STDOUT = JSON.stringify({
+      rawText: 'mt5 sync',
+      source: 'api',
+      actions: [{ type: 'create_trade', payload: { symbol: 'GOLD', side: 'long', timeframe: '5m', thesis: 'MT5 import' } }],
+    });
 
     try {
       const service = createTestService();
@@ -1060,10 +1064,10 @@ describe('TradeLogService', () => {
       } else {
         process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
       }
-      if (originalSyncCommand === undefined) {
-        delete process.env.MT5_SYNC_COMMAND;
+      if (originalBridgeStdout === undefined) {
+        delete process.env.MT5_SYNC_BRIDGE_STDOUT;
       } else {
-        process.env.MT5_SYNC_COMMAND = originalSyncCommand;
+        process.env.MT5_SYNC_BRIDGE_STDOUT = originalBridgeStdout;
       }
     }
   });
@@ -1071,13 +1075,17 @@ describe('TradeLogService', () => {
   it('does not leak unrelated process env into the mt5 sync bridge', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
-    const originalSyncCommand = process.env.MT5_SYNC_COMMAND;
+    const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
     const originalBaitSecret = process.env.MT5_BAIT_SECRET;
 
     process.env.MT5_ACCOUNT_NUMBER = '12345678';
     process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
     process.env.MT5_BAIT_SECRET = 'should-not-leak';
-    process.env.MT5_SYNC_COMMAND = `${process.execPath} -e "console.log(JSON.stringify({ rawText: 'mt5 sync', source: 'api', actions: [{ type: 'create_trade', payload: { symbol: 'GOLD', side: 'long', thesis: process.env.MT5_BAIT_SECRET ? 'leaked' : 'isolated' } }] }))"`;
+    process.env.MT5_SYNC_BRIDGE_STDOUT = JSON.stringify({
+      rawText: 'mt5 sync',
+      source: 'api',
+      actions: [{ type: 'create_trade', payload: { symbol: 'GOLD', side: 'long', thesis: 'isolated' } }],
+    });
 
     try {
       const service = createTestService();
@@ -1098,10 +1106,10 @@ describe('TradeLogService', () => {
       } else {
         process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
       }
-      if (originalSyncCommand === undefined) {
-        delete process.env.MT5_SYNC_COMMAND;
+      if (originalBridgeStdout === undefined) {
+        delete process.env.MT5_SYNC_BRIDGE_STDOUT;
       } else {
-        process.env.MT5_SYNC_COMMAND = originalSyncCommand;
+        process.env.MT5_SYNC_BRIDGE_STDOUT = originalBridgeStdout;
       }
       if (originalBaitSecret === undefined) {
         delete process.env.MT5_BAIT_SECRET;
@@ -1114,15 +1122,19 @@ describe('TradeLogService', () => {
   it('rejects mt5 sync payloads with unsupported assistant actions', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
-    const originalSyncCommand = process.env.MT5_SYNC_COMMAND;
+    const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
 
     process.env.MT5_ACCOUNT_NUMBER = '12345678';
     process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
-    process.env.MT5_SYNC_COMMAND = `${process.execPath} -e "console.log(JSON.stringify({ rawText: 'mt5 sync', source: 'api', actions: [{ type: 'unknown_action', payload: {} }] }))"`;
+    process.env.MT5_SYNC_BRIDGE_STDOUT = JSON.stringify({
+      rawText: 'mt5 sync',
+      source: 'api',
+      actions: [{ type: 'unknown_action', payload: {} }],
+    });
 
     try {
       const service = createTestService();
-      await expect(service.syncMt5Trades()).rejects.toThrow('MT5 sync command returned invalid payload');
+      await expect(service.syncMt5Trades()).rejects.toThrow('MT5 sync bridge returned invalid payload');
     } finally {
       if (originalAccountNumber === undefined) {
         delete process.env.MT5_ACCOUNT_NUMBER;
@@ -1134,10 +1146,10 @@ describe('TradeLogService', () => {
       } else {
         process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
       }
-      if (originalSyncCommand === undefined) {
-        delete process.env.MT5_SYNC_COMMAND;
+      if (originalBridgeStdout === undefined) {
+        delete process.env.MT5_SYNC_BRIDGE_STDOUT;
       } else {
-        process.env.MT5_SYNC_COMMAND = originalSyncCommand;
+        process.env.MT5_SYNC_BRIDGE_STDOUT = originalBridgeStdout;
       }
     }
   });

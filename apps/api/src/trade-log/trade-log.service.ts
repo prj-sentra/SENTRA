@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { exec as execCallback } from 'node:child_process';
+import { execFile as execFileCallback } from 'node:child_process';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type {
   CreateTradeRequest,
@@ -133,7 +134,7 @@ const REVIEW_TAG_ALIASES: Record<string, string> = {
 };
 
 const DEFAULT_RESULT_LABELS = new Set(['익절', '손절', '본절 청산', '부분 익절', '부분 손절', '취소']);
-const execAsync = promisify(execCallback);
+const execFileAsync = promisify(execFileCallback);
 
 @Injectable()
 export class TradeLogService {
@@ -540,7 +541,7 @@ export class TradeLogService {
   async syncMt5Trades(): Promise<TradeLogMt5SyncResponse> {
     const accountNumber = process.env.MT5_ACCOUNT_NUMBER?.trim();
     const readOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD?.trim();
-    const syncCommand = process.env.MT5_SYNC_COMMAND?.trim();
+    const bridgePath = join(__dirname, '..', '..', 'scripts', 'mt5-sync.bridge.js');
 
     if (!accountNumber) {
       throw new BadRequestException('MT5_ACCOUNT_NUMBER env is required');
@@ -548,32 +549,30 @@ export class TradeLogService {
     if (!readOnlyPassword) {
       throw new BadRequestException('MT5_READ_ONLY_PASSWORD env is required');
     }
-    if (!syncCommand) {
-      throw new BadRequestException('MT5_SYNC_COMMAND env is required');
-    }
 
-    const { stdout } = await execAsync(syncCommand, {
+    const { stdout } = await execFileAsync(process.execPath, [bridgePath], {
       env: {
         PATH: process.env.PATH ?? '',
         MT5_ACCOUNT_NUMBER: accountNumber,
         MT5_READ_ONLY_PASSWORD: readOnlyPassword,
+        MT5_SYNC_BRIDGE_STDOUT: process.env.MT5_SYNC_BRIDGE_STDOUT,
       },
       maxBuffer: 1024 * 1024,
     });
 
     const payloadText = stdout.trim();
     if (!payloadText) {
-      throw new BadRequestException('MT5 sync command returned no output');
+      throw new BadRequestException('MT5 sync bridge returned no output');
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(payloadText) as unknown;
     } catch {
-      throw new BadRequestException('MT5 sync command must return JSON');
+      throw new BadRequestException('MT5 sync bridge must return JSON');
     }
 
-    validateTradeLogAssistantActionsRequest(parsed, 'MT5 sync command returned invalid payload');
+    validateTradeLogAssistantActionsRequest(parsed, 'MT5 sync bridge returned invalid payload');
 
     const applied = await this.applyAssistantActions(parsed);
     return {

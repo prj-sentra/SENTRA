@@ -32,7 +32,6 @@ services:
       MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
       MT5_ACCOUNT_NUMBER: ${MT5_ACCOUNT_NUMBER:-}
       MT5_READ_ONLY_PASSWORD: ${MT5_READ_ONLY_PASSWORD:-}
-      MT5_SYNC_COMMAND: ${MT5_SYNC_COMMAND:-}
     ports:
       - "3000:3000"
     depends_on:
