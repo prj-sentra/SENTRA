@@ -573,6 +573,7 @@ export class TradeLogService {
     }
 
     validateTradeLogAssistantActionsRequest(parsed, 'MT5 sync bridge returned invalid payload');
+    await this.prisma.trade.deleteMany();
 
     const applied = await this.applyAssistantActions(parsed);
     return {

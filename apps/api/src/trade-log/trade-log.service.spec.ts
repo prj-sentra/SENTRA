@@ -195,6 +195,12 @@ function createTestService(): TradeLogService {
         trades.set(trade.id, trade);
         return Promise.resolve(trade);
       }),
+      deleteMany: jest.fn(() => {
+        const count = trades.size;
+        trades.clear();
+        return Promise.resolve({ count });
+      }),
+
       findMany: jest.fn(({ where } = {}) => {
         let values = Array.from(trades.values());
         if (where?.status) {
@@ -1024,7 +1030,7 @@ describe('TradeLogService', () => {
     });
   });
 
-  it('syncs mt5 trades through the fixed mt5 bridge script', async () => {
+  it('replaces the local trade log with mt5 trades through the fixed mt5 bridge script', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
     const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
@@ -1039,7 +1045,10 @@ describe('TradeLogService', () => {
 
     try {
       const service = createTestService();
+      await service.createTrade({ symbol: 'BTCUSDT', side: 'short', thesis: 'stale local trade' });
+
       const response = await service.syncMt5Trades();
+      const trades = await service.listTrades();
 
       expect(response).toMatchObject({
         source: 'mt5',
@@ -1053,6 +1062,12 @@ describe('TradeLogService', () => {
         timeframe: '5m',
         thesis: 'MT5 import',
       });
+      expect(trades).toHaveLength(1);
+      expect(trades[0]).toMatchObject({
+        symbol: 'GOLD',
+        thesis: 'MT5 import',
+      });
+      expect(trades.some((trade) => trade.symbol === 'BTCUSDT')).toBe(false);
     } finally {
       if (originalAccountNumber === undefined) {
         delete process.env.MT5_ACCOUNT_NUMBER;
