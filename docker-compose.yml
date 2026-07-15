@@ -29,6 +29,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://trading:trading_dev_password@postgres:5432/trading_journal}
       WIKI_PATH: ${WIKI_PATH:-/data/wiki}
       WIKI_WRITE_TOKEN: ${WIKI_WRITE_TOKEN:-}
+      MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
       MT5_ACCOUNT_NUMBER: ${MT5_ACCOUNT_NUMBER:-}
       MT5_READ_ONLY_PASSWORD: ${MT5_READ_ONLY_PASSWORD:-}
       MT5_SYNC_COMMAND: ${MT5_SYNC_COMMAND:-}

@@ -212,7 +212,8 @@ export interface TradeLogAssistantActionRecordEntry {
 
 export interface TradeLogAssistantActionRecordExit {
   type: 'record_exit';
-  tradeId: string;
+  tradeId?: string;
+  tradeRef?: 'last_created';
   payload: TradeExitRequest;
 }
 

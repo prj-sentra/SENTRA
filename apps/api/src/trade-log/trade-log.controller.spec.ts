@@ -9,6 +9,20 @@ import type {
 import { TradeLogController } from './trade-log.controller';
 
 describe('TradeLogController', () => {
+  const originalMt5SyncToken = process.env.MT5_SYNC_TOKEN;
+
+  beforeEach(() => {
+    process.env.MT5_SYNC_TOKEN = 'test-sync-token';
+  });
+
+  afterAll(() => {
+    if (originalMt5SyncToken === undefined) {
+      delete process.env.MT5_SYNC_TOKEN;
+    } else {
+      process.env.MT5_SYNC_TOKEN = originalMt5SyncToken;
+    }
+  });
+
   it('exposes assistant actions over HTTP controller contract', async () => {
     const response: TradeLogAssistantActionsResponse = {
       rawText: 'BTC 15분봉 롱 진입했어. 67320에 0.05개.',
@@ -137,11 +151,22 @@ describe('TradeLogController', () => {
     };
     const controller = new TradeLogController(service as never);
 
-    await expect(controller.syncMt5Trades()).resolves.toMatchObject({
+    await expect(controller.syncMt5Trades('test-sync-token')).resolves.toMatchObject({
       source: 'mt5',
       importedCount: 1,
       trades: [{ symbol: 'GOLD' }],
     });
+  });
+
+  it('rejects mt5 sync without the configured sync token', async () => {
+    delete process.env.MT5_SYNC_TOKEN;
+
+    const service = {
+      syncMt5Trades: jest.fn(),
+    };
+    const controller = new TradeLogController(service as never);
+
+    expect(() => controller.syncMt5Trades(undefined)).toThrow('Valid MT5 sync token required');
   });
 
   it('exposes trade stats over HTTP controller contract', async () => {

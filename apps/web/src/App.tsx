@@ -260,7 +260,6 @@ function toDatetimeLocalValue(date = new Date()): string {
 }
 
 function createManualTradeFormState(): ManualTradeFormState {
-  const now = toDatetimeLocalValue();
   return {
     symbol: '',
     side: 'long',
@@ -271,11 +270,11 @@ function createManualTradeFormState(): ManualTradeFormState {
     note: '',
     entryPrice: '',
     entryQuantity: '',
-    entryOccurredAt: now,
+    entryOccurredAt: '',
     entryNote: '',
     exitPrice: '',
     exitQuantity: '',
-    exitOccurredAt: now,
+    exitOccurredAt: '',
     exitReason: 'manual',
     exitNote: '',
     setupType: '',
@@ -435,7 +434,7 @@ function buildAssistantActions(form: ManualTradeFormState): TradeLogAssistantAct
     }
     actions.push({
       type: 'record_exit',
-      tradeId: 'last_created',
+      tradeRef: 'last_created',
       payload: {
         price: exitPrice,
         quantity: exitQuantity,
@@ -445,7 +444,6 @@ function buildAssistantActions(form: ManualTradeFormState): TradeLogAssistantAct
       },
     } as TradeLogAssistantActionsRequest['actions'][number]);
   }
-
   return {
     rawText: buildManualRawText(form),
     source: 'manual',

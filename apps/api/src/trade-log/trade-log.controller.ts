@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
 import type {
   CreateTradeRequest,
   CreateTradeTagRequest,
@@ -22,6 +22,12 @@ import { TradeLogService } from './trade-log.service';
 
 @Controller('trade-log')
 export class TradeLogController {
+  private assertMt5SyncToken(providedToken: string | undefined): void {
+    const expectedToken = process.env.MT5_SYNC_TOKEN?.trim();
+    if (!expectedToken || !providedToken || providedToken !== expectedToken) {
+      throw new UnauthorizedException('Valid MT5 sync token required');
+    }
+  }
   constructor(private readonly tradeLogService: TradeLogService) {}
 
   @Get('health')
@@ -47,7 +53,8 @@ export class TradeLogController {
   }
 
   @Post('mt5/sync')
-  syncMt5Trades(): Promise<TradeLogMt5SyncResponse> {
+  syncMt5Trades(@Headers('x-mt5-sync-token') syncToken: string | undefined): Promise<TradeLogMt5SyncResponse> {
+    this.assertMt5SyncToken(syncToken);
     return this.tradeLogService.syncMt5Trades();
   }
 

@@ -10,6 +10,7 @@ import type {
   TradeExitRequest,
   TradeJournalContext,
   TradeLogAssistantActionsRequest,
+  TradeLogAssistantAction,
   TradeLogAssistantActionsResponse,
   TradeLogMt5SyncResponse,
   TradeRecord,
@@ -33,6 +34,7 @@ import {
   validateTradeEntryRequest,
   validateTradeExitRequest,
   validateTradeJournalPatchRequest,
+  validateTradeLogAssistantActionsRequest,
   validateUpdateTradeEntryRequest,
   validateUpdateTradeExitRequest,
   validateUpdateTradeRequest,
@@ -482,38 +484,50 @@ export class TradeLogService {
   async applyAssistantActions(
     request: TradeLogAssistantActionsRequest,
   ): Promise<TradeLogAssistantActionsResponse> {
+    validateTradeLogAssistantActionsRequest(request);
     const touchedTrades: TradeRecord[] = [];
     let lastCreatedTradeId: string | undefined;
 
     for (const action of request.actions) {
-      if (action.type === 'create_trade') {
-        const trade = await this.createTrade({
-          ...action.payload,
-          note: action.payload.note ?? request.rawText,
-        });
-        lastCreatedTradeId = trade.id;
-        touchedTrades.push(trade);
-        continue;
+      if (!this.isTradeLogAssistantAction(action)) {
+        throw new BadRequestException('Unsupported assistant action type');
       }
-
-      if (action.type === 'record_entry') {
-        const tradeId = action.tradeRef === 'last_created' ? lastCreatedTradeId : undefined;
-        if (!tradeId) {
-          throw new BadRequestException('record_entry requires tradeRef last_created');
+      switch (action.type) {
+        case 'create_trade': {
+          const trade = await this.createTrade({
+            ...action.payload,
+            note: action.payload.note ?? request.rawText,
+          });
+          lastCreatedTradeId = trade.id;
+          touchedTrades.push(trade);
+          break;
         }
-        const updated = await this.recordEntry(tradeId, action.payload);
-        this.upsertTouchedTrade(touchedTrades, updated);
-        continue;
+        case 'record_entry': {
+          const tradeId = action.tradeRef === 'last_created' ? lastCreatedTradeId : undefined;
+          if (!tradeId) {
+            throw new BadRequestException('record_entry requires tradeRef last_created');
+          }
+          const updated = await this.recordEntry(tradeId, action.payload);
+          this.upsertTouchedTrade(touchedTrades, updated);
+          break;
+        }
+        case 'patch_trade_journal': {
+          const updated = await this.patchTradeJournal(action.tradeId, action.payload);
+          this.upsertTouchedTrade(touchedTrades, updated);
+          break;
+        }
+        case 'record_exit': {
+          const tradeId = action.tradeRef === 'last_created' ? lastCreatedTradeId : action.tradeId;
+          if (!tradeId) {
+            throw new BadRequestException('record_exit requires tradeId or tradeRef last_created');
+          }
+          const updated = await this.recordExit(tradeId, action.payload);
+          this.upsertTouchedTrade(touchedTrades, updated);
+          break;
+        }
+        default:
+          throw new BadRequestException('Unsupported assistant action type');
       }
-
-      if (action.type === 'patch_trade_journal') {
-        const updated = await this.patchTradeJournal(action.tradeId, action.payload);
-        this.upsertTouchedTrade(touchedTrades, updated);
-        continue;
-      }
-
-      const updated = await this.recordExit(action.tradeId, action.payload);
-      this.upsertTouchedTrade(touchedTrades, updated);
     }
 
     return {
@@ -540,7 +554,7 @@ export class TradeLogService {
 
     const { stdout } = await execAsync(syncCommand, {
       env: {
-        ...process.env,
+        PATH: process.env.PATH ?? '',
         MT5_ACCOUNT_NUMBER: accountNumber,
         MT5_READ_ONLY_PASSWORD: readOnlyPassword,
       },
@@ -559,9 +573,7 @@ export class TradeLogService {
       throw new BadRequestException('MT5 sync command must return JSON');
     }
 
-    if (!this.isTradeLogAssistantActionsRequest(parsed)) {
-      throw new BadRequestException('MT5 sync command returned invalid payload');
-    }
+    validateTradeLogAssistantActionsRequest(parsed, 'MT5 sync command returned invalid payload');
 
     const applied = await this.applyAssistantActions(parsed);
     return {
@@ -581,7 +593,22 @@ export class TradeLogService {
     return (
       typeof candidate.rawText === 'string' &&
       (candidate.source === 'telegram' || candidate.source === 'manual' || candidate.source === 'api') &&
-      Array.isArray(candidate.actions)
+      Array.isArray(candidate.actions) &&
+      candidate.actions.every((action) => this.isTradeLogAssistantAction(action))
+    );
+  }
+
+  private isTradeLogAssistantAction(value: unknown): value is TradeLogAssistantAction {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    return (
+      candidate.type === 'create_trade' ||
+      candidate.type === 'record_entry' ||
+      candidate.type === 'record_exit' ||
+      candidate.type === 'patch_trade_journal'
     );
   }
 

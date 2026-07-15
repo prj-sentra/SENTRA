@@ -9,6 +9,7 @@ import type {
   UpdateTradeExitRequest,
   UpdateTradeJournalRequest,
   UpdateTradeRequest,
+  TradeLogAssistantActionsRequest,
 } from '@trading-journal/shared';
 
 function assertPositive(value: number | undefined, message: string, required: boolean): void {
@@ -70,6 +71,70 @@ function assertTradeTagField(value: unknown, message: string): void {
   const allowed: TradeTagField[] = ['setup', 'rule-violation', 'lesson', 'result-label'];
   if (typeof value !== 'string' || !allowed.includes(value as TradeTagField)) {
     throw new BadRequestException(message);
+  }
+}
+function assertPlainObject(value: unknown, message: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException(message);
+  }
+}
+
+function assertOptionalTrimmedString(value: unknown, message: string): void {
+  if (value !== undefined) {
+    assertTrimmedString(value, message);
+  }
+}
+
+export function validateTradeLogAssistantActionsRequest(
+  request: unknown,
+  invalidMessage = 'Invalid assistant actions payload',
+): asserts request is TradeLogAssistantActionsRequest {
+  assertPlainObject(request, invalidMessage);
+
+  if (
+    typeof request.rawText !== 'string' ||
+    (request.source !== 'telegram' && request.source !== 'manual' && request.source !== 'api') ||
+    !Array.isArray(request.actions)
+  ) {
+    throw new BadRequestException(invalidMessage);
+  }
+
+  for (const action of request.actions) {
+    assertPlainObject(action, invalidMessage);
+
+    switch (action.type) {
+      case 'create_trade':
+        assertPlainObject(action.payload, invalidMessage);
+        validateCreateTradeRequest(action.payload as unknown as CreateTradeRequest);
+        break;
+      case 'record_entry':
+        if (action.tradeRef !== 'last_created') {
+          throw new BadRequestException(invalidMessage);
+        }
+        assertPlainObject(action.payload, invalidMessage);
+        validateTradeEntryRequest(action.payload as { price: number; quantity?: number; occurredAt: string });
+        break;
+      case 'record_exit':
+        if (action.tradeId !== undefined) {
+          assertOptionalTrimmedString(action.tradeId, invalidMessage);
+        }
+        if (action.tradeRef !== undefined && action.tradeRef !== 'last_created') {
+          throw new BadRequestException(invalidMessage);
+        }
+        if (action.tradeId === undefined && action.tradeRef === undefined) {
+          throw new BadRequestException(invalidMessage);
+        }
+        assertPlainObject(action.payload, invalidMessage);
+        validateTradeExitRequest(action.payload as { price: number; quantity?: number; occurredAt: string; reason?: string });
+        break;
+      case 'patch_trade_journal':
+        assertTrimmedString(action.tradeId, invalidMessage);
+        assertPlainObject(action.payload, invalidMessage);
+        validateTradeJournalPatchRequest(action.payload as UpdateTradeJournalRequest);
+        break;
+      default:
+        throw new BadRequestException(invalidMessage);
+    }
   }
 }
 

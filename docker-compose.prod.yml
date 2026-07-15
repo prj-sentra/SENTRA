@@ -3,6 +3,8 @@ services:
     image: caddy:2-alpine
     container_name: trading-journal-caddy
     restart: unless-stopped
+    environment:
+      MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
     ports:
       - "80:80"
       - "443:443"

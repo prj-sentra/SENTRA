@@ -899,6 +899,61 @@ describe('TradeLogService', () => {
     });
   });
 
+  it('applies assistant actions to create, open, and close a trade in one request', async () => {
+    const service = createTestService();
+
+    const response = await service.applyAssistantActions({
+      rawText: 'BTC 15분봉 롱 진입 후 목표 청산했어.',
+      source: 'telegram',
+      actions: [
+        {
+          type: 'create_trade',
+          payload: { symbol: 'BTCUSDT', side: 'long', timeframe: '15m' },
+        },
+        {
+          type: 'record_entry',
+          tradeRef: 'last_created',
+          payload: {
+            price: 67320,
+            quantity: 0.05,
+            occurredAt: '2026-06-29T00:00:00.000Z',
+          },
+        },
+        {
+          type: 'record_exit',
+          tradeRef: 'last_created',
+          payload: {
+            price: 67400,
+            quantity: 0.05,
+            occurredAt: '2026-06-29T00:10:00.000Z',
+            reason: 'target_hit',
+          },
+        },
+      ],
+    });
+
+    expect(response.rawText).toBe('BTC 15분봉 롱 진입 후 목표 청산했어.');
+    expect(response.source).toBe('telegram');
+    expect(response.trades).toHaveLength(1);
+    expect(response.trades[0]).toMatchObject({
+      symbol: 'BTCUSDT',
+      side: 'long',
+      status: 'closed',
+      timeframe: '15m',
+      entry: {
+        price: 67320,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:00:00.000Z',
+      },
+      exit: {
+        price: 67400,
+        quantity: 0.05,
+        occurredAt: '2026-06-29T00:10:00.000Z',
+        reason: 'target_hit',
+      },
+    });
+  });
+
   it('creates separate trades for same symbol same side assistant actions', async () => {
     const service = createTestService();
 
@@ -994,6 +1049,80 @@ describe('TradeLogService', () => {
         timeframe: '5m',
         thesis: 'MT5 import',
       });
+    } finally {
+      if (originalAccountNumber === undefined) {
+        delete process.env.MT5_ACCOUNT_NUMBER;
+      } else {
+        process.env.MT5_ACCOUNT_NUMBER = originalAccountNumber;
+      }
+      if (originalReadOnlyPassword === undefined) {
+        delete process.env.MT5_READ_ONLY_PASSWORD;
+      } else {
+        process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
+      }
+      if (originalSyncCommand === undefined) {
+        delete process.env.MT5_SYNC_COMMAND;
+      } else {
+        process.env.MT5_SYNC_COMMAND = originalSyncCommand;
+      }
+    }
+  });
+
+  it('does not leak unrelated process env into the mt5 sync bridge', async () => {
+    const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
+    const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
+    const originalSyncCommand = process.env.MT5_SYNC_COMMAND;
+    const originalBaitSecret = process.env.MT5_BAIT_SECRET;
+
+    process.env.MT5_ACCOUNT_NUMBER = '12345678';
+    process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
+    process.env.MT5_BAIT_SECRET = 'should-not-leak';
+    process.env.MT5_SYNC_COMMAND = `${process.execPath} -e "console.log(JSON.stringify({ rawText: 'mt5 sync', source: 'api', actions: [{ type: 'create_trade', payload: { symbol: 'GOLD', side: 'long', thesis: process.env.MT5_BAIT_SECRET ? 'leaked' : 'isolated' } }] }))"`;
+
+    try {
+      const service = createTestService();
+      const response = await service.syncMt5Trades();
+
+      expect(response.trades[0]).toMatchObject({
+        symbol: 'GOLD',
+        thesis: 'isolated',
+      });
+    } finally {
+      if (originalAccountNumber === undefined) {
+        delete process.env.MT5_ACCOUNT_NUMBER;
+      } else {
+        process.env.MT5_ACCOUNT_NUMBER = originalAccountNumber;
+      }
+      if (originalReadOnlyPassword === undefined) {
+        delete process.env.MT5_READ_ONLY_PASSWORD;
+      } else {
+        process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
+      }
+      if (originalSyncCommand === undefined) {
+        delete process.env.MT5_SYNC_COMMAND;
+      } else {
+        process.env.MT5_SYNC_COMMAND = originalSyncCommand;
+      }
+      if (originalBaitSecret === undefined) {
+        delete process.env.MT5_BAIT_SECRET;
+      } else {
+        process.env.MT5_BAIT_SECRET = originalBaitSecret;
+      }
+    }
+  });
+
+  it('rejects mt5 sync payloads with unsupported assistant actions', async () => {
+    const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
+    const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
+    const originalSyncCommand = process.env.MT5_SYNC_COMMAND;
+
+    process.env.MT5_ACCOUNT_NUMBER = '12345678';
+    process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
+    process.env.MT5_SYNC_COMMAND = `${process.execPath} -e "console.log(JSON.stringify({ rawText: 'mt5 sync', source: 'api', actions: [{ type: 'unknown_action', payload: {} }] }))"`;
+
+    try {
+      const service = createTestService();
+      await expect(service.syncMt5Trades()).rejects.toThrow('MT5 sync command returned invalid payload');
     } finally {
       if (originalAccountNumber === undefined) {
         delete process.env.MT5_ACCOUNT_NUMBER;
