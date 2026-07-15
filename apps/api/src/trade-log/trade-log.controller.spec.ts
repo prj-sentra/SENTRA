@@ -1,6 +1,7 @@
 import type {
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
+  TradeLogMt5SyncResponse,
   TradeRecord,
   TradeStatsResponse,
   UpdateTradeJournalRequest,
@@ -112,6 +113,34 @@ describe('TradeLogController', () => {
           realizedPnlText: '$0.06',
         },
       },
+    });
+  });
+
+  it('exposes mt5 sync over HTTP controller contract', async () => {
+    const response: TradeLogMt5SyncResponse = {
+      source: 'mt5',
+      syncedAt: '2026-07-11T08:30:00.000Z',
+      importedCount: 1,
+      trades: [
+        {
+          id: 'trade-1',
+          symbol: 'GOLD',
+          side: 'long',
+          status: 'open',
+          createdAt: '2026-07-11T08:30:00.000Z',
+          updatedAt: '2026-07-11T08:30:00.000Z',
+        },
+      ],
+    };
+    const service = {
+      syncMt5Trades: jest.fn<Promise<TradeLogMt5SyncResponse>, []>(() => Promise.resolve(response)),
+    };
+    const controller = new TradeLogController(service as never);
+
+    await expect(controller.syncMt5Trades()).resolves.toMatchObject({
+      source: 'mt5',
+      importedCount: 1,
+      trades: [{ symbol: 'GOLD' }],
     });
   });
 

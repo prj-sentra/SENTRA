@@ -240,6 +240,13 @@ export interface TradeLogAssistantActionsResponse {
   trades: TradeRecord[];
 }
 
+export interface TradeLogMt5SyncResponse {
+  source: 'mt5';
+  syncedAt: string;
+  importedCount: number;
+  trades: TradeRecord[];
+}
+
 export type WikiPageType = 'entity' | 'concept' | 'comparison' | 'query' | 'summary' | 'raw' | string;
 export type WikiConfidence = 'high' | 'medium' | 'low';
 

@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { exec as execCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   CreateTradeRequest,
   CreateTradeTagRequest,
@@ -9,6 +11,7 @@ import type {
   TradeJournalContext,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
+  TradeLogMt5SyncResponse,
   TradeRecord,
   TradeStatsBucket,
   TradeStatsResponse,
@@ -128,6 +131,7 @@ const REVIEW_TAG_ALIASES: Record<string, string> = {
 };
 
 const DEFAULT_RESULT_LABELS = new Set(['익절', '손절', '본절 청산', '부분 익절', '부분 손절', '취소']);
+const execAsync = promisify(execCallback);
 
 @Injectable()
 export class TradeLogService {
@@ -517,6 +521,68 @@ export class TradeLogService {
       source: request.source,
       trades: touchedTrades,
     };
+  }
+
+  async syncMt5Trades(): Promise<TradeLogMt5SyncResponse> {
+    const accountNumber = process.env.MT5_ACCOUNT_NUMBER?.trim();
+    const readOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD?.trim();
+    const syncCommand = process.env.MT5_SYNC_COMMAND?.trim();
+
+    if (!accountNumber) {
+      throw new BadRequestException('MT5_ACCOUNT_NUMBER env is required');
+    }
+    if (!readOnlyPassword) {
+      throw new BadRequestException('MT5_READ_ONLY_PASSWORD env is required');
+    }
+    if (!syncCommand) {
+      throw new BadRequestException('MT5_SYNC_COMMAND env is required');
+    }
+
+    const { stdout } = await execAsync(syncCommand, {
+      env: {
+        ...process.env,
+        MT5_ACCOUNT_NUMBER: accountNumber,
+        MT5_READ_ONLY_PASSWORD: readOnlyPassword,
+      },
+      maxBuffer: 1024 * 1024,
+    });
+
+    const payloadText = stdout.trim();
+    if (!payloadText) {
+      throw new BadRequestException('MT5 sync command returned no output');
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(payloadText) as unknown;
+    } catch {
+      throw new BadRequestException('MT5 sync command must return JSON');
+    }
+
+    if (!this.isTradeLogAssistantActionsRequest(parsed)) {
+      throw new BadRequestException('MT5 sync command returned invalid payload');
+    }
+
+    const applied = await this.applyAssistantActions(parsed);
+    return {
+      source: 'mt5',
+      syncedAt: new Date().toISOString(),
+      importedCount: applied.trades.length,
+      trades: applied.trades,
+    };
+  }
+
+  private isTradeLogAssistantActionsRequest(value: unknown): value is TradeLogAssistantActionsRequest {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    return (
+      typeof candidate.rawText === 'string' &&
+      (candidate.source === 'telegram' || candidate.source === 'manual' || candidate.source === 'api') &&
+      Array.isArray(candidate.actions)
+    );
   }
 
   private async findTradeOrThrow(client: PrismaService | Tx, id: string): Promise<TradeWithRelations> {

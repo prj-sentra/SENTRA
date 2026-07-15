@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type MouseEvent as ReactMouseEvent
 import type {
   TradeJournalContext,
   TradeLogAssistantActionsRequest,
+  TradeLogMt5SyncResponse,
   TradeRecord,
   TradeStatsBucket,
   TradeStatsResponse,
@@ -19,6 +20,8 @@ interface ApiState {
   stats: TradeStatsResponse | null;
   wikiPages: WikiPageSummary[];
   tagCatalog: TradeTagCatalog | null;
+  mt5Syncing: boolean;
+  mt5SyncMessage: string | null;
 }
 
 const initialState: ApiState = {
@@ -26,6 +29,8 @@ const initialState: ApiState = {
   stats: null,
   wikiPages: [],
   tagCatalog: null,
+  mt5Syncing: false,
+  mt5SyncMessage: null,
 };
 
 function routeFromPathname(pathname: string): View {
@@ -448,7 +453,15 @@ function buildAssistantActions(form: ManualTradeFormState): TradeLogAssistantAct
   };
 }
 
-function ManualTradeForm({ tagCatalog, onSaved }: { tagCatalog: TradeTagCatalog | null; onSaved: (updatedTrades: TradeRecord[]) => Promise<void> | void }) {
+interface ManualTradeFormProps {
+  tagCatalog: TradeTagCatalog | null;
+  onSaved: (updatedTrades: TradeRecord[]) => Promise<void> | void;
+  onSync: () => Promise<void>;
+  syncing: boolean;
+  syncMessage: string | null;
+}
+
+function ManualTradeForm({ tagCatalog, onSaved, onSync, syncing, syncMessage }: ManualTradeFormProps) {
   const [form, setForm] = useState<ManualTradeFormState>(() => createManualTradeFormState());
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -501,7 +514,12 @@ function ManualTradeForm({ tagCatalog, onSaved }: { tagCatalog: TradeTagCatalog 
           <h3>수동 매매일지 등록</h3>
           <p className="subhead">create / entry / exit / journal 패치를 한 번에 assistant-actions로 보냅니다.</p>
         </div>
-        <span className="count">manual source</span>
+        <div className="manual-console-header-actions">
+          <span className="count">manual source</span>
+          <button className="secondary-button compact" type="button" onClick={onSync} disabled={syncing}>
+            {syncing ? 'syncing...' : 'MT5 동기화'}
+          </button>
+        </div>
       </div>
 
       <form className="journal-form" onSubmit={handleSubmit}>
@@ -770,6 +788,7 @@ function ManualTradeForm({ tagCatalog, onSaved }: { tagCatalog: TradeTagCatalog 
           <div className="manual-console-note">
             <p>Plan-only submission is allowed. If exit fields are filled, entry fields must also be present in the same submit.</p>
             <p>{status ?? 'Submit to create a manual trade record.'}</p>
+            {syncMessage ? <p>{syncMessage}</p> : null}
           </div>
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={() => setForm(createManualTradeFormState())} disabled={submitting}>
@@ -913,6 +932,32 @@ export function App() {
   async function handleManualTradeSaved(updatedTrades: TradeRecord[]): Promise<void> {
     mergeTrades(updatedTrades);
     await refreshStats();
+  }
+
+  async function handleMt5Sync(): Promise<void> {
+    setState((current) => ({ ...current, mt5Syncing: true, mt5SyncMessage: null }));
+
+    try {
+      const response = await fetchJson<TradeLogMt5SyncResponse>(`${apiUrl}/trade-log/mt5/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      mergeTrades(response.trades);
+      await refreshStats();
+      setState((current) => ({
+        ...current,
+        mt5Syncing: false,
+        mt5SyncMessage: `MT5 동기화 완료 · ${response.importedCount}건`,
+      }));
+    } catch (err: unknown) {
+      setState((current) => ({
+        ...current,
+        mt5Syncing: false,
+        mt5SyncMessage: err instanceof Error ? err.message : 'MT5 sync failed',
+      }));
+    }
   }
 
   function resolveWikiSlug(wikiLink: string): string | undefined {
@@ -1166,7 +1211,13 @@ export function App() {
             <span className="count">{state.trades.length} records</span>
           </div>
 
-          <ManualTradeForm tagCatalog={state.tagCatalog} onSaved={handleManualTradeSaved} />
+          <ManualTradeForm
+            tagCatalog={state.tagCatalog}
+            onSaved={handleManualTradeSaved}
+            onSync={handleMt5Sync}
+            syncing={state.mt5Syncing}
+            syncMessage={state.mt5SyncMessage}
+          />
 
           {state.trades.length === 0 ? (
             <div className="empty-state">

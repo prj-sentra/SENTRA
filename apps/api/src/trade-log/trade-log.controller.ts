@@ -7,6 +7,7 @@ import type {
   TradeExitRequest,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
+  TradeLogMt5SyncResponse,
   TradeRecord,
   TradeStatsResponse,
   TradeTagCatalog,
@@ -43,6 +44,11 @@ export class TradeLogController {
     @Body() request: TradeLogAssistantActionsRequest,
   ): Promise<TradeLogAssistantActionsResponse> {
     return this.tradeLogService.applyAssistantActions(request);
+  }
+
+  @Post('mt5/sync')
+  syncMt5Trades(): Promise<TradeLogMt5SyncResponse> {
+    return this.tradeLogService.syncMt5Trades();
   }
 
   @Post('trades')
