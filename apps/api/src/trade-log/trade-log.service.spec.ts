@@ -1030,7 +1030,7 @@ describe('TradeLogService', () => {
     });
   });
 
-  it('replaces the local trade log with mt5 trades through the fixed mt5 bridge script', async () => {
+  it('preserves existing local trades and adds mt5 trades through the fixed mt5 bridge script', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
     const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
@@ -1045,7 +1045,7 @@ describe('TradeLogService', () => {
 
     try {
       const service = createTestService();
-      await service.createTrade({ symbol: 'BTCUSDT', side: 'short', thesis: 'stale local trade' });
+      const existingTrade = await service.createTrade({ symbol: 'BTCUSDT', side: 'short', thesis: 'existing local trade' });
 
       const response = await service.syncMt5Trades();
       const trades = await service.listTrades();
@@ -1062,12 +1062,20 @@ describe('TradeLogService', () => {
         timeframe: '5m',
         thesis: 'MT5 import',
       });
-      expect(trades).toHaveLength(1);
-      expect(trades[0]).toMatchObject({
-        symbol: 'GOLD',
-        thesis: 'MT5 import',
-      });
-      expect(trades.some((trade) => trade.symbol === 'BTCUSDT')).toBe(false);
+      expect(trades).toHaveLength(2);
+      expect(trades).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: existingTrade.id,
+            symbol: 'BTCUSDT',
+            thesis: 'existing local trade',
+          }),
+          expect.objectContaining({
+            symbol: 'GOLD',
+            thesis: 'MT5 import',
+          }),
+        ]),
+      );
     } finally {
       if (originalAccountNumber === undefined) {
         delete process.env.MT5_ACCOUNT_NUMBER;
