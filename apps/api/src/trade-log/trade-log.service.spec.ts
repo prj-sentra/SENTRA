@@ -1095,6 +1095,37 @@ describe('TradeLogService', () => {
     }
   });
 
+  it('rejects mt5 sync when the fixed bridge script is not wired to a real MT5 source', async () => {
+    const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
+    const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;
+    const originalBridgeStdout = process.env.MT5_SYNC_BRIDGE_STDOUT;
+
+    process.env.MT5_ACCOUNT_NUMBER = '12345678';
+    process.env.MT5_READ_ONLY_PASSWORD = 'read-only-secret';
+    delete process.env.MT5_SYNC_BRIDGE_STDOUT;
+
+    try {
+      const service = createTestService();
+      await expect(service.syncMt5Trades()).rejects.toThrow('MT5 sync bridge is not wired to a real MT5 data source');
+    } finally {
+      if (originalAccountNumber === undefined) {
+        delete process.env.MT5_ACCOUNT_NUMBER;
+      } else {
+        process.env.MT5_ACCOUNT_NUMBER = originalAccountNumber;
+      }
+      if (originalReadOnlyPassword === undefined) {
+        delete process.env.MT5_READ_ONLY_PASSWORD;
+      } else {
+        process.env.MT5_READ_ONLY_PASSWORD = originalReadOnlyPassword;
+      }
+      if (originalBridgeStdout === undefined) {
+        delete process.env.MT5_SYNC_BRIDGE_STDOUT;
+      } else {
+        process.env.MT5_SYNC_BRIDGE_STDOUT = originalBridgeStdout;
+      }
+    }
+  });
+
   it('does not leak unrelated process env into the mt5 sync bridge', async () => {
     const originalAccountNumber = process.env.MT5_ACCOUNT_NUMBER;
     const originalReadOnlyPassword = process.env.MT5_READ_ONLY_PASSWORD;

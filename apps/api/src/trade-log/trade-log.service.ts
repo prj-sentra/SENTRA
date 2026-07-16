@@ -550,15 +550,20 @@ export class TradeLogService {
       throw new BadRequestException('MT5_READ_ONLY_PASSWORD env is required');
     }
 
-    const { stdout } = await execFileAsync(process.execPath, [bridgePath], {
-      env: {
-        PATH: process.env.PATH ?? '',
-        MT5_ACCOUNT_NUMBER: accountNumber,
-        MT5_READ_ONLY_PASSWORD: readOnlyPassword,
-        MT5_SYNC_BRIDGE_STDOUT: process.env.MT5_SYNC_BRIDGE_STDOUT,
-      },
-      maxBuffer: 1024 * 1024,
-    });
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync(process.execPath, [bridgePath], {
+        env: {
+          PATH: process.env.PATH ?? '',
+          MT5_ACCOUNT_NUMBER: accountNumber,
+          MT5_READ_ONLY_PASSWORD: readOnlyPassword,
+          MT5_SYNC_BRIDGE_STDOUT: process.env.MT5_SYNC_BRIDGE_STDOUT,
+        },
+        maxBuffer: 1024 * 1024,
+      }));
+    } catch {
+      throw new BadRequestException('MT5 sync bridge is not wired to a real MT5 data source');
+    }
 
     const payloadText = stdout.trim();
     if (!payloadText) {
