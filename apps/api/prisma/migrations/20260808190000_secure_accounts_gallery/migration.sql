@@ -109,19 +109,27 @@ GROUP BY i."id", i."trade_id";
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM image_map WHERE campaign_count > 1) THEN RAISE EXCEPTION 'legacy image maps to multiple campaigns'; END IF;
   IF EXISTS (SELECT 1 FROM image_map im JOIN "trades" t ON t."id"=im.trade_id WHERE campaign_count=0 AND t."opened_at" IS NULL) THEN RAISE EXCEPTION 'legacy image has no campaign and no opened_at'; END IF;
-  IF to_regclass('public.legacy_trade_chart_image_file_manifest') IS NULL THEN RAISE EXCEPTION 'legacy image file manifest required'; END IF;
-  IF to_regclass('public.legacy_trade_chart_image_file_manifest') IS NOT NULL THEN
-    IF EXISTS (
-      SELECT 1 FROM "trade_chart_images" i
-      FULL JOIN "legacy_trade_chart_image_file_manifest" f ON f."image_id"=i."id"
-      WHERE i."id" IS NULL OR f."image_id" IS NULL
-        OR f."file_name" IS DISTINCT FROM i."file_name"
-        OR f."byte_size" IS DISTINCT FROM i."byte_size"
-        OR f."sha256" !~ '^[0-9a-f]{64}$'
-    ) THEN RAISE EXCEPTION 'legacy image file manifest reconciliation failed'; END IF;
-    IF EXISTS (SELECT 1 FROM "legacy_trade_chart_image_file_manifest" GROUP BY "image_id" HAVING count(*) <> 1)
-      THEN RAISE EXCEPTION 'legacy image file manifest reconciliation failed'; END IF;
+  IF to_regclass('public.legacy_trade_chart_image_file_manifest') IS NULL THEN
+    IF EXISTS (SELECT 1 FROM "trade_chart_images") THEN
+      RAISE EXCEPTION 'legacy image file manifest required';
+    END IF;
+    CREATE TABLE "legacy_trade_chart_image_file_manifest" (
+      "image_id" TEXT NOT NULL,
+      "file_name" TEXT NOT NULL,
+      "byte_size" INTEGER NOT NULL,
+      "sha256" TEXT NOT NULL
+    );
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM "trade_chart_images" i
+    FULL JOIN "legacy_trade_chart_image_file_manifest" f ON f."image_id"=i."id"
+    WHERE i."id" IS NULL OR f."image_id" IS NULL
+      OR f."file_name" IS DISTINCT FROM i."file_name"
+      OR f."byte_size" IS DISTINCT FROM i."byte_size"
+      OR f."sha256" !~ '^[0-9a-f]{64}$'
+  ) THEN RAISE EXCEPTION 'legacy image file manifest reconciliation failed'; END IF;
+  IF EXISTS (SELECT 1 FROM "legacy_trade_chart_image_file_manifest" GROUP BY "image_id" HAVING count(*) <> 1)
+    THEN RAISE EXCEPTION 'legacy image file manifest reconciliation failed'; END IF;
 END $$;
 INSERT INTO "trade_campaigns" ("id", "root_trade_id", "trading_date", "owner_id", "mt5_account_id", "created_at", "updated_at") SELECT md5(im.trade_id || ':secure-gallery'), im.trade_id, ((t."opened_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul')::date, t."owner_id", t."mt5_account_id", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM image_map im JOIN "trades" t ON t."id"=im.trade_id WHERE im.campaign_count=0;
 INSERT INTO "campaign_memberships" ("id", "campaign_id", "trade_id", "source", "created_at", "updated_at") SELECT md5(im.trade_id || ':secure-gallery-member'), md5(im.trade_id || ':secure-gallery'), im.trade_id, 'manual', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM image_map im WHERE im.campaign_count=0 ON CONFLICT ("trade_id") DO NOTHING;

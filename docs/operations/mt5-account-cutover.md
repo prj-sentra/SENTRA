@@ -32,6 +32,24 @@ The filesystem manifest is part of the database migration input, not an optional
 
 Preparation must fail on missing or extra files, duplicate image IDs, byte-size differences, or SHA-256 differences. Do not deploy if it does. Retain the generated manifest, its loader output, the verifier output, and the database backup together as cutover audit evidence. Never point verification at production: the verifier requires an empty database and intentionally exercises failing migrations and reruns.
 
+## Clean-checkout release verification
+
+Run the release gate from tracked source only. This proves the migration history and verifier are present in the packaged release rather than supplied by a developer's untracked files:
+
+```sh
+mkdir -p "$CLEAN_CHECKOUT"
+git archive --format=tar HEAD | tar -xf - -C "$CLEAN_CHECKOUT"
+cd "$CLEAN_CHECKOUT"
+corepack pnpm install --frozen-lockfile
+pnpm --filter @trading-journal/api prisma:generate
+DATABASE_URL='postgresql://…/trading_journal_empty' \
+  pnpm --filter @trading-journal/api prisma:migrate
+MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' \
+  pnpm --filter @trading-journal/api test:migration:secure-accounts-gallery
+```
+
+`trading_journal_empty` and `trading_journal_verify` must be separate empty, disposable databases. Archive the command output with the manifest and backup evidence.
+
 ## Cutover
 
 1. Complete the write freeze and manifest procedure above; keep image writes frozen until the migrated API is healthy.
