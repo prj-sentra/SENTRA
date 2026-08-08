@@ -357,6 +357,7 @@ model Mt5SyncStatus {
   accountLogin          BigInt     @map("account_login")
   lastSyncAt            DateTime?  @map("last_sync_at")
   lastDealTime          DateTime?  @map("last_deal_time")
+  cursor                String?
   lastReceivedDealCount Int        @default(0) @map("last_received_deal_count")
   lastError             String?    @map("last_error")
   updatedAt             DateTime   @updatedAt @map("updated_at")

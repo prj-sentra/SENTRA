@@ -61,6 +61,7 @@ DO $$ BEGIN
     RAISE EXCEPTION 'canonical MT5 identity collision requires remediation';
   END IF;
 END $$;
+ALTER TABLE "mt5_sync_status" ADD COLUMN "cursor" TEXT;
 
 CREATE TABLE "mt5_accounts" ("id" TEXT PRIMARY KEY, "owner_id" TEXT NOT NULL, "nickname" TEXT NOT NULL, "canonical_server" TEXT NOT NULL, "account_login" BIGINT NOT NULL, "credential_ciphertext" BYTEA NOT NULL, "credential_iv" BYTEA NOT NULL, "credential_tag" BYTEA NOT NULL, "credential_version" INTEGER NOT NULL DEFAULT 1, "active" BOOLEAN NOT NULL DEFAULT true, "replaced_by_id" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL, CHECK ("account_login" > 0 AND "account_login" <= 9007199254740991), CHECK ("canonical_server" = canonical_mt5_server("canonical_server") AND "canonical_server" <> ''), FOREIGN KEY ("owner_id") REFERENCES "app_users"("id") ON DELETE RESTRICT, FOREIGN KEY ("replaced_by_id") REFERENCES "mt5_accounts"("id") ON DELETE RESTRICT);
 CREATE UNIQUE INDEX "mt5_accounts_canonical_server_account_login_key" ON "mt5_accounts"("canonical_server", "account_login");
