@@ -1,110 +1,115 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res, StreamableFile, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import type {
-  CreateTradeRequest,
-  CreateTradeTagRequest,
-  HealthResponse,
-  TradeEntryRequest,
-  TradeExitRequest,
+  PatchTradeAnalysisRequest,
+  RelinkTradeCampaignRequest,
+  ResolveCampaignConflictRequest,
+  TradeCampaignDateResponse,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
-  TradeLogMt5SyncResponse,
   TradeRecord,
   TradeStatsResponse,
-  TradeTagCatalog,
-  TradeTagDefinition,
-  TradeTagField,
-  UpdateTradeEntryRequest,
-  UpdateTradeExitRequest,
-  UpdateTradeJournalRequest,
+  UpdateTradeExecutionNoteRequest,
   UpdateTradeRequest,
 } from '@trading-journal/shared';
+import { CurrentUser, type AuthenticatedUser } from '../auth/current-user.decorator';
+import { CampaignImageService, type CampaignImageRecord } from './campaign-image.service';
 import { TradeLogService } from './trade-log.service';
 
 @Controller('trade-log')
 export class TradeLogController {
-  private assertMt5SyncToken(providedToken: string | undefined): void {
-    const expectedToken = process.env.MT5_SYNC_TOKEN?.trim();
-    if (!expectedToken || !providedToken || providedToken !== expectedToken) {
-      throw new UnauthorizedException('Valid MT5 sync token required');
-    }
-  }
-  constructor(private readonly tradeLogService: TradeLogService) {}
-
-  @Get('health')
-  health(): HealthResponse {
-    return this.tradeLogService.health();
-  }
-
-  @Get('tags')
-  tags(@Query('field') field?: TradeTagField): Promise<TradeTagCatalog | TradeTagDefinition[]> {
-    return field ? this.tradeLogService.listTagsByField(field) : this.tradeLogService.listTags();
-  }
-
-  @Post('tags')
-  createTag(@Body() request: CreateTradeTagRequest): Promise<TradeTagDefinition> {
-    return this.tradeLogService.createTag(request);
-  }
+  constructor(
+    private readonly tradeLogService: TradeLogService,
+    private readonly campaignImageService: CampaignImageService,
+  ) {}
 
   @Post('assistant-actions')
   applyAssistantActions(
+    @CurrentUser() user: AuthenticatedUser,
     @Body() request: TradeLogAssistantActionsRequest,
   ): Promise<TradeLogAssistantActionsResponse> {
-    return this.tradeLogService.applyAssistantActions(request);
+    return this.tradeLogService.applyAssistantActions(user.id, request);
   }
 
-  @Post('mt5/sync')
-  syncMt5Trades(@Headers('x-mt5-sync-token') syncToken: string | undefined): Promise<TradeLogMt5SyncResponse> {
-    this.assertMt5SyncToken(syncToken);
-    return this.tradeLogService.syncMt5Trades();
-  }
-
-  @Post('trades')
-  createTrade(@Body() request: CreateTradeRequest): Promise<TradeRecord> {
-    return this.tradeLogService.createTrade(request);
-  }
-
-  @Get('trades')
-  trades(): Promise<TradeRecord[]> {
-    return this.tradeLogService.listTrades();
+  @Get('campaigns')
+  campaigns(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('date') date?: string,
+    @Query('scope') scope?: 'all' | 'manual' | 'account',
+    @Query('accountId') accountId?: string,
+  ): Promise<TradeCampaignDateResponse> {
+    return this.tradeLogService.listCampaigns(user.id, date, { scope, accountId });
   }
 
   @Get('stats')
-  stats(): Promise<TradeStatsResponse> {
-    return this.tradeLogService.getStats();
+  stats(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('scope') scope?: 'all' | 'manual' | 'account',
+    @Query('accountId') accountId?: string,
+  ): Promise<TradeStatsResponse> {
+    return this.tradeLogService.getStats(user.id, { scope, accountId });
   }
 
   @Get('trades/:id')
-  trade(@Param('id') id: string): Promise<TradeRecord> {
-    return this.tradeLogService.getTrade(id);
+  trade(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<TradeRecord> {
+    return this.tradeLogService.getTrade(user.id, id);
   }
 
   @Patch('trades/:id')
-  updateTrade(@Param('id') id: string, @Body() request: UpdateTradeRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTrade(id, request);
+  updateTrade(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTrade(user.id, id, request);
   }
 
-  @Patch('trades/:id/journal')
-  patchJournal(@Param('id') id: string, @Body() request: UpdateTradeJournalRequest): Promise<TradeRecord> {
-    return this.tradeLogService.patchTradeJournal(id, request);
+  @Patch('trades/:id/analysis')
+  patchAnalysis(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: PatchTradeAnalysisRequest): Promise<TradeRecord> {
+    return this.tradeLogService.patchTradeAnalysis(user.id, id, request);
   }
 
-  @Post('trades/:id/entry')
-  recordEntry(@Param('id') id: string, @Body() request: TradeEntryRequest): Promise<TradeRecord> {
-    return this.tradeLogService.recordEntry(id, request);
+  @Patch('trades/:id/entry/note')
+  updateEntryNote(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTradeEntryNote(user.id, id, request);
   }
 
-  @Patch('trades/:id/entry')
-  updateEntry(@Param('id') id: string, @Body() request: UpdateTradeEntryRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTradeEntry(id, request);
+  @Patch('trades/:id/exit/note')
+  updateExitNote(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
+    return this.tradeLogService.updateTradeExitNote(user.id, id, request);
   }
 
-  @Post('trades/:id/exit')
-  recordExit(@Param('id') id: string, @Body() request: TradeExitRequest): Promise<TradeRecord> {
-    return this.tradeLogService.recordExit(id, request);
+  @Post('campaigns/relink')
+  relinkCampaign(@CurrentUser() user: AuthenticatedUser, @Body() request: RelinkTradeCampaignRequest): Promise<void> {
+    return this.tradeLogService.relinkCampaign(user.id, request);
   }
 
-  @Patch('trades/:id/exit')
-  updateExit(@Param('id') id: string, @Body() request: UpdateTradeExitRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTradeExit(id, request);
+  @Post('campaign-conflicts/:id/resolve')
+  resolveCampaignConflict(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: ResolveCampaignConflictRequest): Promise<void> {
+    return this.tradeLogService.resolveCampaignConflict(user.id, id, request);
+  }
+  @Get('campaigns/:campaignId/images')
+  images(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string): Promise<CampaignImageRecord[]> {
+    return this.campaignImageService.list(user.id, campaignId);
+  }
+
+  @Post('campaigns/:campaignId/images')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  uploadImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @UploadedFile() file?: Express.Multer.File): Promise<CampaignImageRecord> {
+    return this.campaignImageService.upload(user.id, campaignId, file);
+  }
+
+  @Put('campaigns/:campaignId/images/order')
+  reorderImages(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Body() request: { imageIds: string[] }): Promise<CampaignImageRecord[]> {
+    return this.campaignImageService.reorder(user.id, campaignId, request?.imageIds);
+  }
+
+  @Get('campaigns/:campaignId/images/:imageId')
+  async image(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string, @Res({ passthrough: true }) response: Response): Promise<StreamableFile> {
+    const image = await this.campaignImageService.get(user.id, campaignId, imageId);
+    response.set({ 'Content-Type': image.record.mimeType, 'Content-Length': image.buffer.byteLength.toString(), 'Cache-Control': 'private, max-age=31536000, immutable' });
+    return new StreamableFile(image.buffer);
+  }
+
+  @Delete('campaigns/:campaignId/images/:imageId')
+  removeImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string): Promise<void> {
+    return this.campaignImageService.remove(user.id, campaignId, imageId);
   }
 }
