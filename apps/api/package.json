@@ -8,10 +8,10 @@
     "start": "node dist/main.js",
     "start:migrate": "prisma migrate deploy --schema=prisma/schema.prisma && node dist/main.js",
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "prepare:migration:secure-accounts-gallery": "ts-node -r tsconfig-paths/register scripts/prepare-secure-accounts-gallery-migration.ts",
     "prisma:migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:migration:secure-accounts-gallery": "ts-node -r tsconfig-paths/register scripts/verify-secure-accounts-gallery-migration.ts",
-    "prepare:migration:secure-accounts-gallery": "ts-node -r tsconfig-paths/register scripts/prepare-secure-accounts-gallery-migration.ts",
     "test": "jest --passWithNoTests",
     "test:migration:trade-analysis": "ts-node -r tsconfig-paths/register scripts/verify-trade-analysis-migration.ts"
   },

@@ -1,75 +1,52 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { Client } from 'pg';
 
-const connectionString = process.env.MIGRATION_VERIFY_DATABASE_URL ?? process.env.DATABASE_URL;
-const imageRoot = process.env.LEGACY_IMAGE_VOLUME;
-if (!connectionString) throw new Error('DATABASE_URL is required');
-if (!imageRoot) throw new Error('LEGACY_IMAGE_VOLUME is required');
+const connectionString = process.env.MIGRATION_VERIFY_DATABASE_URL;
+const volume = process.env.LEGACY_IMAGE_VOLUME;
+if (!connectionString) throw new Error('MIGRATION_VERIFY_DATABASE_URL is required');
+if (!volume) throw new Error('LEGACY_IMAGE_VOLUME is required');
 
-const canonicalizeServer = (value: string): string => value
-  .normalize('NFKC')
-  .replace(/[\t\n\f\r ]+/g, ' ')
-  .trim()
-  .replace(/[A-Z]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 32));
+interface LegacyImage { id: string; file_name: string; byte_size: number }
+interface ManifestEntry extends LegacyImage { sha256: string }
 
 async function main(): Promise<void> {
+  const root = resolve(volume!);
+  if (!lstatSync(root).isDirectory()) throw new Error('LEGACY_IMAGE_VOLUME must be a directory');
   const client = new Client({ connectionString });
   await client.connect();
   try {
-    const identities = await client.query<{ server: string; login: string }>(`
-      SELECT "server", "account_login"::text login FROM "mt5_deals"
-      UNION ALL SELECT "server", "account_login"::text FROM "mt5_orders"
-      UNION ALL SELECT "server", "account_login"::text FROM "mt5_sync_status"
-      UNION ALL SELECT "mt5_server", "mt5_account_login"::text FROM "trades"
-        WHERE "mt5_server" IS NOT NULL AND "mt5_account_login" IS NOT NULL
-    `);
-    const canonical = new Map<string, string>();
-    for (const row of identities.rows) {
-      const server = canonicalizeServer(row.server);
-      if (!server) throw new Error('invalid MT5 identity requires remediation');
-      const key = `${server}\0${row.login}`;
-      const prior = canonical.get(key);
-      if (prior !== undefined && prior !== row.server) throw new Error('canonical MT5 identity collision requires remediation');
-      canonical.set(key, row.server);
-    }
+    const source = await client.query<LegacyImage>('SELECT id, file_name, byte_size FROM trade_chart_images ORDER BY id');
+    const expectedNames = new Set(source.rows.map((row) => row.file_name));
+    if (expectedNames.size !== source.rows.length) throw new Error('legacy image file names must be unique');
+    const actualNames = new Set(readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name));
+    const missing = [...expectedNames].filter((name) => !actualNames.has(name));
+    const extra = [...actualNames].filter((name) => !expectedNames.has(name));
+    if (missing.length || extra.length) throw new Error(`legacy image volume mismatch: missing=${missing.join(',')} extra=${extra.join(',')}`);
 
-    const images = await client.query<{ id: string; file_name: string; byte_size: number }>(
-      `SELECT "id", "file_name", "byte_size" FROM "trade_chart_images" ORDER BY "id"`,
-    );
-    const expected = new Set(images.rows.map((row) => row.file_name));
-    const actual = readdirSync(imageRoot, { withFileTypes: true });
-    if (actual.some((entry) => !entry.isFile()) || actual.some((entry) => !expected.has(entry.name)) || actual.length !== expected.size) {
-      throw new Error('legacy image file manifest reconciliation failed: missing or extra files');
-    }
-    const manifest = images.rows.map((row) => {
-      if (basename(row.file_name) !== row.file_name) throw new Error(`unsafe legacy image filename: ${row.file_name}`);
-      const path = resolve(imageRoot, row.file_name);
-      const stat = lstatSync(path);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== row.byte_size) {
-        throw new Error(`legacy image file manifest reconciliation failed: ${row.file_name}`);
-      }
-      return { ...row, sha256: createHash('sha256').update(readFileSync(path)).digest('hex') };
+    const manifest: ManifestEntry[] = source.rows.map((row) => {
+      if (basename(row.file_name) !== row.file_name) throw new Error(`unsafe legacy image file name: ${row.file_name}`);
+      const bytes = readFileSync(resolve(root, row.file_name));
+      if (bytes.byteLength !== row.byte_size) throw new Error(`legacy image byte-size mismatch: ${row.file_name}`);
+      return { ...row, sha256: createHash('sha256').update(bytes).digest('hex') };
     });
 
     await client.query('BEGIN');
-    await client.query(`CREATE TABLE "legacy_trade_chart_image_file_manifest" (
-      "image_id" TEXT PRIMARY KEY, "file_name" TEXT NOT NULL UNIQUE,
-      "byte_size" INTEGER NOT NULL CHECK ("byte_size" >= 0), "sha256" TEXT NOT NULL,
-      "verified_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`);
-    for (const row of manifest) {
-      await client.query(
-        `INSERT INTO "legacy_trade_chart_image_file_manifest" ("image_id","file_name","byte_size","sha256") VALUES ($1,$2,$3,$4)`,
-        [row.id, row.file_name, row.byte_size, row.sha256],
-      );
+    try {
+      await client.query('DROP TABLE IF EXISTS legacy_trade_chart_image_file_manifest');
+      await client.query('CREATE TABLE legacy_trade_chart_image_file_manifest (image_id TEXT NOT NULL, file_name TEXT NOT NULL, byte_size INTEGER NOT NULL, sha256 TEXT NOT NULL)');
+      for (const entry of manifest) {
+        await client.query('INSERT INTO legacy_trade_chart_image_file_manifest (image_id,file_name,byte_size,sha256) VALUES ($1,$2,$3,$4)', [entry.id, entry.file_name, entry.byte_size, entry.sha256]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
     }
-    await client.query('COMMIT');
-    console.log(`materialized verified migration manifest for ${manifest.length} files`);
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined);
-    throw error;
+    const auditPath = resolve(process.env.LEGACY_IMAGE_MANIFEST_AUDIT ?? 'legacy-image-manifest.audit.json');
+    writeFileSync(auditPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), volume: root, entries: manifest }, null, 2)}\n`, { flag: 'wx' });
+    console.log(`loaded ${manifest.length} legacy image manifest rows; audit=${auditPath}`);
   } finally {
     await client.end();
   }
