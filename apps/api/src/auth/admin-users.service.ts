@@ -15,15 +15,24 @@ export class AdminUsersService implements OnModuleInit {
     if (!username && !password) return;
     if (!username || !password || password.length < 12) throw new Error('Initial administrator credentials are incomplete');
     const normalizedUsername = normalizeUsername(username);
-    const existingAdmin = await this.prisma.appUser.findFirst({ where: { isAdmin: true } });
-    if (existingAdmin) return;
-    if (await this.prisma.appUser.findUnique({ where: { normalizedUsername } })) throw new Error('Initial administrator username collides with an existing user');
     const passwordHash = await this.passwords.hash(password);
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(7465726164696)`;
       if (await tx.appUser.findFirst({ where: { isAdmin: true } })) return;
-      const user = await tx.appUser.create({ data: { username: username.trim(), normalizedUsername, passwordHash, status: 'ACTIVE', isAdmin: true, bootstrapCompletedAt: new Date(), approvedAt: new Date() } });
-      await tx.userStateAudit.create({ data: { actorId: user.id, subjectId: user.id, action: 'BOOTSTRAP', fromStatus: null, toStatus: 'ACTIVE' } });
+      const sentinel = await tx.appUser.findFirst({ where: { legacyOwner: true } });
+      if (!sentinel || sentinel.status !== 'DISABLED') throw new Error('Legacy owner sentinel is unavailable for administrator bootstrap');
+      const collision = await tx.appUser.findFirst({ where: { normalizedUsername, id: { not: sentinel.id } } });
+      if (collision) throw new Error('Initial administrator username collides with an existing user');
+      const now = new Date();
+      const user = await tx.appUser.update({
+        where: { id: sentinel.id },
+        data: {
+          username: username.trim(), normalizedUsername, passwordHash, status: 'ACTIVE', isAdmin: true,
+          bootstrapCompletedAt: now, approvedAt: now, disabledAt: null, disabledById: null,
+          stateVersion: { increment: 1 }, credentialVersion: { increment: 1 },
+        },
+      });
+      await tx.userStateAudit.create({ data: { actorId: user.id, subjectId: user.id, action: 'BOOTSTRAP', fromStatus: 'DISABLED', toStatus: 'ACTIVE' } });
     });
   }
 

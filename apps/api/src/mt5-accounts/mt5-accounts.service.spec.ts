@@ -63,3 +63,14 @@ describe('Mt5AccountsService', () => {
     await expect(new Mt5AccountsService(prisma as never, new CredentialCipherService(KEY)).update('owner-1', 'account-1', { server: 'other-server', password: 'new-secret' })).rejects.toBeInstanceOf(ConflictException);
   });
 });
+
+describe('MT5 identifier boundaries', () => {
+  it('rejects account logins outside JavaScript-safe PostgreSQL BIGINT input', async () => {
+    const prisma = createPrisma();
+    const service = new Mt5AccountsService(prisma as never, new CredentialCipherService(KEY));
+    await expect(service.create('owner-1', {
+      nickname: 'Primary', server: 'broker', accountLogin: Number.MAX_SAFE_INTEGER + 1, password: 'secret',
+    })).rejects.toThrow('accountLogin is invalid');
+    expect(prisma.mt5Account.create).not.toHaveBeenCalled();
+  });
+});

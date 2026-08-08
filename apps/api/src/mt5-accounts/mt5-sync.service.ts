@@ -9,6 +9,14 @@ import { Mt5BridgeClient, Mt5DealFact, Mt5OrderFact } from './mt5-bridge.client'
 const LEASE_MS = 60_000;
 class StaleSyncResult extends Error {}
 
+export const seoulTradingDate = (value: Date): Date => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value;
+  return new Date(`${part('year')}-${part('month')}-${part('day')}T00:00:00.000Z`);
+};
+
 @Injectable()
 export class Mt5SyncService {
   constructor(
@@ -78,7 +86,7 @@ export class Mt5SyncService {
       }
       await this.prisma.$transaction([
         this.prisma.mt5SyncLease.deleteMany({ where: { accountId, leaseId } }),
-        this.prisma.mt5SyncStatus.updateMany({ where: { accountId }, data: { lastError: 'MT5 synchronization failed' } }),
+        this.prisma.mt5SyncStatus.updateMany({ where: { accountId }, data: { lastError: this.safeErrorCategory(error) } }),
       ]);
       return { state: 'failed', accountId, message: 'MT5 synchronization failed' };
     }
@@ -159,7 +167,7 @@ export class Mt5SyncService {
           ...(exits.length && { exit: { upsert: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc }, update: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc } } } }),
         },
       });
-      const tradingDate = new Date(Date.UTC(opened.timeMscUtc.getUTCFullYear(), opened.timeMscUtc.getUTCMonth(), opened.timeMscUtc.getUTCDate()));
+      const tradingDate = seoulTradingDate(opened.timeMscUtc);
       const campaign = await tx.tradeCampaign.upsert({
         where: { rootTradeId: trade.id },
         create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId },
@@ -174,6 +182,16 @@ export class Mt5SyncService {
     return positionIds.length;
   }
 
+  private safeErrorCategory(error: unknown): string {
+    if (!(error instanceof Error)) return 'MT5_SYNC_UNKNOWN';
+    if (error.message.includes('configuration')) return 'MT5_SYNC_CONFIGURATION';
+    if (error.message.includes('too large')) return 'MT5_SYNC_RESPONSE_TOO_LARGE';
+    if (error.message.includes('identity mismatch')) return 'MT5_SYNC_IDENTITY_MISMATCH';
+    if (error.message.includes('invalid')) return 'MT5_SYNC_INVALID_RESPONSE';
+    if (error.message.includes('request failed')) return 'MT5_SYNC_UPSTREAM_REJECTED';
+    if (error.message.includes('unavailable')) return 'MT5_SYNC_UNAVAILABLE';
+    return 'MT5_SYNC_INTERNAL';
+  }
   assertTrustedToken(provided: string | undefined): void {
     const expected = process.env.MT5_SYNC_TOKEN?.trim();
     if (!expected || !provided || provided !== expected) throw new UnauthorizedException('Trusted sync route required');

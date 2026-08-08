@@ -59,6 +59,7 @@ export interface Mt5BridgeResponse {
 }
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
+const POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807n;
 const DEAL_NUMBER_FIELDS = ['time', 'timeMsc', 'type', 'entry', 'reason', 'volume', 'price', 'commission', 'swap', 'profit', 'fee'] as const;
 const DEAL_BIGINT_FIELDS = ['ticket', 'order', 'positionId', 'magic'] as const;
 const ORDER_NUMBER_FIELDS = ['timeSetup', 'timeSetupMsc', 'timeDone', 'timeDoneMsc', 'type', 'state', 'reason', 'volumeInitial', 'volumeCurrent', 'priceOpen', 'sl', 'tp', 'priceCurrent', 'priceStopLimit'] as const;
@@ -109,7 +110,12 @@ export class Mt5BridgeClient {
   private validateFact(value: unknown, numberFields: readonly string[], bigintFields: readonly string[]): void {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (numberFields.some((field) => typeof value[field] !== 'number' || !Number.isFinite(value[field]))) throw new BadGatewayException('MT5 bridge returned an invalid payload');
-    if (bigintFields.some((field) => typeof value[field] !== 'string' || !/^(0|[1-9]\d*)$/.test(value[field] as string))) throw new BadGatewayException('MT5 bridge returned an invalid payload');
+    if (bigintFields.some((field) => {
+      const candidate = value[field];
+      return typeof candidate !== 'string'
+        || !/^(0|[1-9]\d*)$/.test(candidate)
+        || BigInt(candidate) > POSTGRES_BIGINT_MAX;
+    })) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (STRING_FIELDS.some((field) => typeof value[field] !== 'string')) throw new BadGatewayException('MT5 bridge returned an invalid payload');
   }
 

@@ -55,6 +55,24 @@ describe('Mt5BridgeClient', () => {
       .rejects.toThrow('invalid payload');
   });
 
+  it('accepts the PostgreSQL BIGINT maximum and rejects overflow identifiers', async () => {
+    const deal = {
+      ticket: '9223372036854775807', order: '1', positionId: '1', time: 1, timeMsc: 1000,
+      type: 0, entry: 0, magic: '0', reason: 0, volume: 1, price: 1, commission: 0,
+      swap: 0, profit: 0, fee: 0, symbol: 'X', comment: '', externalId: '',
+    };
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      server: 'broker-live', accountLogin: 123, cursor: 'cursor', deals: [deal], orders: [],
+    }), { status: 200 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().sync({ server: 'broker-live', accountLogin: 123, password: 'secret' })).resolves.toBeDefined();
+
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      server: 'broker-live', accountLogin: 123, cursor: 'cursor',
+      deals: [{ ...deal, ticket: '9223372036854775808' }], orders: [],
+    }), { status: 200 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().sync({ server: 'broker-live', accountLogin: 123, password: 'secret' })).rejects.toThrow('invalid payload');
+  });
+
   it('rejects oversized responses before parsing', async () => {
     global.fetch = jest.fn().mockResolvedValue(new Response('', {
       status: 200, headers: { 'content-length': String(1024 * 1024 + 1) },
