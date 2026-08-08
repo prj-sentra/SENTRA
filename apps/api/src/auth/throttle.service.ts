@@ -1,4 +1,4 @@
-import { Injectable, TooManyRequestsException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -8,10 +8,10 @@ const LIMIT = 10;
 abstract class DatabaseThrottle {
   protected constructor(protected readonly prisma: PrismaService, private readonly purpose: 'login' | 'signup') {}
 
-  protected key(ip: string, principal: string): Buffer {
+  protected key(ip: string, principal: string): Uint8Array<ArrayBuffer> {
     const secret = process.env.AUTH_THROTTLE_KEY;
     if (!secret || secret.length < 32) throw new Error('AUTH_THROTTLE_KEY must contain at least 32 characters');
-    return createHmac('sha256', secret).update(`${this.purpose}\0${ip}\0${principal}`).digest();
+    return Uint8Array.from(createHmac('sha256', secret).update(`${this.purpose}\0${ip}\0${principal}`).digest());
   }
 
   async assertAllowed(ip: string, principal: string): Promise<void> {
@@ -19,7 +19,7 @@ abstract class DatabaseThrottle {
     const row = this.purpose === 'login'
       ? await this.prisma.loginThrottle.findUnique({ where: { keyDigest } })
       : await this.prisma.signupThrottle.findUnique({ where: { keyDigest } });
-    if (row?.blockedUntil && row.blockedUntil > new Date()) throw new TooManyRequestsException('Request temporarily unavailable');
+    if (row?.blockedUntil && row.blockedUntil > new Date()) throw new HttpException('Request temporarily unavailable', HttpStatus.TOO_MANY_REQUESTS);
   }
 
   async fail(ip: string, principal: string): Promise<void> {

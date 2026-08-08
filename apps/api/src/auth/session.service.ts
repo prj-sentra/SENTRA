@@ -9,8 +9,8 @@ export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export class SessionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  digest(token: string): Buffer {
-    return createHash('sha256').update(token, 'utf8').digest();
+  digest(token: string): Uint8Array<ArrayBuffer> {
+    return Uint8Array.from(createHash('sha256').update(token, 'utf8').digest());
   }
 
   async create(user: { id: string; stateVersion: number; credentialVersion: number }) {
@@ -25,12 +25,13 @@ export class SessionService {
 
   async authenticate(token: string) {
     const session = await this.prisma.appSession.findUnique({
-      where: { tokenDigest: this.digest(token) }, include: { user: true },
+      where: { tokenDigest: this.digest(token) },
     });
-    if (!session || session.revokedAt || session.expiresAt <= new Date() ||
-        session.user.status !== 'ACTIVE' || session.user.stateVersion !== session.userStateVersion ||
-        session.user.credentialVersion !== session.credentialVersion) return null;
-    const { passwordHash: _passwordHash, ...user } = session.user;
+    if (!session || session.revokedAt || session.expiresAt <= new Date()) return null;
+    const sessionUser = await this.prisma.appUser.findUnique({ where: { id: session.userId } });
+    if (!sessionUser || sessionUser.status !== 'ACTIVE' || sessionUser.stateVersion !== session.userStateVersion ||
+        sessionUser.credentialVersion !== session.credentialVersion) return null;
+    const { passwordHash: _passwordHash, ...user } = sessionUser;
     return { sessionId: session.id, user };
   }
 
