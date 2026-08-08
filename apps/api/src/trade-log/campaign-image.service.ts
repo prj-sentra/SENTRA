@@ -77,34 +77,41 @@ export class CampaignImageService {
   }
 
   async reorder(ownerId: string, campaignId: string, imageIds: string[]): Promise<CampaignImageRecord[]> {
-    await this.requireCampaign(ownerId, campaignId);
     if (!Array.isArray(imageIds) || new Set(imageIds).size !== imageIds.length) throw new BadRequestException('imageIds must be unique');
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE`;
-      const rows = await tx.tradeCampaignImage.findMany({ where: { campaignId }, orderBy: { position: 'asc' } });
-      if (rows.length !== imageIds.length || rows.some((row) => !imageIds.includes(row.id))) throw new BadRequestException('imageIds must contain the complete campaign gallery');
-      if (imageIds.length === 0) return;
-      const assignments = imageIds.map((id, position) => Prisma.sql`WHEN ${id} THEN ${position}`);
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE "trade_campaign_images"
-        SET "position" = CASE "id" ${Prisma.join(assignments, ' ')} END,
-            "updated_at" = CURRENT_TIMESTAMP
-        WHERE "campaign_id" = ${campaignId}
-      `);
+    const rows = await this.prisma.$transaction(async (tx) => {
+      await this.lockOwnedCampaign(tx, ownerId, campaignId);
+      const lockedRows = await tx.tradeCampaignImage.findMany({ where: { campaignId }, orderBy: { position: 'asc' } });
+      if (lockedRows.length !== imageIds.length || lockedRows.some((row) => !imageIds.includes(row.id))) throw new BadRequestException('imageIds must contain the complete campaign gallery');
+      if (imageIds.length) {
+        const assignments = imageIds.map((id, position) => Prisma.sql`WHEN ${id} THEN ${position}`);
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "trade_campaign_images"
+          SET "position" = CASE "id" ${Prisma.join(assignments, ' ')} END,
+              "updated_at" = CURRENT_TIMESTAMP
+          WHERE "campaign_id" = ${campaignId}
+        `);
+      }
+      return tx.tradeCampaignImage.findMany({ where: { campaignId }, orderBy: { position: 'asc' } });
     });
-    return this.list(ownerId, campaignId);
+    return rows.map((row) => this.serialize(row));
   }
 
   async remove(ownerId: string, campaignId: string, imageId: string): Promise<void> {
-    const row = await this.findOwned(ownerId, campaignId, imageId);
-    await this.prisma.$transaction(async (tx) => {
+    const fileName = await this.prisma.$transaction(async (tx) => {
+      await this.lockOwnedCampaign(tx, ownerId, campaignId);
+      const row = await tx.tradeCampaignImage.findFirst({ where: { id: imageId, campaignId } });
+      if (!row) throw new NotFoundException(`Campaign image ${imageId} not found`);
       await tx.tradeCampaignImage.delete({ where: { id: imageId } });
-      const later = await tx.tradeCampaignImage.findMany({ where: { campaignId, position: { gt: row.position } }, orderBy: { position: 'asc' } });
-      for (const image of later) await tx.tradeCampaignImage.update({ where: { id: image.id }, data: { position: image.position - 1 } });
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "trade_campaign_images"
+        SET "position" = "position" - 1,
+            "updated_at" = CURRENT_TIMESTAMP
+        WHERE "campaign_id" = ${campaignId}
+          AND "position" > ${row.position}
+      `);
+      return row.fileName;
     });
-    await unlink(this.safePath(row.fileName)).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT') throw error;
-    });
+    await unlink(this.safePath(fileName)).catch(() => undefined);
   }
 
   private async requireCampaign(ownerId: string, campaignId: string): Promise<void> {
@@ -116,6 +123,16 @@ export class CampaignImageService {
     const row = await this.prisma.tradeCampaignImage.findFirst({ where: { id: imageId, campaignId, campaign: { ownerId } } });
     if (!row) throw new NotFoundException(`Campaign image ${imageId} not found`);
     return row;
+  }
+
+  private async lockOwnedCampaign(tx: Prisma.TransactionClient, ownerId: string, campaignId: string): Promise<void> {
+    const campaigns = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id"
+      FROM "trade_campaigns"
+      WHERE "id" = ${campaignId} AND "owner_id" = ${ownerId}
+      FOR UPDATE
+    `);
+    if (campaigns.length !== 1) throw new NotFoundException(`Campaign ${campaignId} not found`);
   }
 
   private safePath(fileName: string): string {
