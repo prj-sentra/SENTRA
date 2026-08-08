@@ -25,6 +25,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "jsdom": "^30.0.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "@types/node": "^24.10.0"
   }
 }
