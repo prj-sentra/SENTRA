@@ -826,6 +826,41 @@ h3 {
 .admin-users { margin: 0 auto 32px; max-width: 1400px; }
 .admin-users .list-item { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .admin-users .list-item > div:first-child { display: grid; gap: 4px; }
+.app-layout { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; display: grid; grid-template-rows: auto auto auto 1fr; gap: 20px; padding: 24px; border-right: 1px solid var(--border); background: var(--layer-01); }
+.sidebar-brand { font: 600 1rem 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .04em; }
+.sidebar nav { display: grid; gap: 1px; border: 1px solid var(--border); background: var(--border); }
+.sidebar nav button { min-height: 44px; border: 0; padding: 0 12px; text-align: left; color: var(--text-secondary); background: var(--surface); cursor: pointer; }
+.sidebar nav button.active { color: #fff; background: var(--text-primary); box-shadow: inset 4px 0 0 var(--blue); }
+.account-switcher { display: grid; gap: 8px; color: var(--text-muted); font-size: .75rem; text-transform: uppercase; }
+.account-switcher select { width: 100%; border: 1px solid var(--border); padding: 10px; background: var(--surface); }
+.sidebar-footer { align-self: end; display: grid; gap: 10px; color: var(--text-secondary); }
+.app-content { min-width: 0; padding: 24px; }
+.workspace-header { display: flex; justify-content: flex-end; min-height: 48px; margin-bottom: 16px; }
+.sync-control { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.muted { color: var(--text-muted); }
+.accounts-page { display: grid; grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); gap: 24px; }
+.account-editor { display: grid; gap: 14px; align-self: start; padding: 24px; border: 1px solid var(--border); background: var(--surface); }
+.account-editor label { display: grid; gap: 6px; }
+.account-editor input { width: 100%; border: 1px solid var(--border); padding: 10px 12px; }
+.account-list { display: grid; align-content: start; gap: 1px; border: 1px solid var(--border); background: var(--border); }
+.account-list article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; background: var(--surface); }
+.account-list article div { display: grid; gap: 4px; }
+.account-list article span { color: var(--text-secondary); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .78rem; }
+.stats-page { display: grid; gap: 24px; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.metric-grid article { display: grid; gap: 8px; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
+.metric-grid span { color: var(--text-muted); font-size: .75rem; text-transform: uppercase; }
+.metric-grid strong { font-size: 1.6rem; }
+.stats-breakdown { padding: 20px; border: 1px solid var(--border); background: var(--surface); }
+.stats-breakdown h2 { margin-bottom: 14px; }
+@media (max-width: 800px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; grid-template-rows: auto; }
+  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-content { padding: 12px; }
+  .accounts-page { grid-template-columns: 1fr; }
+}
 @media (max-width: 920px) {
   .topbar { grid-template-columns: 1fr; }
   .brand-block { border-right: 0; border-bottom: 1px solid var(--border); }
@@ -855,9 +890,9 @@ h3 {
 .journal-page-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 20px; }
 .journal-page-heading h1 { margin: 4px 0 0; }
 .trade-card-list { display: grid; gap: 18px; }
-.trade-record-card { overflow: hidden; border: 1px solid var(--border); background: var(--panel); box-shadow: 0 12px 30px rgb(0 0 0 / 12%); }
+.trade-record-card { overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 12px 30px rgb(0 0 0 / 12%); }
 .trade-card-summary { display: grid; grid-template-columns: minmax(260px, 38%) 1fr; min-height: 260px; }
-.trade-cover { aspect-ratio: 17 / 10; min-height: 100%; display: grid; place-items: center; overflow: hidden; background: var(--surface); color: var(--muted); }
+.trade-cover { aspect-ratio: 17 / 10; min-height: 100%; display: grid; place-items: center; overflow: hidden; background: var(--surface); color: var(--text-muted); }
 .trade-cover img { width: 100%; height: 100%; object-fit: cover; }
 .trade-summary-body { position: relative; padding: 24px 24px 58px; }
 .trade-summary-body header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
@@ -866,10 +901,10 @@ h3 {
 .direction { padding: 3px 8px; border-radius: 999px; text-transform: uppercase; font-size: 12px; font-weight: 700; }
 .direction.long, .positive { color: #31bc83; }
 .direction.short, .negative { color: #ef6b6b; }
-.trade-time { color: var(--muted); font-size: 13px; }
+.trade-time { color: var(--text-muted); font-size: 13px; }
 .trade-primary-metrics { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; margin-top: 22px; }
 .trade-primary-metrics dl, .trade-risk-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0; }
-.trade-summary-body dt { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.trade-summary-body dt { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
 .trade-summary-body dd { margin: 4px 0 0; font-weight: 650; }
 .pnl { font-size: clamp(28px, 4vw, 48px); }
 .trade-risk-row { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--border); }
@@ -893,8 +928,8 @@ h3 {
 .trade-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
 .detail-editor { display: grid; gap: 10px; padding: 16px; background: var(--surface); }
 .detail-editor label { display: grid; gap: 4px; }
-.detail-editor label span { color: var(--muted); font-size: 12px; text-transform: capitalize; }
-.journal-state { padding: 48px; text-align: center; color: var(--muted); }
+.detail-editor label span { color: var(--text-muted); font-size: 12px; text-transform: capitalize; }
+.journal-state { padding: 48px; text-align: center; color: var(--text-muted); }
 
 @container (max-width: 720px) {
   .trade-card-summary, .expanded-content, .trade-editor-grid { grid-template-columns: 1fr; }

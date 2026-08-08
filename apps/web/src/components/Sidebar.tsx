@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { SafeMt5AccountRef, TradeAccountScope } from '@trading-journal/shared';
 import { AccountSwitcher } from './AccountSwitcher';
 
-export type AppView = 'stats' | 'trade-log' | 'wiki' | 'accounts' | 'admin';
+export type AppView = 'stats' | 'trade-log' | 'accounts' | 'admin';
 
 export interface SidebarProps {
   activeView: AppView;
@@ -17,7 +17,6 @@ export interface SidebarProps {
 const primaryItems: Array<{ view: AppView; label: string }> = [
   { view: 'stats', label: 'Statistics' },
   { view: 'trade-log', label: 'Trade journal' },
-  { view: 'wiki', label: 'Wiki' },
   { view: 'accounts', label: 'MT5 accounts' },
 ];
 
