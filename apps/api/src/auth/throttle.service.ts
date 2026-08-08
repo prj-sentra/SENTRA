@@ -1,43 +1,80 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-const WINDOW_MS = 15 * 60 * 1000;
 const LIMIT = 10;
 
-abstract class DatabaseThrottle {
-  protected constructor(protected readonly prisma: PrismaService, private readonly purpose: 'login' | 'signup') {}
+type ThrottlePurpose = 'login' | 'signup';
+type ThrottleDimension = 'ip' | 'principal';
 
-  protected key(ip: string, principal: string): Uint8Array<ArrayBuffer> {
+abstract class DatabaseThrottle {
+  protected constructor(protected readonly prisma: PrismaService, private readonly purpose: ThrottlePurpose) {}
+
+  private key(dimension: ThrottleDimension, value: string): Uint8Array<ArrayBuffer> {
     const secret = process.env.AUTH_THROTTLE_KEY;
     if (!secret || secret.length < 32) throw new Error('AUTH_THROTTLE_KEY must contain at least 32 characters');
-    return Uint8Array.from(createHmac('sha256', secret).update(`${this.purpose}\0${ip}\0${principal}`).digest());
+    return Uint8Array.from(createHmac('sha256', secret).update(`${this.purpose}\0${dimension}\0${value}`).digest());
+  }
+
+  private keys(ip: string, principal: string): [Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>] {
+    return [this.key('ip', ip), this.key('principal', principal)];
   }
 
   async assertAllowed(ip: string, principal: string): Promise<void> {
-    const keyDigest = this.key(ip, principal);
-    const row = this.purpose === 'login'
-      ? await this.prisma.loginThrottle.findUnique({ where: { keyDigest } })
-      : await this.prisma.signupThrottle.findUnique({ where: { keyDigest } });
-    if (row?.blockedUntil && row.blockedUntil > new Date()) throw new HttpException('Request temporarily unavailable', HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  async fail(ip: string, principal: string): Promise<void> {
-    const keyDigest = this.key(ip, principal);
-    const now = new Date();
-    if (this.purpose === 'login') {
-      const current = await this.prisma.loginThrottle.findUnique({ where: { keyDigest } });
-      const failures = (current?.updatedAt && now.getTime() - current.updatedAt.getTime() < WINDOW_MS ? current.failures : 0) + 1;
-      await this.prisma.loginThrottle.upsert({ where: { keyDigest }, create: { keyDigest, failures, blockedUntil: failures >= LIMIT ? new Date(now.getTime() + WINDOW_MS) : null }, update: { failures, blockedUntil: failures >= LIMIT ? new Date(now.getTime() + WINDOW_MS) : null } });
-    } else {
-      const current = await this.prisma.signupThrottle.findUnique({ where: { keyDigest } });
-      const attempts = (current?.updatedAt && now.getTime() - current.updatedAt.getTime() < WINDOW_MS ? current.attempts : 0) + 1;
-      await this.prisma.signupThrottle.upsert({ where: { keyDigest }, create: { keyDigest, attempts, blockedUntil: attempts >= LIMIT ? new Date(now.getTime() + WINDOW_MS) : null }, update: { attempts, blockedUntil: attempts >= LIMIT ? new Date(now.getTime() + WINDOW_MS) : null } });
+    const keys = this.keys(ip, principal);
+    const rows = this.purpose === 'login'
+      ? await this.prisma.loginThrottle.findMany({ where: { keyDigest: { in: keys } } })
+      : await this.prisma.signupThrottle.findMany({ where: { keyDigest: { in: keys } } });
+    if (rows.some((row) => row.blockedUntil && row.blockedUntil > new Date())) {
+      throw new HttpException('Request temporarily unavailable', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 
+  async fail(ip: string, principal: string): Promise<void> {
+    const keys = this.keys(ip, principal);
+    await this.prisma.$transaction(keys.map((keyDigest) => this.increment(keyDigest)));
+  }
+
+  private increment(keyDigest: Uint8Array<ArrayBuffer>): Prisma.PrismaPromise<number> {
+    if (this.purpose === 'login') {
+      return this.prisma.$executeRaw`
+        INSERT INTO "login_throttles" ("key_digest", "failures", "blocked_until", "updated_at")
+        VALUES (${keyDigest}, 1, NULL, NOW())
+        ON CONFLICT ("key_digest") DO UPDATE SET
+          "failures" = CASE
+            WHEN "login_throttles"."updated_at" < NOW() - INTERVAL '15 minutes' THEN 1
+            ELSE "login_throttles"."failures" + 1
+          END,
+          "blocked_until" = CASE
+            WHEN (CASE WHEN "login_throttles"."updated_at" < NOW() - INTERVAL '15 minutes' THEN 1 ELSE "login_throttles"."failures" + 1 END) >= ${LIMIT}
+              THEN NOW() + INTERVAL '15 minutes'
+            ELSE NULL
+          END,
+          "updated_at" = NOW()
+      `;
+    }
+    return this.prisma.$executeRaw`
+      INSERT INTO "signup_throttles" ("key_digest", "attempts", "blocked_until", "updated_at")
+      VALUES (${keyDigest}, 1, NULL, NOW())
+      ON CONFLICT ("key_digest") DO UPDATE SET
+        "attempts" = CASE
+          WHEN "signup_throttles"."updated_at" < NOW() - INTERVAL '15 minutes' THEN 1
+          ELSE "signup_throttles"."attempts" + 1
+        END,
+        "blocked_until" = CASE
+          WHEN (CASE WHEN "signup_throttles"."updated_at" < NOW() - INTERVAL '15 minutes' THEN 1 ELSE "signup_throttles"."attempts" + 1 END) >= ${LIMIT}
+            THEN NOW() + INTERVAL '15 minutes'
+          ELSE NULL
+        END,
+        "updated_at" = NOW()
+    `;
+  }
+
   async clear(ip: string, principal: string): Promise<void> {
-    if (this.purpose === 'login') await this.prisma.loginThrottle.deleteMany({ where: { keyDigest: this.key(ip, principal) } });
+    if (this.purpose === 'login') {
+      await this.prisma.loginThrottle.deleteMany({ where: { keyDigest: { in: this.keys(ip, principal) } } });
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PasswordService } from './password.service';
 import { SessionService } from './session.service';
 import { LoginThrottleService, SignupThrottleService } from './throttle.service';
+const DUMMY_PASSWORD_HASH = 'scrypt$WlpaWlpaWlpaWlpaWlpaWg==$MFl3+o4b4jw1S3dqsGZtoiZbzwdUEVqKbVa64bkUDUx3W9KmDuD7QIWaNBsqtmLdJlF/alao6NGV7B8PVEXAeA==';
 
 export function normalizeUsername(value: string): string { return value.trim().normalize('NFKC').toLocaleLowerCase('en-US'); }
 export function validateCredentials(username: unknown, password: unknown): asserts username is string {
@@ -35,7 +36,7 @@ export class AuthService {
     catch { /* perform dummy password work below */ }
     await this.loginThrottle.assertAllowed(ip, normalizedUsername);
     const user = await this.prisma.appUser.findUnique({ where: { normalizedUsername } });
-    const candidateHash = user?.passwordHash ?? await this.passwords.hash('dummy-password-value');
+    const candidateHash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
     const verified = typeof password === 'string' && await this.passwords.verify(password, candidateHash);
     if (!user || !verified || user.status !== 'ACTIVE') {
       await this.loginThrottle.fail(ip, normalizedUsername);

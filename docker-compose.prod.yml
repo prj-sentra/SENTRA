@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     environment:
       MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
     ports:
       - "80:80"
       - "443:443"
@@ -26,6 +27,14 @@ services:
     ports: !reset []
 
   api:
+    environment:
+      NODE_ENV: production
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+      AUTH_THROTTLE_KEY: ${AUTH_THROTTLE_KEY:?AUTH_THROTTLE_KEY is required}
+      MT5_CREDENTIAL_ENCRYPTION_KEY: ${MT5_CREDENTIAL_ENCRYPTION_KEY:?MT5_CREDENTIAL_ENCRYPTION_KEY is required}
+      INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      TRADE_IMAGE_DIR: ${TRADE_IMAGE_DIR:-/data/trade-images}
     ports: !reset []
 
 volumes:

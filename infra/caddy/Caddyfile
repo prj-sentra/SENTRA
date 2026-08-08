@@ -1,4 +1,4 @@
-http://sentra.hoya.kim {
+{$CADDY_SITE_ADDRESS} {
 	encode gzip
 
 	@mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/sync$
