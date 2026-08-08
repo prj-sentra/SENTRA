@@ -19,36 +19,233 @@ enum TradeStatus {
   CANCELLED @map("cancelled")
 }
 
-enum TradeTagField {
-  SETUP          @map("setup")
-  RULE_VIOLATION @map("rule-violation")
-  LESSON         @map("lesson")
-  RESULT_LABEL   @map("result-label")
+enum CampaignMembershipSource {
+  AUTO   @map("auto")
+  MANUAL @map("manual")
+}
+
+enum CampaignConflictStatus {
+  UNRESOLVED @map("unresolved")
+  RESOLVED   @map("resolved")
+}
+
+enum TradeAnalysisPrimaryTrend {
+  UP       @map("up")
+  SIDEWAYS @map("sideways")
+  DOWN     @map("down")
+}
+
+enum TradeAnalysisBollingerBandCount {
+  ONE_BAND @map("one_band")
+  TWO_BAND @map("two_band")
+}
+
+enum TradeAnalysisBollingerDirection {
+  NORMAL  @map("normal")
+  REVERSE @map("reverse")
+  CHASE   @map("chase")
+}
+
+enum TradeAnalysisMaArrangement {
+  BULLISH   @map("bullish")
+  BEARISH   @map("bearish")
+  CONGESTED @map("congested")
+}
+
+enum TradeAnalysisCross {
+  NONE          @map("none")
+  GOLDEN_20_60  @map("golden_20_60")
+  GOLDEN_20_120 @map("golden_20_120")
+  DEAD_20_60    @map("dead_20_60")
+  DEAD_20_120   @map("dead_20_120")
+}
+
+enum TradeAnalysisChartPatternType {
+  DOUBLE_TOP             @map("double_top")
+  DOUBLE_BOTTOM          @map("double_bottom")
+  HEAD_SHOULDERS         @map("head_shoulders")
+  INVERSE_HEAD_SHOULDERS @map("inverse_head_shoulders")
+}
+
+enum TradeAnalysisEconomicIndicatorImpact {
+  POSITIVE @map("positive")
+  NEGATIVE @map("negative")
+}
+
+enum AppUserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum UserStateAuditAction {
+  APPROVE
+  REJECT
+  DISABLE
+  ENABLE
+  RESET_PASSWORD
+  BOOTSTRAP
 }
 
 model Trade {
-  id               String                    @id @default(uuid())
-  symbol           String
-  side             TradeSide
-  status           TradeStatus
-  timeframe        String?
-  session          String?
-  strategy         String?
-  thesis           String?
-  note             String?
-  journal          Json?
-  resultLabelTagId Int?
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
-  entry            TradeEntry?
-  exit             TradeExit?
-  resultLabelTag   ResultLabelTagDefinition? @relation(fields: [resultLabelTagId], references: [id], onDelete: SetNull)
-  setupTagLinks    TradeSetupTagLink[]
-  ruleViolationTagLinks TradeRuleViolationTagLink[]
-  lessonTagLinks   TradeLessonTagLink[]
+  id                 String              @id @default(uuid())
+  symbol             String
+  side               TradeSide
+  status             TradeStatus
+  strategy           String?
+  thesis             String?
+  entryRationale     String?             @map("entry_rationale")
+  exitRationale      String?             @map("exit_rationale")
+  takeProfitCriteria String?             @map("take_profit_criteria")
+  stopLossCriteria   String?             @map("stop_loss_criteria")
+  note               String?
+  ownerId            String              @map("owner_id")
+  mt5AccountId       String?             @map("mt5_account_id")
+  owner              AppUser             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  mt5Account         Mt5Account?         @relation(fields: [mt5AccountId], references: [id], onDelete: Restrict)
+  campaignRoot       TradeCampaign?      @relation("CampaignRoot")
+  campaignMembership CampaignMembership?
+  campaignConflicts  CampaignConflict[]
+  mt5Server          String?             @map("mt5_server")
+  mt5AccountLogin    BigInt?             @map("mt5_account_login")
+  mt5PositionId      BigInt?             @map("mt5_position_id")
+  accountCurrency    String?             @map("account_currency")
+  quantityLots       Decimal?            @map("quantity_lots")
+  entryPrice         Decimal?            @map("entry_price")
+  exitPrice          Decimal?            @map("exit_price")
+  exitReason         String?             @map("exit_reason")
+  realizedPnl        Decimal?            @map("realized_pnl")
+  takeProfitPrice    Decimal?            @map("take_profit_price")
+  stopLossPrice      Decimal?            @map("stop_loss_price")
+  openedAt           DateTime?           @map("opened_at")
+  closedAt           DateTime?           @map("closed_at")
+  seedBalance        Decimal?            @map("seed_balance")
+  riskAmount         Decimal?            @map("risk_amount")
+  riskPercent        Decimal?            @map("risk_percent")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  analysis           TradeAnalysis?
+  entry              TradeEntry?
+  exit               TradeExit?
 
-  @@index([resultLabelTagId])
+  @@unique([mt5Server, mt5AccountLogin, mt5PositionId])
+  @@index([mt5Server, mt5AccountLogin])
+  @@index([ownerId, mt5AccountId])
   @@map("trades")
+}
+
+model TradeCampaign {
+  id           String               @id @default(uuid())
+  rootTradeId  String               @unique @map("root_trade_id")
+  tradingDate  DateTime             @map("trading_date") @db.Date
+  ownerId      String               @map("owner_id")
+  mt5AccountId String?              @map("mt5_account_id")
+  owner        AppUser              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  mt5Account   Mt5Account?          @relation(fields: [mt5AccountId], references: [id], onDelete: Restrict)
+  images       TradeCampaignImage[]
+  rootTrade    Trade                @relation("CampaignRoot", fields: [rootTradeId], references: [id], onDelete: Restrict)
+  memberships  CampaignMembership[]
+  conflicts    CampaignConflict[]   @relation("ConflictResolvedCampaign")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+
+  @@index([tradingDate])
+  @@index([ownerId, mt5AccountId, tradingDate])
+  @@map("trade_campaigns")
+}
+
+model CampaignMembership {
+  id         String                   @id @default(uuid())
+  campaignId String                   @map("campaign_id")
+  tradeId    String                   @unique @map("trade_id")
+  source     CampaignMembershipSource
+  campaign   TradeCampaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  trade      Trade                    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime                 @default(now()) @map("created_at")
+  updatedAt  DateTime                 @updatedAt @map("updated_at")
+
+  @@index([campaignId])
+  @@map("campaign_memberships")
+}
+
+model CampaignConflict {
+  id                   String                 @id @default(uuid())
+  tradeId              String                 @map("trade_id")
+  candidateCampaignIds Json                   @map("candidate_campaign_ids")
+  status               CampaignConflictStatus @default(UNRESOLVED)
+  resolvedCampaignId   String?                @map("resolved_campaign_id")
+  trade                Trade                  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  resolvedCampaign     TradeCampaign?         @relation("ConflictResolvedCampaign", fields: [resolvedCampaignId], references: [id], onDelete: SetNull)
+  createdAt            DateTime               @default(now()) @map("created_at")
+  resolvedAt           DateTime?              @map("resolved_at")
+
+  @@unique([tradeId])
+  @@index([tradeId, status])
+  @@map("campaign_conflicts")
+}
+
+model TradeAnalysis {
+  id                     String                           @id @default(uuid())
+  tradeId                String                           @unique @map("trade_id")
+  schemaVersion          Int                              @default(1) @map("schema_version")
+  baseTimeframe          String?                          @map("base_timeframe")
+  primaryTrend           TradeAnalysisPrimaryTrend?       @map("primary_trend")
+  bollingerBandCount     TradeAnalysisBollingerBandCount? @map("bollinger_band_count")
+  bollingerDirection     TradeAnalysisBollingerDirection? @map("bollinger_direction")
+  maArrangement          TradeAnalysisMaArrangement?      @map("ma_arrangement")
+  cross                  TradeAnalysisCross?
+  stopLossLine           Decimal?                         @map("stop_loss_line") @db.Decimal(65, 30)
+  marketZoneEnabled      Boolean                          @default(false) @map("market_zone_enabled")
+  marketZoneHigh         Decimal?                         @map("market_zone_high") @db.Decimal(65, 30)
+  marketZoneLow          Decimal?                         @map("market_zone_low") @db.Decimal(65, 30)
+  chartPatternObserved   Boolean                          @default(false) @map("chart_pattern_observed")
+  chartPatternTimeframe  String?                          @map("chart_pattern_timeframe")
+  chartPatternType       TradeAnalysisChartPatternType?   @map("chart_pattern_type")
+  retailPositionEnabled  Boolean                          @default(false) @map("retail_position_enabled")
+  retailBuyAveragePrice  Decimal?                         @map("retail_buy_average_price") @db.Decimal(65, 30)
+  retailSellAveragePrice Decimal?                         @map("retail_sell_average_price") @db.Decimal(65, 30)
+  retailBuyRatio         Decimal?                         @map("retail_buy_ratio") @db.Decimal(65, 30)
+  fibonacciEnabled       Boolean                          @default(false) @map("fibonacci_enabled")
+  fibonacciStartPrice    Decimal?                         @map("fibonacci_start_price") @db.Decimal(65, 30)
+  fibonacciEndPrice      Decimal?                         @map("fibonacci_end_price") @db.Decimal(65, 30)
+  regret                 String?
+  createdAt              DateTime                         @default(now()) @map("created_at")
+  updatedAt              DateTime                         @updatedAt @map("updated_at")
+  trade                  Trade                            @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  economicIndicators     TradeAnalysisEconomicIndicator[]
+
+  @@map("trade_analyses")
+}
+
+model TradeAnalysisEconomicIndicator {
+  id         String                               @id @default(uuid())
+  analysisId String                               @map("analysis_id")
+  type       String
+  impact     TradeAnalysisEconomicIndicatorImpact
+  position   Int
+  analysis   TradeAnalysis                        @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisId, position])
+  @@index([analysisId, position])
+  @@map("trade_analysis_economic_indicators")
+}
+
+model TradeCampaignImage {
+  id           String        @id @default(uuid())
+  campaignId   String        @map("campaign_id")
+  position     Int
+  fileName     String        @map("file_name")
+  mimeType     String        @map("mime_type")
+  byteSize     Int           @map("byte_size")
+  width        Int
+  height       Int
+  originalName String?       @map("original_name")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  campaign     TradeCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, position])
+  @@map("trade_campaign_images")
 }
 
 model TradeEntry {
@@ -78,101 +275,213 @@ model TradeExit {
   @@map("trade_exits")
 }
 
-model SetupTagDefinition {
-  id              Int                 @id @default(autoincrement())
-  field           TradeTagField       @default(SETUP)
-  label           String
-  normalizedLabel String              @unique
-  systemDefined   Boolean             @default(false)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  tradeLinks      TradeSetupTagLink[]
+model Mt5Deal {
+  accountId    String     @map("account_id")
+  account      Mt5Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  server       String
+  accountLogin BigInt     @map("account_login")
+  ticket       BigInt
+  order        BigInt
+  positionId   BigInt     @map("position_id")
+  time         BigInt
+  timeMsc      BigInt     @map("time_msc")
+  timeUtc      DateTime   @map("time_utc")
+  timeMscUtc   DateTime   @map("time_msc_utc")
+  type         Int
+  entry        Int
+  magic        BigInt
+  reason       Int
+  volume       Decimal
+  price        Decimal
+  commission   Decimal
+  swap         Decimal
+  profit       Decimal
+  fee          Decimal
+  symbol       String
+  comment      String
+  externalId   String     @map("external_id")
+  fetchedAt    DateTime   @map("fetched_at")
+  rawJson      Json       @map("raw_json")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  @@unique([field, label])
-  @@index([label])
-  @@map("setup_tag_definitions")
+  @@id([server, accountLogin, ticket])
+  @@index([accountId])
+  @@map("mt5_deals")
 }
 
-model RuleViolationTagDefinition {
-  id              Int                         @id @default(autoincrement())
-  field           TradeTagField               @default(RULE_VIOLATION)
-  label           String
-  normalizedLabel String                      @unique
-  systemDefined   Boolean                     @default(false)
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
-  tradeLinks      TradeRuleViolationTagLink[]
+model Mt5Order {
+  accountId       String     @map("account_id")
+  account         Mt5Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  server          String
+  accountLogin    BigInt     @map("account_login")
+  ticket          BigInt
+  positionId      BigInt     @map("position_id")
+  timeSetup       BigInt     @map("time_setup")
+  timeSetupMsc    BigInt     @map("time_setup_msc")
+  timeSetupUtc    DateTime   @map("time_setup_utc")
+  timeSetupMscUtc DateTime   @map("time_setup_msc_utc")
+  timeDone        BigInt     @map("time_done")
+  timeDoneMsc     BigInt     @map("time_done_msc")
+  timeDoneUtc     DateTime   @map("time_done_utc")
+  timeDoneMscUtc  DateTime   @map("time_done_msc_utc")
+  type            Int
+  state           Int
+  reason          Int
+  volumeInitial   Decimal    @map("volume_initial")
+  volumeCurrent   Decimal    @map("volume_current")
+  priceOpen       Decimal    @map("price_open")
+  sl              Decimal
+  tp              Decimal
+  priceCurrent    Decimal    @map("price_current")
+  priceStopLimit  Decimal    @map("price_stoplimit")
+  symbol          String
+  comment         String
+  externalId      String     @map("external_id")
+  fetchedAt       DateTime   @map("fetched_at")
+  rawJson         Json       @map("raw_json")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
-  @@unique([field, label])
-  @@index([label])
-  @@map("rule_violation_tag_definitions")
+  @@id([server, accountLogin, ticket])
+  @@index([server, accountLogin, positionId])
+  @@index([accountId])
+  @@map("mt5_orders")
 }
 
-model LessonTagDefinition {
-  id              Int                  @id @default(autoincrement())
-  field           TradeTagField        @default(LESSON)
-  label           String
-  normalizedLabel String               @unique
-  systemDefined   Boolean              @default(false)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  tradeLinks      TradeLessonTagLink[]
+model Mt5SyncStatus {
+  accountId             String     @unique @map("account_id")
+  account               Mt5Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  server                String
+  accountLogin          BigInt     @map("account_login")
+  lastSyncAt            DateTime?  @map("last_sync_at")
+  lastDealTime          DateTime?  @map("last_deal_time")
+  lastReceivedDealCount Int        @default(0) @map("last_received_deal_count")
+  lastError             String?    @map("last_error")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
 
-  @@unique([field, label])
-  @@index([label])
-  @@map("lesson_tag_definitions")
+  @@id([server, accountLogin])
+  @@map("mt5_sync_status")
 }
 
-model ResultLabelTagDefinition {
-  id              Int      @id @default(autoincrement())
-  field           TradeTagField @default(RESULT_LABEL)
-  label           String
-  normalizedLabel String   @unique
-  systemDefined   Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  trades          Trade[]
+model AppUser {
+  id                   String           @id @default(uuid())
+  username             String
+  normalizedUsername   String           @unique @map("normalized_username")
+  passwordHash         String           @map("password_hash")
+  status               AppUserStatus    @default(PENDING)
+  isAdmin              Boolean          @default(false) @map("is_admin")
+  legacyOwner          Boolean          @default(false) @map("legacy_owner")
+  bootstrapCompletedAt DateTime?        @map("bootstrap_completed_at")
+  approvedAt           DateTime?        @map("approved_at")
+  approvedById         String?          @map("approved_by_id")
+  disabledAt           DateTime?        @map("disabled_at")
+  disabledById         String?          @map("disabled_by_id")
+  stateVersion         Int              @default(0) @map("state_version")
+  credentialVersion    Int              @default(0) @map("credential_version")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  approvedBy           AppUser?         @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvals            AppUser[]        @relation("UserApprovals")
+  disabledBy           AppUser?         @relation("UserDisables", fields: [disabledById], references: [id], onDelete: Restrict)
+  disables             AppUser[]        @relation("UserDisables")
+  sessions             AppSession[]
+  mt5Accounts          Mt5Account[]
+  trades               Trade[]
+  campaigns            TradeCampaign[]
+  auditAsActor         UserStateAudit[] @relation("AuditActor")
+  auditAsSubject       UserStateAudit[] @relation("AuditSubject")
 
-  @@unique([field, label])
-  @@index([label])
-  @@map("result_label_tag_definitions")
+  @@index([status, createdAt])
+  @@map("app_users")
 }
 
-model TradeSetupTagLink {
-  id        Int                @id @default(autoincrement())
-  tradeId    String
-  tagId      Int
-  createdAt  DateTime          @default(now())
-  trade      Trade             @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  tag        SetupTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+model AppSession {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  tokenDigest       Bytes     @unique @map("token_digest")
+  userStateVersion  Int       @map("user_state_version")
+  credentialVersion Int       @map("credential_version")
+  expiresAt         DateTime  @map("expires_at")
+  revokedAt         DateTime? @map("revoked_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  user              AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([tradeId, tagId])
-  @@index([tagId])
-  @@map("trade_setup_tag_links")
+  @@index([userId, expiresAt])
+  @@index([expiresAt, revokedAt])
+  @@map("app_sessions")
 }
 
-model TradeRuleViolationTagLink {
-  id        Int                        @id @default(autoincrement())
-  tradeId    String
-  tagId      Int
-  createdAt  DateTime                  @default(now())
-  trade      Trade                     @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  tag        RuleViolationTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+model LoginThrottle {
+  keyDigest    Bytes     @id @map("key_digest")
+  failures     Int       @default(0)
+  blockedUntil DateTime? @map("blocked_until")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  @@unique([tradeId, tagId])
-  @@index([tagId])
-  @@map("trade_rule_violation_tag_links")
+  @@map("login_throttles")
 }
 
-model TradeLessonTagLink {
-  id        Int                  @id @default(autoincrement())
-  tradeId    String
-  tagId      Int
-  createdAt  DateTime            @default(now())
-  trade      Trade               @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  tag        LessonTagDefinition @relation(fields: [tagId], references: [id], onDelete: Cascade)
+model SignupThrottle {
+  keyDigest    Bytes     @id @map("key_digest")
+  attempts     Int       @default(0)
+  blockedUntil DateTime? @map("blocked_until")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  @@unique([tradeId, tagId])
-  @@index([tagId])
-  @@map("trade_lesson_tag_links")
+  @@map("signup_throttles")
+}
+
+model UserStateAudit {
+  id         String               @id @default(uuid())
+  actorId    String               @map("actor_id")
+  subjectId  String               @map("subject_id")
+  action     UserStateAuditAction
+  fromStatus AppUserStatus?       @map("from_status")
+  toStatus   AppUserStatus?       @map("to_status")
+  createdAt  DateTime             @default(now()) @map("created_at")
+  actor      AppUser              @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  subject    AppUser              @relation("AuditSubject", fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@index([subjectId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("user_state_audits")
+}
+
+model Mt5Account {
+  id                   String          @id @default(uuid())
+  ownerId              String          @map("owner_id")
+  nickname             String
+  canonicalServer      String          @map("canonical_server")
+  accountLogin         BigInt          @map("account_login")
+  credentialCiphertext Bytes           @map("credential_ciphertext")
+  credentialIv         Bytes           @map("credential_iv")
+  credentialTag        Bytes           @map("credential_tag")
+  credentialVersion    Int             @default(1) @map("credential_version")
+  active               Boolean         @default(true)
+  replacedById         String?         @map("replaced_by_id")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  owner                AppUser         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  replacedBy           Mt5Account?     @relation("AccountReplacement", fields: [replacedById], references: [id], onDelete: Restrict)
+  replaces             Mt5Account[]    @relation("AccountReplacement")
+  lease                Mt5SyncLease?
+  trades               Trade[]
+  campaigns            TradeCampaign[]
+  deals                Mt5Deal[]
+  orders               Mt5Order[]
+  syncStatus           Mt5SyncStatus?
+
+  @@unique([canonicalServer, accountLogin])
+  @@index([ownerId, active])
+  @@map("mt5_accounts")
+}
+
+model Mt5SyncLease {
+  accountId String     @id @map("account_id")
+  leaseId   String     @unique @map("lease_id")
+  claimedAt DateTime   @map("claimed_at")
+  expiresAt DateTime   @map("expires_at")
+  account   Mt5Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("mt5_sync_leases")
 }

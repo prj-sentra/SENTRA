@@ -10,7 +10,9 @@
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
     "prisma:migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "jest --passWithNoTests"
+    "test:migration:secure-accounts-gallery": "ts-node -r tsconfig-paths/register scripts/verify-secure-accounts-gallery-migration.ts",
+    "test": "jest --passWithNoTests",
+    "test:migration:trade-analysis": "ts-node -r tsconfig-paths/register scripts/verify-trade-analysis-migration.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -18,8 +20,11 @@
     "@nestjs/platform-express": "^11.1.9",
     "@prisma/client": "^6.19.0",
     "@trading-journal/shared": "file:../../packages/shared",
+    "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sharp": "^0.35.3",
+    "xtend": "4.0.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.14",
@@ -27,7 +32,9 @@
     "@nestjs/testing": "^11.1.9",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^24.10.2",
+    "@types/pg": "^8.15.6",
     "jest": "^30.2.0",
     "prisma": "^6.19.0",
     "source-map-support": "^0.5.21",
