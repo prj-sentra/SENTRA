@@ -4,7 +4,7 @@ services:
     container_name: trading-journal-caddy
     restart: unless-stopped
     environment:
-      MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
+      MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:?MT5_SYNC_TOKEN is required}
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:?CADDY_SITE_ADDRESS is required}
     ports:
       - "80:80"

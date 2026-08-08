@@ -23,3 +23,21 @@
 On validation, identity, or fence failures, disable sync initiation and preserve the database for investigation. Do not edit cursors or delete fact rows. Roll back application containers only when their schema contract remains compatible; otherwise restore the verified backup as a coordinated outage.
 
 Rotate a bridge token by accepting the new token at the bridge, updating the API secret, restarting the API, verifying a sync, then revoking the old token. Rotate an MT5 password through the account replacement flow so it serializes against active leases. Re-run the two-sync and stale-output checks after any credential, bridge, proxy, or database change.
+
+## Executable acceptance inventory
+
+Run these checks from the repository root before cutover:
+
+```sh
+pnpm --filter @trading-journal/api test
+pnpm --filter @trading-journal/api test:migration:secure-accounts-gallery
+infra/caddy/test-routing.sh
+MT5_SYNC_TOKEN=replace-me CADDY_SITE_ADDRESS=https://journal.example \
+  WEB_ORIGIN=https://journal.example AUTH_THROTTLE_KEY=replace-me \
+  MT5_CREDENTIAL_ENCRYPTION_KEY=replace-me MT5_BRIDGE_BASE_URL=https://bridge.internal \
+  MT5_BRIDGE_TOKEN=replace-me docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+```
+
+The production Compose render must fail when `MT5_SYNC_TOKEN` is unset or empty. The composed Caddy check starts disposable API and web backends and proves that Caddy injects the token only for the exact account sync path; it also proves ordinary API routes and near-miss paths receive no token.
+
+For gallery migration, inventory every source image before deployment and retain the generated manifest with the database backup. Each manifest row must identify the relative source path, byte size, and SHA-256 digest. Compare the materialized volume against that manifest and reject missing, extra, size-mismatched, or digest-mismatched files before permitting the migration to drop source image data. Retain the verified manifest and verifier output as cutover audit evidence.

@@ -1,0 +1,29 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      CADDY_SITE_ADDRESS: :8080
+      MT5_SYNC_TOKEN: composed-test-secret
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+  api:
+    image: node:22-alpine
+    command:
+      - node
+      - -e
+      - |
+        require('http').createServer((request, response) => {
+          response.setHeader('content-type', 'application/json');
+          response.end(JSON.stringify({ path: request.url, token: request.headers['x-mt5-sync-token'] || null }));
+        }).listen(3000)
+  web:
+    image: node:22-alpine
+    command:
+      - node
+      - -e
+      - require('http').createServer((_request, response) => response.end('web')).listen(80)
