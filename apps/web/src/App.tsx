@@ -11,6 +11,9 @@ import type {
   WikiPageDetail,
   WikiPageSummary,
 } from '@trading-journal/shared';
+import { apiRequest, setUnauthorizedHandler } from './api/client';
+import { AuthScreen, type CurrentUser } from './auth/AuthScreen';
+import { UserManagement } from './admin/UserManagement';
 
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 type View = 'stats' | 'trade-log' | 'wiki';
@@ -51,7 +54,7 @@ function routePath(view: View): string {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -801,7 +804,7 @@ function ManualTradeForm({ tagCatalog, onSaved, onSync, syncing, syncMessage }: 
     </section>
   );
 }
-export function App() {
+function AuthenticatedApp() {
   const [activeView, setActiveView] = useState<View>(routeFromPathname(window.location.pathname));
   const [state, setState] = useState<ApiState>(initialState);
   const [selectedWikiSlug, setSelectedWikiSlug] = useState<string | null>(null);
@@ -1033,11 +1036,6 @@ export function App() {
           <p className="subhead">Structured trade records, review-grade process stats, and field-maintained LLM wiki.</p>
         </div>
         <div className="control-stack">
-          <div className="system-status" aria-label="System status">
-            <span>API ONLINE</span>
-            <span>{state.trades.length} TRADES</span>
-            <span>{state.wikiPages.length} WIKI PAGES</span>
-          </div>
           <nav className="tabs" aria-label="Sentra sections">
             <button
               className={activeView === 'stats' ? 'tab active' : 'tab'}
@@ -1083,7 +1081,6 @@ export function App() {
                   <p className="section-label">Review Stats</p>
                   <h3>Wiki-aligned process dashboard</h3>
                 </div>
-                <span className="count">closed trades only · {stats.overview.totalTrades} records</span>
               </div>
 
               <div className="stats-card-grid">
@@ -1206,7 +1203,6 @@ export function App() {
               <p className="section-label">Trade Log</p>
               <h2>독립 포지션 기록</h2>
             </div>
-            <span className="count">{state.trades.length} records</span>
           </div>
 
           <ManualTradeForm
@@ -1364,4 +1360,44 @@ export function App() {
       )}
     </main>
   );
+}
+
+export function App() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
+
+  async function loadCurrentUser(): Promise<void> {
+    try {
+      setUser(await apiRequest<CurrentUser>('/auth/me'));
+    } catch {
+      setUser(null);
+    } finally {
+      setBootstrapping(false);
+    }
+  }
+
+  useEffect(() => {
+    const unsetUnauthorizedHandler = setUnauthorizedHandler(() => setUser(null));
+    void loadCurrentUser();
+    return unsetUnauthorizedHandler;
+  }, []);
+
+  async function logout(): Promise<void> {
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+    } finally {
+      setUser(null);
+    }
+  }
+
+  if (bootstrapping) {
+    return <main className="shell"><div className="empty-state compact"><h3>세션 확인 중</h3></div></main>;
+  }
+  if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
+
+  return <>
+    <div className="session-controls"><span>{user.username}</span><button className="secondary-button compact" onClick={() => void logout()} type="button">로그아웃</button></div>
+    <AuthenticatedApp />
+    <UserManagement currentUser={user} />
+  </>;
 }

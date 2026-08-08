@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { Public, PublicRoute } from './public-route.decorator';
@@ -7,6 +7,12 @@ import { readSessionCookie, SESSION_COOKIE, SESSION_TTL_MS, SessionService } fro
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly sessions: SessionService) {}
+
+  @Get('me')
+  me(@Req() request: Request & { user: { passwordHash?: string } }) {
+    const { passwordHash: _passwordHash, ...user } = request.user;
+    return user;
+  }
 
   @Post('signup') @Public(PublicRoute.SIGNUP) @HttpCode(202)
   async signup(@Body() body: { username?: unknown; password?: unknown }, @Req() request: Request) {
