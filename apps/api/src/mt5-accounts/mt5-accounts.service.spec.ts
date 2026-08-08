@@ -32,6 +32,7 @@ const createPrisma = () => ({
   mt5Deal: { count: jest.fn().mockResolvedValue(0) },
   mt5Order: { count: jest.fn().mockResolvedValue(0) },
   mt5SyncStatus: { count: jest.fn().mockResolvedValue(0) },
+  mt5SyncLease: { count: jest.fn().mockResolvedValue(0) },
   $transaction: jest.fn(),
 });
 
@@ -53,7 +54,7 @@ describe('Mt5AccountsService', () => {
         ownerId: 'owner-1',
         canonicalServer: 'broker demo',
         accountLogin: 42n,
-        credentialCiphertext: expect.any(Buffer),
+        credentialCiphertext: expect.any(Uint8Array),
       }),
     }));
     expect(result).toEqual({

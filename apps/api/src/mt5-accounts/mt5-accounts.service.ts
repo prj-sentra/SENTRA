@@ -94,6 +94,9 @@ export class Mt5AccountsService {
       where: { id, ownerId },
     });
     if (!current) throw new NotFoundException('MT5 account not found');
+    if (patch.active === true && current.replacedById) {
+      throw new ConflictException('A replaced MT5 account cannot be reactivated');
+    }
 
     const server = patch.server ?? current.canonicalServer;
     const login = patch.accountLogin ?? Number(current.accountLogin);
@@ -133,14 +136,15 @@ export class Mt5AccountsService {
   }
 
   private async isLinked(accountId: string): Promise<boolean> {
-    const [trades, campaigns, deals, orders, syncStatuses] = await Promise.all([
+    const [trades, campaigns, deals, orders, syncStatuses, leases] = await Promise.all([
       this.prisma.trade.count({ where: { mt5AccountId: accountId } }),
       this.prisma.tradeCampaign.count({ where: { mt5AccountId: accountId } }),
       this.prisma.mt5Deal.count({ where: { accountId } }),
       this.prisma.mt5Order.count({ where: { accountId } }),
       this.prisma.mt5SyncStatus.count({ where: { accountId } }),
+      this.prisma.mt5SyncLease.count({ where: { accountId } }),
     ]);
-    return trades + campaigns + deals + orders + syncStatuses > 0;
+    return trades + campaigns + deals + orders + syncStatuses + leases > 0;
   }
 
   private async replaceLinked(
@@ -173,9 +177,9 @@ export class Mt5AccountsService {
 
   private envelopeData(envelope: CredentialEnvelope) {
     return {
-      credentialCiphertext: envelope.ciphertext,
-      credentialIv: envelope.iv,
-      credentialTag: envelope.tag,
+      credentialCiphertext: Uint8Array.from(envelope.ciphertext),
+      credentialIv: Uint8Array.from(envelope.iv),
+      credentialTag: Uint8Array.from(envelope.tag),
       credentialVersion: envelope.version,
     };
   }
