@@ -36,39 +36,14 @@ const manifestSql = `
   )
 `;
 
-// The target is a cutover from the deployed legacy MT5/gallery schema. That
-// schema predates the checked-in Prisma history, so the verifier materializes
-// it explicitly instead of silently testing an empty approximation.
-const legacyCutoverSchemaSql = `
-  ALTER TABLE "trades" ADD COLUMN "mt5_server" TEXT;
-  ALTER TABLE "trades" ADD COLUMN "mt5_account_login" BIGINT;
-  ALTER TABLE "trades" ADD COLUMN "mt5_position_id" BIGINT;
-  ALTER TABLE "trades" ADD COLUMN "opened_at" TIMESTAMP(3);
-  CREATE UNIQUE INDEX "trades_mt5_identity" ON "trades"("mt5_server","mt5_account_login","mt5_position_id");
-  CREATE TABLE "mt5_deals" ("server" TEXT NOT NULL, "account_login" BIGINT NOT NULL, "ticket" BIGINT NOT NULL);
-  CREATE TABLE "mt5_orders" ("server" TEXT NOT NULL, "account_login" BIGINT NOT NULL, "ticket" BIGINT NOT NULL);
-  CREATE TABLE "mt5_sync_status" ("server" TEXT NOT NULL, "account_login" BIGINT NOT NULL);
-  CREATE TABLE "trade_campaigns" (
-    "id" TEXT PRIMARY KEY, "root_trade_id" TEXT NOT NULL UNIQUE REFERENCES "trades"("id"),
-    "trading_date" DATE NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL
-  );
-  CREATE TABLE "campaign_memberships" (
-    "id" TEXT PRIMARY KEY, "campaign_id" TEXT NOT NULL REFERENCES "trade_campaigns"("id"),
-    "trade_id" TEXT NOT NULL UNIQUE REFERENCES "trades"("id"), "source" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL
-  );
-  CREATE TABLE "trade_chart_images" (
-    "id" TEXT PRIMARY KEY, "trade_id" TEXT NOT NULL REFERENCES "trades"("id"),
-    "file_name" TEXT NOT NULL, "mime_type" TEXT NOT NULL, "byte_size" INTEGER NOT NULL,
-    "width" INTEGER NOT NULL, "height" INTEGER NOT NULL, "original_name" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL
-  )
-`;
 
 const baseTrade = (id: string, openedAt: string | null = 'CURRENT_TIMESTAMP') => `
+  BEGIN;
   INSERT INTO "trades" ("id","symbol","side","status","createdAt","updatedAt","opened_at")
   VALUES ('${id}','XAUUSD','long','open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,${openedAt});
+  INSERT INTO "trade_analyses" ("id","trade_id","updated_at")
+  VALUES (md5('${id}:analysis'),'${id}',CURRENT_TIMESTAMP);
+  COMMIT;
 `;
 
 async function verifyFailureScenario(client: Client, migrationSql: string, expected: string, setup: string): Promise<void> {
@@ -115,10 +90,12 @@ async function main(): Promise<void> {
         await executeMigration(client, migrationName, sql);
         continue;
       }
-      await executeMigration(client, 'legacy-cutover-schema', legacyCutoverSchemaSql);
 
       await verifyFailureScenario(client, sql, 'canonical MT5 identity collision requires remediation', `
-        INSERT INTO "mt5_deals" ("server","account_login","ticket") VALUES (E'Broker\tLive',7,1),('broker live',7,2)
+        ${baseTrade('identity-a')}
+        ${baseTrade('identity-b')}
+        UPDATE "trades" SET "mt5_server"=E'Broker\tLive',"mt5_account_login"=7,"mt5_position_id"=1 WHERE "id"='identity-a';
+        UPDATE "trades" SET "mt5_server"='broker live',"mt5_account_login"=7,"mt5_position_id"=2 WHERE "id"='identity-b'
       `);
       await verifyFailureScenario(client, sql, 'legacy image has no campaign and no opened_at', `
         ${baseTrade('null-time', 'NULL')}
@@ -148,14 +125,23 @@ async function main(): Promise<void> {
         INSERT INTO "legacy_trade_chart_image_file_manifest" VALUES ('hash-image','hash.webp',1,'mismatch')
       `);
       await verifyFailureScenario(client, sql, 'trade_campaign_images_position_check', `
-        ${baseTrade('limit-root')}
+        DO $$ BEGIN
+          FOR i IN 0..10 LOOP
+            INSERT INTO "trades" ("id","symbol","side","status","createdAt","updatedAt","opened_at")
+              VALUES ('limit-'||i,'XAUUSD','long','open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+            INSERT INTO "trade_analyses" ("id","trade_id","updated_at")
+              VALUES (md5('limit-'||i||':analysis'),'limit-'||i,CURRENT_TIMESTAMP);
+          END LOOP;
+        END $$;
         INSERT INTO "trade_campaigns" ("id","root_trade_id","trading_date","updated_at")
-          VALUES ('limit-campaign','limit-root',CURRENT_DATE,CURRENT_TIMESTAMP);
+          VALUES ('limit-campaign','limit-0',CURRENT_DATE,CURRENT_TIMESTAMP);
+        INSERT INTO "campaign_memberships" ("id","campaign_id","trade_id","source","updated_at")
+          SELECT 'limit-member-'||i,'limit-campaign','limit-'||i,'manual',CURRENT_TIMESTAMP FROM generate_series(0,10) i;
         INSERT INTO "trade_chart_images" ("id","trade_id","file_name","mime_type","byte_size","width","height","updated_at")
-          SELECT 'limit-'||i,'limit-root','limit-'||i||'.webp','image/webp',1,1,1,CURRENT_TIMESTAMP FROM generate_series(0,10) i;
+          SELECT 'limit-image-'||i,'limit-'||i,'limit-'||i||'.webp','image/webp',1,1,1,CURRENT_TIMESTAMP FROM generate_series(0,10) i;
         ${manifestSql};
         INSERT INTO "legacy_trade_chart_image_file_manifest"
-          SELECT 'limit-'||i,'limit-'||i||'.webp',1,repeat('0',64) FROM generate_series(0,10) i
+          SELECT 'limit-image-'||i,'limit-'||i||'.webp',1,repeat('0',64) FROM generate_series(0,10) i
       `);
       // A missing filesystem-produced manifest must fail before the legacy
       // metadata table is dropped. The same database must then be cut over
