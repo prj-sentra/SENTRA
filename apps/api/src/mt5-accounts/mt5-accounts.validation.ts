@@ -29,7 +29,7 @@ export const canonicalizeServer = (value: unknown): string => {
     .normalize('NFKC')
     .replace(/[\t\n\f\r ]+/g, ' ')
     .trim()
-    .replace(/[A-Z]/g, (character) => character.toLowerCase());
+    .replace(/[A-Z]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 32));
   if (!server) throw new BadRequestException('server is invalid');
   return server;
 };

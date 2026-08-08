@@ -12,7 +12,11 @@ export class AdminUsersService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const username = process.env.INITIAL_ADMIN_USERNAME, password = process.env.INITIAL_ADMIN_PASSWORD;
-    if (!username && !password) return;
+    if (!username && !password) {
+      const activeAdmin = await this.prisma.appUser.findFirst({ where: { isAdmin: true, status: 'ACTIVE' } });
+      if (activeAdmin) return;
+      throw new Error('Initial administrator credentials are required until bootstrap completes');
+    }
     if (!username || !password || password.length < 12) throw new Error('Initial administrator credentials are incomplete');
     const normalizedUsername = normalizeUsername(username);
     const passwordHash = await this.passwords.hash(password);

@@ -34,7 +34,7 @@ CREATE INDEX "user_state_audits_actor_id_created_at_idx" ON "user_state_audits"(
 -- instead of silently coalescing their histories.
 CREATE FUNCTION canonical_mt5_server(TEXT) RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-RETURN lower(btrim(regexp_replace(normalize($1, NFKC), E'[\t\n\f\r ]+', ' ', 'g'), E' \t\n\f\r'));
+RETURN translate(btrim(regexp_replace(normalize($1, NFKC), E'[\t\n\f\r ]+', ' ', 'g'), E' \t\n\f\r'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
 -- Fail closed before rewriting any broker identity.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM "trades" WHERE "mt5_account_login" IS NOT NULL AND ("mt5_account_login" <= 0 OR "mt5_account_login" > 9007199254740991 OR "mt5_server" IS NULL OR btrim("mt5_server") = ''))

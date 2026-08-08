@@ -39,6 +39,21 @@ const manifestSql = `
   )
 `;
 
+const populatedLegacySql = `
+  BEGIN;
+  INSERT INTO "trades" ("id","symbol","side","status","opened_at","createdAt","updatedAt")
+  VALUES ('verify-image-trade','VERIFY','long','closed','2026-08-08T00:00:00Z',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+  INSERT INTO "trade_analyses" ("id","trade_id","updated_at")
+  VALUES ('verify-image-analysis','verify-image-trade',CURRENT_TIMESTAMP);
+  INSERT INTO "trade_campaigns" ("id","root_trade_id","trading_date","created_at","updated_at")
+  VALUES ('verify-image-campaign','verify-image-trade','2026-08-08',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+  INSERT INTO "campaign_memberships" ("id","campaign_id","trade_id","source","created_at","updated_at")
+  VALUES ('verify-image-membership','verify-image-campaign','verify-image-trade','manual',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+  INSERT INTO "trade_chart_images" ("id","trade_id","file_name","mime_type","byte_size","width","height","original_name","created_at","updated_at")
+  VALUES ('verify-image','verify-image-trade','verify.webp','image/webp',4,1,1,'verify.webp',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+  COMMIT;
+`;
+
 async function executeMigration(client: Client, name: string, sql: string): Promise<void> {
   await client.query('BEGIN');
   try {
@@ -73,15 +88,26 @@ async function main(): Promise<void> {
         continue;
       }
 
-      // A missing filesystem-produced manifest must fail before the legacy
-      // metadata table is dropped. The same database must then be cut over
-      // successfully once the manifest has been supplied.
+      // Seed a populated legacy image so the destructive cutover is exercised,
+      // then prove both missing and mismatched filesystem manifests fail before
+      // the source metadata can be dropped.
+      await client.query(populatedLegacySql);
       await expectMigrationFailure(client, sql, 'legacy image file manifest required');
       const sourceAfterFailure = await client.query<{ present: boolean }>(
         `SELECT to_regclass('public.trade_chart_images') IS NOT NULL AS present`,
       );
       if (!sourceAfterFailure.rows[0]?.present) throw new Error('target migration dropped legacy image metadata before reconciliation');
       await client.query(manifestSql);
+      await client.query(`
+        INSERT INTO "legacy_trade_chart_image_file_manifest" ("image_id","file_name","byte_size","sha256")
+        VALUES ('verify-image','verify.webp',5,repeat('0',64))
+      `);
+      await expectMigrationFailure(client, sql, 'legacy image file manifest reconciliation failed');
+      await client.query(`
+        UPDATE "legacy_trade_chart_image_file_manifest"
+        SET "byte_size"=4, "sha256"=repeat('a',64)
+        WHERE "image_id"='verify-image'
+      `);
       await executeMigration(client, migrationName, sql);
 
       // A rerun is rejected without damaging the completed destination.

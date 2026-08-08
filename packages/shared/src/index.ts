@@ -48,9 +48,8 @@ export interface TradeLogAssistantActionPatchAnalysis { type: 'patch_trade_analy
 export type TradeLogAssistantAction = TradeLogAssistantActionPatchAnalysis;
 export interface TradeLogAssistantActionsRequest { rawText: string; source: 'telegram' | 'manual' | 'api'; actions: TradeLogAssistantAction[]; }
 export interface TradeLogAssistantActionsResponse { rawText: string; source: 'telegram' | 'manual' | 'api'; trades: TradeRecord[]; }
-export interface TradeLogMt5SyncResponse { source: 'mt5'; syncedAt: string; importedCount: number; receivedCount?: number; server?: string; accountLogin?: number; from?: string; to?: string; lastDealTime?: string | null; trades: TradeRecord[]; }
 export interface HealthResponse { status: 'ok'; service: string; timestamp: string; }
-export type AppUserStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED';
+export type AppUserStatus = 'PENDING' | 'ACTIVE' | 'DISABLED';
 
 export interface SignupRequest {
   username: string;

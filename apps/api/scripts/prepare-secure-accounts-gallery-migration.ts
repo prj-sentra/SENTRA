@@ -12,7 +12,7 @@ const canonicalizeServer = (value: string): string => value
   .normalize('NFKC')
   .replace(/[\t\n\f\r ]+/g, ' ')
   .trim()
-  .toLowerCase();
+  .replace(/[A-Z]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 32));
 
 async function main(): Promise<void> {
   const client = new Client({ connectionString });
