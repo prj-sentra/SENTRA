@@ -34,7 +34,7 @@ CREATE INDEX "user_state_audits_actor_id_created_at_idx" ON "user_state_audits"(
 -- instead of silently coalescing their histories.
 CREATE FUNCTION canonical_mt5_server(TEXT) RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-RETURN lower(regexp_replace(btrim($1), '[[:space:]]+', ' ', 'g'));
+RETURN lower(btrim(regexp_replace(normalize($1, NFKC), E'[\t\n\f\r ]+', ' ', 'g'), E' \t\n\f\r'));
 -- Fail closed before rewriting any broker identity.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM "trades" WHERE "mt5_account_login" IS NOT NULL AND ("mt5_account_login" <= 0 OR "mt5_account_login" > 9007199254740991 OR "mt5_server" IS NULL OR btrim("mt5_server") = ''))
@@ -134,8 +134,8 @@ DO $$ BEGIN
   IF (SELECT count(*) FROM "trade_chart_images") <> (SELECT count(*) FROM "trade_campaign_images") THEN RAISE EXCEPTION 'image count reconciliation failed'; END IF;
   IF EXISTS (SELECT 1 FROM "trade_chart_images" s JOIN "legacy_trade_chart_image_file_manifest" f ON f."image_id"=s."id" LEFT JOIN "trade_campaign_images" d ON d."id"=s."id" WHERE d."id" IS NULL OR (s."file_name",s."mime_type",s."byte_size",f."sha256",s."width",s."height",s."original_name",s."created_at",s."updated_at") IS DISTINCT FROM (d."file_name",d."mime_type",d."byte_size",d."content_sha256",d."width",d."height",d."original_name",d."created_at",d."updated_at")) THEN RAISE EXCEPTION 'image metadata reconciliation failed'; END IF;
 END $$;
+ALTER TABLE "legacy_trade_chart_image_file_manifest" RENAME TO "secure_gallery_file_migration_audit";
 DROP TABLE "trade_chart_images";
-DROP TABLE IF EXISTS "legacy_trade_chart_image_file_manifest";
 
 CREATE FUNCTION enforce_campaign_trade_scope() RETURNS trigger LANGUAGE plpgsql AS $$ DECLARE co TEXT; ca TEXT; tor TEXT; ta TEXT; BEGIN IF TG_TABLE_NAME='trade_campaigns' THEN SELECT "owner_id","mt5_account_id" INTO tor,ta FROM "trades" WHERE "id"=NEW."root_trade_id"; IF (tor,ta) IS DISTINCT FROM (NEW."owner_id",NEW."mt5_account_id") THEN RAISE EXCEPTION 'campaign root scope mismatch'; END IF; ELSE SELECT "owner_id","mt5_account_id" INTO co,ca FROM "trade_campaigns" WHERE "id"=NEW."campaign_id"; SELECT "owner_id","mt5_account_id" INTO tor,ta FROM "trades" WHERE "id"=NEW."trade_id"; IF (tor,ta) IS DISTINCT FROM (co,ca) THEN RAISE EXCEPTION 'campaign member scope mismatch'; END IF; END IF; RETURN NEW; END $$;
 CREATE TRIGGER campaign_scope BEFORE INSERT OR UPDATE ON "trade_campaigns" FOR EACH ROW EXECUTE FUNCTION enforce_campaign_trade_scope();

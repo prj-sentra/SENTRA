@@ -15,6 +15,9 @@ const migration = readFileSync(migrationPath, 'utf8');
 
 for (const proof of [
   'canonical MT5 identity collision requires remediation',
+  'normalize($1, NFKC)',
+  "E'[\\t\\n\\f\\r ]+'",
+  'secure_gallery_file_migration_audit',
   'legacy image maps to multiple campaigns',
   'legacy image has no campaign and no opened_at',
   'legacy image file manifest required',
@@ -87,6 +90,10 @@ async function main(): Promise<void> {
         `SELECT to_regclass('public.trade_campaign_images') IS NOT NULL AS present`,
       );
       if (!destinationAfterRerun.rows[0]?.present) throw new Error('failed rerun damaged migrated gallery');
+      const auditAfterRerun = await client.query<{ present: boolean }>(
+        `SELECT to_regclass('public.secure_gallery_file_migration_audit') IS NOT NULL AS present`,
+      );
+      if (!auditAfterRerun.rows[0]?.present) throw new Error('migration discarded filesystem audit evidence');
     }
     if (!migrationNames.includes(targetMigration)) throw new Error(`target migration ${targetMigration} was not executed`);
     await client.query(readFileSync(fixturePath, 'utf8'));
