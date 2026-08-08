@@ -78,9 +78,6 @@ export class Mt5AccountsService {
     } catch (error) { this.rethrowConflict(error); }
   }
 
-  async deactivate(ownerId: string, id: string): Promise<SafeMt5Account> {
-    return this.update(ownerId, id, { active: false });
-  }
 
   private async isLinked(tx: Prisma.TransactionClient, accountId: string): Promise<boolean> {
     const [trades, campaigns, deals, orders, syncStatuses] = await Promise.all([

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CreateMt5AccountRequest,
   Mt5SyncResponse,
@@ -39,6 +39,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<SafeMt5AccountRef | undefined>();
   const [accountBusy, setAccountBusy] = useState(false);
+  const scopedLoadGeneration = useRef(0);
 
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
 
@@ -62,6 +63,7 @@ export function App() {
 
   const loadScopedData = useCallback(async () => {
     if (!user) return;
+    const generation = ++scopedLoadGeneration.current;
     setLoading(true);
     setError(null);
     const query = new URLSearchParams(scopeQuery(scope));
@@ -72,13 +74,14 @@ export function App() {
         apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`),
         apiRequest<TradeStatsResponse>(`/trade-log/stats?${statsQuery}`),
       ]);
+      if (generation !== scopedLoadGeneration.current) return;
       setCampaigns(campaignResponse.campaigns);
       setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate });
       setStats(statsResponse);
     } catch {
-      setError('Trading records are unavailable.');
+      if (generation === scopedLoadGeneration.current) setError('Trading records are unavailable.');
     } finally {
-      setLoading(false);
+      if (generation === scopedLoadGeneration.current) setLoading(false);
     }
   }, [scope, selectedDate, user]);
 
@@ -96,6 +99,7 @@ export function App() {
   }
 
   async function logout(): Promise<void> {
+    scopedLoadGeneration.current += 1;
     try { await apiRequest('/auth/logout', { method: 'POST' }); }
     finally { setUser(null); setAccounts([]); setCampaigns([]); setStats(null); }
   }

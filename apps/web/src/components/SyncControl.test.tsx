@@ -21,5 +21,19 @@ describe('SyncControl', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sync selected/i })); });
     expect(screen.getByRole('status')).toHaveTextContent('failed · Primary · Synchronization result expired');
     expect(screen.getByRole('status')).not.toHaveTextContent('imported');
+    act(() => vi.advanceTimersByTime(2999));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('shows the safe in-progress response and expires both non-complete states at 3000ms', async () => {
+    cleanup();
+    render(<SyncControl account={account} onSync={async () => ({ state: 'in_progress', accountId: 'a1', message: 'Synchronization is already in progress.' })} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sync selected/i })); });
+    expect(screen.getByRole('status')).toHaveTextContent('in progress · Primary · Synchronization is already in progress.');
+    act(() => vi.advanceTimersByTime(2999));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

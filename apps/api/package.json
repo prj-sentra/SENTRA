@@ -12,8 +12,7 @@
     "prisma:migrate": "prisma migrate deploy --schema=prisma/schema.prisma",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:migration:secure-accounts-gallery": "ts-node -r tsconfig-paths/register scripts/verify-secure-accounts-gallery-migration.ts",
-    "test": "jest --passWithNoTests",
-    "test:migration:trade-analysis": "ts-node -r tsconfig-paths/register scripts/verify-trade-analysis-migration.ts"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

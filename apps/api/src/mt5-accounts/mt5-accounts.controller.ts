@@ -41,10 +41,6 @@ export class Mt5AccountsController {
     return this.accounts.update(request.user.id, id, body);
   }
 
-  @Post(':id/deactivate')
-  deactivate(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
-    return this.accounts.deactivate(request.user.id, id);
-  }
   @Post(':id/sync')
   @HttpCode(202)
   sync(

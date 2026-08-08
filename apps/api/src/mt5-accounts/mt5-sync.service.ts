@@ -139,6 +139,7 @@ export class Mt5SyncService {
       ...incomingDeals.map((deal) => deal.positionId),
       ...incomingOrders.map((order) => order.positionId),
     ].filter((id) => BigInt(id) > 0n))];
+    let projectedCount = 0;
     for (const positionId of positionIds) {
       const deals = await tx.mt5Deal.findMany({ where: { server, accountLogin, positionId: BigInt(positionId) }, orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }] });
       const orders = await tx.mt5Order.findMany({
@@ -189,8 +190,9 @@ export class Mt5SyncService {
         create: { tradeId: trade.id, campaignId: campaign.id, source: 'AUTO' },
         update: {},
       });
+      projectedCount += 1;
     }
-    return positionIds.length;
+    return projectedCount;
   }
 
   private safeErrorCategory(error: unknown): string {

@@ -90,6 +90,16 @@ describe('Mt5SyncService stateful persistence boundary', () => {
     expect(state.trade).toMatchObject({ takeProfitPrice: 5, stopLossPrice: 1.5 });
     expect(state.trade.analysis).toEqual({ thesis: 'authored' });
   });
+  it('does not count an unknown order-only position as an imported trade', async () => {
+    const { db, state } = statefulDb();
+    const order = { ticket: '30', positionId: '99', timeSetup: 1, timeSetupMsc: 1000, timeDone: 1, timeDoneMsc: 1000, type: 0, state: 0, reason: 0, volumeInitial: 1, volumeCurrent: 0, priceOpen: 2, sl: 1.5, tp: 3, priceCurrent: 2, priceStopLimit: 0, symbol: 'XAUUSD', comment: '', externalId: '' };
+    const service = new Mt5SyncService(db, cipher as never, bridge([
+      { server: 'broker', accountLogin: 7, cursor: 'order-only', deals: [], orders: [order] },
+    ]) as never);
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed', importedCount: 0 });
+    expect(state.trade).toBeUndefined();
+  });
 
   it('rejects a duplicate live claim without calling upstream', async () => {
     const { db, state } = statefulDb(); state.lease = { accountId: 'account-1', leaseId: 'live', expiresAt: new Date(Date.now() + 60_000) };
