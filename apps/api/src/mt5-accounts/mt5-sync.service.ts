@@ -138,6 +138,12 @@ export class Mt5SyncService {
     const positionIds = [...new Set(incoming.map((deal) => deal.positionId).filter((id) => BigInt(id) > 0n))];
     for (const positionId of positionIds) {
       const deals = await tx.mt5Deal.findMany({ where: { server, accountLogin, positionId: BigInt(positionId) }, orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }] });
+      const orders = await tx.mt5Order.findMany({
+        where: { server, accountLogin, positionId: BigInt(positionId) },
+        orderBy: [{ timeSetupMsc: 'desc' }, { ticket: 'desc' }],
+      });
+      const takeProfitPrice = orders.find((order) => Number(order.tp) !== 0)?.tp;
+      const stopLossPrice = orders.find((order) => Number(order.sl) !== 0)?.sl;
       if (!deals.length) continue;
       const entries = deals.filter((deal) => deal.entry === 0 || deal.entry === 2);
       const exits = deals.filter((deal) => deal.entry === 1 || deal.entry === 2);
@@ -151,6 +157,8 @@ export class Mt5SyncService {
         status: closed ? TradeStatus.CLOSED : TradeStatus.OPEN, quantityLots: entryVolume, entryPrice: entries.length ? weighted(entries) : Number(opened.price),
         ...(exits.length && { exitPrice: weighted(exits) }), realizedPnl: deals.reduce((sum, deal) => sum + Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee), 0),
         openedAt: opened.timeMscUtc, ...(closed && { closedAt: exits[exits.length - 1].timeMscUtc }),
+        takeProfitPrice: takeProfitPrice ?? null,
+        stopLossPrice: stopLossPrice ?? null,
       };
       const trade = await tx.trade.upsert({
         where: { mt5Server_mt5AccountLogin_mt5PositionId: { mt5Server: server, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId) } },

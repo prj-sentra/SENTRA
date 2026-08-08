@@ -31,7 +31,7 @@ describe('CampaignImageService ownership and ordering', () => {
     const prisma = prismaMock();
     prisma.tradeCampaign.findFirst.mockResolvedValue({ id: 'campaign-1' });
     prisma.$transaction = jest.fn(async (callback: any) => callback({
-      $queryRaw: jest.fn(),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'campaign-1' }]),
       tradeCampaignImage: { findMany: jest.fn().mockResolvedValue([imageRow]) },
     }));
     await expect(new CampaignImageService(prisma).reorder('owner-a', 'campaign-1', ['image-1', 'image-1'])).rejects.toBeInstanceOf(BadRequestException);
@@ -43,7 +43,7 @@ describe('CampaignImageService ownership and ordering', () => {
     prisma.tradeCampaign.findFirst.mockResolvedValue({ id: 'campaign-1' });
     prisma.tradeCampaignImage.findMany.mockResolvedValue([{ ...imageRow, position: 0 }]);
     const tx = {
-      $queryRaw: jest.fn(),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'campaign-1' }]),
       $executeRaw: jest.fn(),
       tradeCampaignImage: { findMany: jest.fn().mockResolvedValue([imageRow]) },
     };
@@ -53,6 +53,35 @@ describe('CampaignImageService ownership and ordering', () => {
 
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks ownership, re-reads the image, and reindexes deletion in the same transaction', async () => {
+    const prisma = prismaMock();
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'campaign-1' }]),
+      $executeRaw: jest.fn(),
+      tradeCampaignImage: {
+        findFirst: jest.fn().mockResolvedValue(imageRow),
+        delete: jest.fn(),
+      },
+    };
+    prisma.$transaction = jest.fn(async (callback: any) => callback(tx));
+
+    await new CampaignImageService(prisma).remove('owner-a', 'campaign-1', 'image-1');
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.tradeCampaignImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-1', campaignId: 'campaign-1' } });
+    expect(tx.tradeCampaignImage.delete).toHaveBeenCalledWith({ where: { id: 'image-1' } });
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.tradeCampaignImage.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects a delete when campaign ownership fails under the lock', async () => {
+    const prisma = prismaMock();
+    const tx = { $queryRaw: jest.fn().mockResolvedValue([]) };
+    prisma.$transaction = jest.fn(async (callback: any) => callback(tx));
+
+    await expect(new CampaignImageService(prisma).remove('owner-a', 'campaign-1', 'image-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('scopes image lookup through campaign ownership', async () => {
