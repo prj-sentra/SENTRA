@@ -42,7 +42,7 @@ export class AuthService {
       await this.loginThrottle.fail(ip, normalizedUsername);
       throw new UnauthorizedException('Invalid credentials');
     }
-    await this.loginThrottle.clear(ip, normalizedUsername);
+    await this.loginThrottle.clearPrincipal(normalizedUsername);
     return this.sessions.create(user);
   }
 }
