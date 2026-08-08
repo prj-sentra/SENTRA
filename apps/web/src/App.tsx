@@ -33,11 +33,14 @@ export function App() {
   const [scope, setScope] = useState<TradeAccountScope>({ scope: 'all' });
   const [accounts, setAccounts] = useState<SafeMt5AccountRef[]>([]);
   const [campaigns, setCampaigns] = useState<TradeCampaign[]>([]);
+  const [campaignDate, setCampaignDate] = useState<Pick<TradeCampaignDateResponse, 'date' | 'previousDate' | 'nextDate'>>({});
   const [stats, setStats] = useState<TradeStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<SafeMt5AccountRef | undefined>();
   const [accountBusy, setAccountBusy] = useState(false);
+
+  const [selectedDate, setSelectedDate] = useState<string | undefined>();
 
   const loadCurrentUser = useCallback(async () => {
     try {
@@ -61,20 +64,23 @@ export function App() {
     if (!user) return;
     setLoading(true);
     setError(null);
-    const query = scopeQuery(scope);
+    const query = new URLSearchParams(scopeQuery(scope));
+    if (selectedDate) query.set('date', selectedDate);
+    const statsQuery = scopeQuery(scope);
     try {
       const [campaignResponse, statsResponse] = await Promise.all([
         apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`),
-        apiRequest<TradeStatsResponse>(`/trade-log/stats?${query}`),
+        apiRequest<TradeStatsResponse>(`/trade-log/stats?${statsQuery}`),
       ]);
       setCampaigns(campaignResponse.campaigns);
+      setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate });
       setStats(statsResponse);
     } catch {
       setError('Trading records are unavailable.');
     } finally {
       setLoading(false);
     }
-  }, [scope, user]);
+  }, [scope, selectedDate, user]);
 
   useEffect(() => { void loadAccounts(); }, [loadAccounts]);
   useEffect(() => { void loadScopedData(); }, [loadScopedData]);
@@ -82,6 +88,7 @@ export function App() {
   const selectedAccount = useMemo(() => scope.scope === 'account'
     ? accounts.find((account) => account.id === scope.accountId) ?? null
     : null, [accounts, scope]);
+
 
   async function mutate(path: string, init: RequestInit): Promise<void> {
     await apiRequest(path, init);
@@ -111,6 +118,12 @@ export function App() {
   async function syncAccount(accountId: string): Promise<Mt5SyncResponse> {
     return apiRequest(`/mt5-accounts/${encodeURIComponent(accountId)}/sync`, { method: 'POST' });
   }
+  async function toggleAccount(account: SafeMt5AccountRef): Promise<void> {
+    const action = account.active ? 'deactivate' : 'activate';
+    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} ${account.nickname}?`)) return;
+    await updateAccount(account.id, { active: !account.active });
+  }
+
 
   if (checkingSession) return <main className="shell"><p className="muted" role="status">Loading session…</p></main>;
   if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
@@ -121,7 +134,7 @@ export function App() {
       accounts={accounts}
       scope={scope}
       onNavigate={setView}
-      onScopeChange={setScope}
+      onScopeChange={(nextScope) => { setSelectedDate(undefined); setScope(nextScope); }}
       isAdmin={user.isAdmin}
       footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" onClick={() => void logout()}>Log out</button></>}
     />
@@ -131,18 +144,28 @@ export function App() {
       </header>
       {view === 'trade-log' ? <TradeJournalPage
         campaigns={campaigns}
+        date={campaignDate.date}
+        previousDate={campaignDate.previousDate}
+        nextDate={campaignDate.nextDate}
+        onSelectDate={setSelectedDate}
         loading={loading}
         error={error}
         imageUrl={(campaignId, imageId) => `${apiBaseUrl}/trade-log/campaigns/${encodeURIComponent(campaignId)}/images/${encodeURIComponent(imageId)}`}
         onUpdateTrade={(tradeId: string, patch: UpdateTradeRequest) => mutate(`/trade-log/trades/${encodeURIComponent(tradeId)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
-        onPatchAnalysis={(tradeId: string, patch: PatchTradeAnalysisRequest) => mutate(`/trade-log/trades/${encodeURIComponent(tradeId)}/analysis`, { method: 'PATCH', body: JSON.stringify(patch) })}
+        onPatchAnalysis={async (tradeId: string, patch: PatchTradeAnalysisRequest) => {
+          try {
+            await apiRequest(`/trade-log/trades/${encodeURIComponent(tradeId)}/analysis`, { method: 'PATCH', body: JSON.stringify(patch) });
+          } finally {
+            await loadScopedData();
+          }
+        }}
         onUpdateExecutionNote={(tradeId, kind, note) => mutate(`/trade-log/trades/${encodeURIComponent(tradeId)}/${kind}/note`, { method: 'PATCH', body: JSON.stringify({ note }) })}
         onUploadImage={async (campaignId, file) => { const body = new FormData(); body.set('file', file); await mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/images`, { method: 'POST', body }); }}
         onReorderImages={(campaignId, imageIds) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/images/order`, { method: 'PUT', body: JSON.stringify({ imageIds }) })}
         onDeleteImage={(campaignId, imageId) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/images/${encodeURIComponent(imageId)}`, { method: 'DELETE' })}
       /> : null}
       {view === 'stats' ? <StatsPage stats={stats} loading={loading} error={error} /> : null}
-      {view === 'accounts' ? <section className="accounts-page"><AccountEditor account={editingAccount} busy={accountBusy} onCreate={createAccount} onUpdate={updateAccount} onCancel={editingAccount ? () => setEditingAccount(undefined) : undefined} /><div className="account-list">{accounts.map((account) => <article key={account.id}><div><strong>{account.nickname}</strong><span>{account.server} / {account.accountLogin}{account.active ? '' : ' · inactive'}</span></div><button type="button" className="secondary-button compact" onClick={() => setEditingAccount(account)}>Edit</button></article>)}</div></section> : null}
+      {view === 'accounts' ? <section className="accounts-page"><AccountEditor account={editingAccount} busy={accountBusy} onCreate={createAccount} onUpdate={updateAccount} onCancel={editingAccount ? () => setEditingAccount(undefined) : undefined} /><div className="account-list">{accounts.map((account) => <article key={account.id}><div><strong>{account.nickname}</strong><span>{account.server} / {account.accountLogin}{account.active ? '' : ' · inactive'}</span></div><div className="account-actions"><button type="button" className="secondary-button compact" onClick={() => setEditingAccount(account)}>Edit</button><button type="button" className="secondary-button compact" disabled={accountBusy} onClick={() => void toggleAccount(account)}>{account.active ? 'Deactivate' : 'Activate'}</button></div></article>)}</div></section> : null}
       {view === 'admin' ? <UserManagement currentUser={user} /> : null}
     </main>
   </div>;

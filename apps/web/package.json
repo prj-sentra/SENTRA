@@ -7,18 +7,24 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@trading-journal/shared": "file:../../packages/shared",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "^5.9.3",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "typescript": "^5.9.3",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "jsdom": "^30.0.1",
+    "vitest": "^4.1.10"
   }
 }

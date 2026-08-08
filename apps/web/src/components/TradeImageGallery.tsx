@@ -18,6 +18,7 @@ export function TradeImageGallery({ campaignId, symbol, images, imageUrl, onUplo
   const [preview, setPreview] = useState<TradeCampaignImage | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const previewIndex = preview ? ordered.findIndex((image) => image.id === preview.id) : -1;
 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -64,7 +65,13 @@ export function TradeImageGallery({ campaignId, symbol, images, imageUrl, onUplo
         })}
       </ul>
       <label className="gallery-upload"><span>{busy ? 'Working…' : images.length >= 10 ? 'Maximum 10 images' : 'Add image'}</span><input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy || images.length >= 10} onChange={(event) => void upload(event)} /></label>
-      {preview ? <ImageLightbox src={imageUrl(campaignId, preview.id)} alt={`${symbol} trade chart preview`} onClose={() => setPreview(null)} /> : null}
+      {preview ? <ImageLightbox
+        src={imageUrl(campaignId, preview.id)}
+        alt={`${symbol} trade chart ${previewIndex + 1}`}
+        onClose={() => setPreview(null)}
+        onPrevious={previewIndex > 0 ? () => setPreview(ordered[previewIndex - 1]) : undefined}
+        onNext={previewIndex < ordered.length - 1 ? () => setPreview(ordered[previewIndex + 1]) : undefined}
+      /> : null}
     </section>
   );
 }

@@ -7,10 +7,11 @@ export interface SyncControlProps {
   onCompleted?: (response: Mt5SyncResponse) => Promise<void> | void;
 }
 
-function safeResult(response: Mt5SyncResponse): string {
-  if (response.state === 'completed') return `Sync complete${response.importedCount === undefined ? '' : ` · ${response.importedCount} imported`}`;
-  if (response.state === 'in_progress') return 'Synchronization is already in progress.';
-  return 'Synchronization failed. Try again.';
+export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5AccountRef): string {
+  const imported = response.importedCount ?? 0;
+  const received = response.receivedCount ?? 0;
+  const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString() : 'not reported';
+  return `${response.state} · ${imported} imported / ${received} received · ${account.nickname} · ${syncedAt}`;
 }
 
 export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {
@@ -35,7 +36,7 @@ export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) 
     setSyncing(true);
     try {
       const response = await onSync(account.id);
-      showResult(safeResult(response));
+      showResult(formatSyncResult(response, account));
       if (response.state === 'completed') await onCompleted?.(response);
     } catch {
       showResult('Synchronization failed. Try again.');
