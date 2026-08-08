@@ -1,4 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CampaignImageService } from './campaign-image.service';
 
 const imageRow = {
@@ -57,5 +60,23 @@ describe('CampaignImageService ownership and ordering', () => {
     prisma.tradeCampaignImage.findFirst.mockResolvedValue(null);
     await expect(new CampaignImageService(prisma).get('owner-a', 'campaign-1', 'image-1')).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.tradeCampaignImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-1', campaignId: 'campaign-1', campaign: { ownerId: 'owner-a' } } });
+  });
+
+  it('reads an owned image from the configured filesystem root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'campaign-images-'));
+    const previousRoot = process.env.TRADE_IMAGE_DIR;
+    process.env.TRADE_IMAGE_DIR = root;
+    try {
+      const prisma = prismaMock();
+      prisma.tradeCampaignImage.findFirst.mockResolvedValue(imageRow);
+      await writeFile(join(root, imageRow.fileName), Buffer.from('verified-image'));
+      const result = await new CampaignImageService(prisma).get('owner-a', 'campaign-1', 'image-1');
+      expect(result.buffer.toString()).toBe('verified-image');
+      expect(result.record).not.toHaveProperty('fileName');
+    } finally {
+      if (previousRoot === undefined) delete process.env.TRADE_IMAGE_DIR;
+      else process.env.TRADE_IMAGE_DIR = previousRoot;
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

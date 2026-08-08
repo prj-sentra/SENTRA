@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import sharp from 'sharp';
@@ -53,9 +53,10 @@ export class CampaignImageService {
     let row: Awaited<ReturnType<typeof this.prisma.tradeCampaignImage.create>> | undefined;
     try {
       row = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE`;
         const count = await tx.tradeCampaignImage.count({ where: { campaignId } });
         if (count >= MAX_IMAGES) throw new BadRequestException('Campaign gallery is limited to 10 images');
-        return tx.tradeCampaignImage.create({ data: { campaignId, position: count, fileName, mimeType: 'image/webp', byteSize: output.data.byteLength, width: output.info.width, height: output.info.height, originalName: file.originalname || null } });
+        return tx.tradeCampaignImage.create({ data: { campaignId, position: count, fileName, mimeType: 'image/webp', byteSize: output.data.byteLength, contentSha256: createHash('sha256').update(output.data).digest('hex'), width: output.info.width, height: output.info.height, originalName: file.originalname || null } });
       });
       await rename(temporaryPath, finalPath);
       return this.serialize(row);
@@ -125,6 +126,17 @@ export class CampaignImageService {
   }
 
   private serialize(row: { id: string; campaignId: string; position: number; mimeType: string; byteSize: number; width: number; height: number; originalName: string | null; createdAt: Date; updatedAt: Date }): CampaignImageRecord {
-    return { ...row, originalName: row.originalName ?? undefined, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+    return {
+      id: row.id,
+      campaignId: row.campaignId,
+      position: row.position,
+      mimeType: row.mimeType,
+      byteSize: row.byteSize,
+      width: row.width,
+      height: row.height,
+      originalName: row.originalName ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
   }
 }
