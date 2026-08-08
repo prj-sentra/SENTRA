@@ -1,23 +1,28 @@
 import { INestApplication, UnauthorizedException } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
+import { OriginGuard, SessionAuthGuard } from './guards';
 
-const json = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const json = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://journal.test' }, body: JSON.stringify(body) });
 
 describe('authentication HTTP acceptance', () => {
   let app: INestApplication;
   let baseUrl: string;
   const auth = { signup: jest.fn(), login: jest.fn() };
-  const sessions = { revoke: jest.fn() };
+  const sessions = { revoke: jest.fn(), authenticate: jest.fn() };
 
   beforeAll(async () => {
+    process.env.WEB_ORIGIN = 'https://journal.test';
     const module = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: auth },
         { provide: SessionService, useValue: sessions },
+        { provide: APP_GUARD, useClass: OriginGuard },
+        { provide: APP_GUARD, useClass: SessionAuthGuard },
       ],
     }).compile();
     app = module.createNestApplication();
@@ -41,11 +46,12 @@ describe('authentication HTTP acceptance', () => {
     auth.login.mockResolvedValue({ token: 'opaque-session-token' });
     const login = await fetch(`${baseUrl}/auth/login`, json({ username: 'active', password: 'long-enough-password' }));
     const cookie = login.headers.get('set-cookie')!;
+    sessions.authenticate = jest.fn().mockResolvedValue({ user: { id: 'owner-1' }, sessionId: 'session-1' });
     expect(login.status).toBe(200);
     expect(cookie).toContain('tj_session=opaque-session-token');
     expect(cookie.toLowerCase()).toContain('httponly');
 
-    const logout = await fetch(`${baseUrl}/auth/logout`, { method: 'POST', headers: { cookie } });
+    const logout = await fetch(`${baseUrl}/auth/logout`, { method: 'POST', headers: { cookie, origin: 'https://journal.test' } });
     expect(logout.status).toBe(204);
     expect(sessions.revoke).toHaveBeenCalledWith('opaque-session-token');
     expect(logout.headers.get('set-cookie')).toContain('tj_session=;');
@@ -56,5 +62,14 @@ describe('authentication HTTP acceptance', () => {
     const response = await fetch(`${baseUrl}/auth/login`, json({ username: 'blocked', password: 'long-enough-password' }));
     expect(response.status).toBe(401);
     expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('enforces exact Origin and authentication through application-global guards', async () => {
+    auth.login.mockResolvedValue({ token: 'unused' });
+    const wrongOrigin = await fetch(`${baseUrl}/auth/login`, { ...json({ username: 'active', password: 'long-enough-password' }), headers: { 'content-type': 'application/json', origin: 'https://evil.test' } });
+    expect(wrongOrigin.status).toBe(403);
+    sessions.authenticate = jest.fn().mockResolvedValue(null);
+    const unauthenticated = await fetch(`${baseUrl}/auth/logout`, { method: 'POST', headers: { origin: 'https://journal.test' } });
+    expect(unauthenticated.status).toBe(401);
   });
 });
