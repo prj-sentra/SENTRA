@@ -74,7 +74,7 @@ CREATE INDEX "mt5_sync_leases_expires_at_idx" ON "mt5_sync_leases"("expires_at")
 
 ALTER TABLE "trades" ADD COLUMN "owner_id" TEXT;
 ALTER TABLE "trades" ADD COLUMN "mt5_account_id" TEXT;
-UPDATE "trades" t SET "owner_id" = '00000000-0000-0000-0000-000000000001', "mt5_account_id" = a."id" FROM "mt5_accounts" a WHERE a."canonical_server" = canonical_mt5_server(t."mt5_server") AND a."account_login" = t."mt5_account_login";
+UPDATE "trades" t SET "owner_id" = '00000000-0000-0000-0000-000000000001', "mt5_account_id" = a."id", "mt5_server" = a."canonical_server" FROM "mt5_accounts" a WHERE a."canonical_server" = canonical_mt5_server(t."mt5_server") AND a."account_login" = t."mt5_account_login";
 UPDATE "trades" SET "owner_id" = '00000000-0000-0000-0000-000000000001' WHERE "owner_id" IS NULL;
 ALTER TABLE "trades" ALTER COLUMN "owner_id" SET NOT NULL;
 ALTER TABLE "trades" ADD FOREIGN KEY ("owner_id") REFERENCES "app_users"("id") ON DELETE RESTRICT;

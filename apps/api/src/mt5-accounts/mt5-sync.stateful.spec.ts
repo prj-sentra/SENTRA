@@ -22,8 +22,8 @@ function statefulDb() {
       create: jest.fn(async ({ data }: any) => { if (state.lease) throw new Prisma.PrismaClientKnownRequestError('duplicate', { code: 'P2002', clientVersion: 'test' }); state.lease = data; return data; }),
     },
     mt5SyncStatus: {
-      findUnique: jest.fn(async () => state.cursor ? { cursor: state.cursor } : null),
-      upsert: jest.fn(async ({ create, update }: any) => { state.cursor = state.cursor ? update.cursor : create.cursor; }),
+      findUnique: jest.fn(async () => state.cursor !== undefined ? { cursor: state.cursor } : null),
+      upsert: jest.fn(async ({ create, update }: any) => { state.cursor = state.cursor !== undefined ? update.cursor : create.cursor; }),
       updateMany: jest.fn(),
     },
     mt5Deal: {
@@ -46,7 +46,7 @@ describe('Mt5SyncService stateful persistence boundary', () => {
     const { db, state } = statefulDb();
     const upstream = bridge([
       { server: 'broker', accountLogin: 7, cursor: 'opaque:first', deals: [deal], orders: [] },
-      { server: 'broker', accountLogin: 7, cursor: 'opaque:empty', deals: [], orders: [] },
+      { server: 'broker', accountLogin: 7, cursor: '', deals: [], orders: [] },
       { server: 'broker', accountLogin: 7, cursor: 'opaque:replay', deals: [deal], orders: [] },
     ]);
     const service = new Mt5SyncService(db, cipher as never, upstream as never);
@@ -54,12 +54,12 @@ describe('Mt5SyncService stateful persistence boundary', () => {
     expect(state.trade.analysis.thesis).toBe('keep me');
     expect(state.campaign.rootTradeId).toBe('trade-1');
     expect(state.membership).toMatchObject({ tradeId: 'trade-1', campaignId: 'campaign-1' });
-    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ cursor: 'opaque:empty', receivedCount: 0 });
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ cursor: '', receivedCount: 0 });
     await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ cursor: 'opaque:replay' });
     expect(state.deals).toHaveLength(1);
     expect(state.trade.analysis.thesis).toBe('keep me');
     expect(upstream.sync.mock.calls[1][0].cursor).toBe('opaque:first');
-    expect(upstream.sync.mock.calls[2][0].cursor).toBe('opaque:empty');
+    expect(upstream.sync.mock.calls[2][0].cursor).toBe('');
   });
 
   it('rejects a duplicate live claim without calling upstream', async () => {

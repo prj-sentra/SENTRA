@@ -41,7 +41,7 @@ export class Mt5SyncService {
         server: account.canonicalServer,
         accountLogin: Number(account.accountLogin),
         password,
-        ...(cursor && { cursor }),
+        ...(cursor !== undefined && { cursor }),
       });
       const syncedAt = new Date();
       const result = await this.prisma.$transaction(async (tx) => {

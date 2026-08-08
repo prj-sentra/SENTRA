@@ -23,6 +23,7 @@ abstract class DatabaseThrottle {
 
   async assertAllowed(ip: string, principal: string): Promise<void> {
     const keys = this.keys(ip, principal);
+    await this.prisma.$transaction(keys.map((keyDigest) => this.increment(keyDigest)));
     const rows = this.purpose === 'login'
       ? await this.prisma.loginThrottle.findMany({ where: { keyDigest: { in: keys } } })
       : await this.prisma.signupThrottle.findMany({ where: { keyDigest: { in: keys } } });
@@ -31,9 +32,9 @@ abstract class DatabaseThrottle {
     }
   }
 
-  async fail(ip: string, principal: string): Promise<void> {
-    const keys = this.keys(ip, principal);
-    await this.prisma.$transaction(keys.map((keyDigest) => this.increment(keyDigest)));
+  async fail(_ip: string, _principal: string): Promise<void> {
+    // Admission is reserved atomically before expensive password work so
+    // concurrent requests cannot exceed the hashing budget.
   }
 
   private increment(keyDigest: Uint8Array<ArrayBuffer>): Prisma.PrismaPromise<number> {

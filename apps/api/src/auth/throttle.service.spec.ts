@@ -28,9 +28,16 @@ describe('LoginThrottleService', () => {
       { keyDigest: digest('principal', 'trader'), blockedUntil: null },
       { keyDigest: digest('ip', '203.0.113.10'), blockedUntil: future },
     ]);
-    const service = new LoginThrottleService({ loginThrottle: { findMany } } as never);
+    const transaction = jest.fn().mockResolvedValue([]);
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const service = new LoginThrottleService({
+      $transaction: transaction,
+      $executeRaw: executeRaw,
+      loginThrottle: { findMany },
+    } as never);
 
     await expect(service.assertAllowed('203.0.113.10', 'trader')).rejects.toMatchObject({ status: 429 });
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledWith({ where: { keyDigest: { in: [
       digest('ip', '203.0.113.10'), digest('principal', 'trader'),
     ] } } });
