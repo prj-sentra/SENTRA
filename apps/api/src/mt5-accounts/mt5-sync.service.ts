@@ -41,7 +41,7 @@ export class Mt5SyncService {
       });
       if (live !== 1) return { state: 'failed', accountId, message: 'Synchronization result expired' };
 
-      const applied = await this.tradeLog.applyAssistantActions(payload.actions);
+      const applied = await this.tradeLog.applyAssistantActions(ownerId, payload.actions);
       const syncedAt = new Date();
       const committed = await this.prisma.$transaction(async (tx) => {
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: syncedAt } } });

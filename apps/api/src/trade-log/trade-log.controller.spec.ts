@@ -1,213 +1,116 @@
 import type {
-  TradeLogAssistantActionsRequest,
-  TradeLogAssistantActionsResponse,
-  TradeLogMt5SyncResponse,
+  PatchTradeAnalysisRequest,
+  RelinkTradeCampaignRequest,
+  ResolveCampaignConflictRequest,
+  TradeCampaignDateResponse,
   TradeRecord,
   TradeStatsResponse,
-  UpdateTradeJournalRequest,
+  UpdateTradeExecutionNoteRequest,
 } from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
 
+function createController(service: object, chartImageService: object = {}): TradeLogController {
+  return new TradeLogController(service as never, chartImageService as never);
+}
+
+const user = { id: 'owner-1' } as never;
+
+const tradeRecord: TradeRecord = {
+  id: 'trade-1',
+  symbol: 'XAUUSD',
+  side: 'long',
+  status: 'planned',
+  analysis: {
+    schemaVersion: 1,
+    marketZoneEnabled: false,
+    chartPatternObserved: false,
+    retailPositionEnabled: false,
+    fibonacciEnabled: false,
+    economicIndicators: [],
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  },
+  createdAt: '2026-08-01T00:00:00.000Z',
+  updatedAt: '2026-08-01T00:00:00.000Z',
+};
+
+const tradeStats: TradeStatsResponse = {
+  overview: {
+    totalTrades: 1,
+    totalRealizedPoints: 0,
+    averageRealizedPoints: 0,
+    winRate: 0,
+    totalRiskAmount: 0,
+    riskAmountCount: 0,
+    averageRiskPercent: 0,
+    riskPercentCount: 0,
+  },
+  bySession: [],
+  byBaseTimeframe: [],
+};
+
 describe('TradeLogController', () => {
-  const originalMt5SyncToken = process.env.MT5_SYNC_TOKEN;
 
-  beforeEach(() => {
-    process.env.MT5_SYNC_TOKEN = 'test-sync-token';
-  });
-
-  afterAll(() => {
-    if (originalMt5SyncToken === undefined) {
-      delete process.env.MT5_SYNC_TOKEN;
-    } else {
-      process.env.MT5_SYNC_TOKEN = originalMt5SyncToken;
-    }
-  });
-
-  it('exposes assistant actions over HTTP controller contract', async () => {
-    const response: TradeLogAssistantActionsResponse = {
-      rawText: 'BTC 15분봉 롱 진입했어. 67320에 0.05개.',
-      source: 'telegram',
-      trades: [
-        {
-          id: 'trade-1',
-          symbol: 'BTCUSDT',
-          side: 'long',
-          status: 'open',
-          timeframe: '15m',
-          entry: {
-            price: 67320,
-            quantity: 0.05,
-            occurredAt: '2026-06-29T00:00:00.000Z',
-          },
-          createdAt: '2026-06-29T00:00:00.000Z',
-          updatedAt: '2026-06-29T00:00:00.000Z',
-        },
-      ],
+  it('forwards analysis patches to the service', async () => {
+    const response = tradeRecord;
+    const service = { patchTradeAnalysis: jest.fn().mockResolvedValue(response) };
+    const controller = createController(service);
+    const request: PatchTradeAnalysisRequest = {
+      expectedUpdatedAt: '2026-08-01T00:00:00.000Z',
+      marketZoneEnabled: true,
+      marketZoneHigh: 120,
+      marketZoneLow: 100,
+      economicIndicators: [{ type: 'CPI', impact: 'negative' }],
     };
+
+    await expect(controller.patchAnalysis(user, 'trade-1', request)).resolves.toBe(response);
+    expect(service.patchTradeAnalysis).toHaveBeenCalledWith('owner-1', 'trade-1', request);
+  });
+  it('exposes dated campaigns and note-only execution mutations', async () => {
+    const response = { date: '2026-08-01', campaigns: [], diagnostics: { missingOpenedAtTradeIds: [] } } as TradeCampaignDateResponse;
     const service = {
-      applyAssistantActions: jest.fn<Promise<TradeLogAssistantActionsResponse>, [TradeLogAssistantActionsRequest]>(() =>
-        Promise.resolve(response),
-      ),
+      listCampaigns: jest.fn().mockResolvedValue(response),
+      updateTradeEntryNote: jest.fn().mockResolvedValue(tradeRecord),
+      updateTradeExitNote: jest.fn().mockResolvedValue(tradeRecord),
     };
-    const controller = new TradeLogController(service as never);
+    const controller = createController(service);
+    const note: UpdateTradeExecutionNoteRequest = { note: 'kept with immutable execution' };
 
-    await expect(
-      controller.applyAssistantActions({
-        rawText: 'BTC 15분봉 롱 진입했어. 67320에 0.05개.',
-        source: 'telegram',
-        actions: [
-          {
-            type: 'create_trade',
-            payload: { symbol: 'BTCUSDT', side: 'long', timeframe: '15m' },
-          },
-          {
-            type: 'record_entry',
-            tradeRef: 'last_created',
-            payload: {
-              price: 67320,
-              quantity: 0.05,
-              occurredAt: '2026-06-29T00:00:00.000Z',
-            },
-          },
-        ],
-      }),
-    ).resolves.toMatchObject({
-      rawText: 'BTC 15분봉 롱 진입했어. 67320에 0.05개.',
-      source: 'telegram',
-      trades: [
-        {
-          symbol: 'BTCUSDT',
-          side: 'long',
-          status: 'open',
-          timeframe: '15m',
-          entry: {
-            price: 67320,
-            quantity: 0.05,
-            occurredAt: '2026-06-29T00:00:00.000Z',
-          },
-        },
-      ],
-    });
+    await expect(controller.campaigns(user, '2026-08-01')).resolves.toBe(response);
+    await expect(controller.updateEntryNote(user, 'trade-1', note)).resolves.toBe(tradeRecord);
+    await expect(controller.updateExitNote(user, 'trade-1', note)).resolves.toBe(tradeRecord);
+    expect(service.listCampaigns).toHaveBeenCalledWith('owner-1', '2026-08-01', { scope: undefined, accountId: undefined });
+    expect(service.updateTradeEntryNote).toHaveBeenCalledWith('owner-1', 'trade-1', note);
+    expect(service.updateTradeExitNote).toHaveBeenCalledWith('owner-1', 'trade-1', note);
   });
 
-  it('exposes journal patching over HTTP controller contract', async () => {
-    const response: TradeRecord = {
-      id: 'trade-1',
-      symbol: 'XAUUSD',
-      side: 'short',
-      status: 'closed',
-      journal: {
-        review: {
-          resultLabel: '본절 청산',
-          realizedPnlText: '$0.06',
-        },
-      },
-      createdAt: '2026-07-03T00:00:00.000Z',
-      updatedAt: '2026-07-03T00:10:00.000Z',
-    };
-    const service = {
-      patchTradeJournal: jest.fn<Promise<TradeRecord>, [string, UpdateTradeJournalRequest]>(() =>
-        Promise.resolve(response),
-      ),
-    };
-    const controller = new TradeLogController(service as never);
+  it('exposes campaign relinking and conflict resolution', async () => {
+    const service = { relinkCampaign: jest.fn().mockResolvedValue(undefined), resolveCampaignConflict: jest.fn().mockResolvedValue(undefined) };
+    const controller = createController(service);
+    const relink: RelinkTradeCampaignRequest = { tradeId: 'trade-1', campaignId: 'campaign-1' };
+    const resolution: ResolveCampaignConflictRequest = { campaignId: 'campaign-1' };
 
-    await expect(
-      controller.patchJournal('trade-1', {
-        review: {
-          resultLabel: '본절 청산',
-          realizedPnlText: '$0.06',
-        },
-      }),
-    ).resolves.toMatchObject({
-      id: 'trade-1',
-      journal: {
-        review: {
-          resultLabel: '본절 청산',
-          realizedPnlText: '$0.06',
-        },
-      },
-    });
+    await expect(controller.relinkCampaign(user, relink)).resolves.toBeUndefined();
+    await expect(controller.resolveCampaignConflict(user, 'conflict-1', resolution)).resolves.toBeUndefined();
+    expect(service.relinkCampaign).toHaveBeenCalledWith('owner-1', relink);
+    expect(service.resolveCampaignConflict).toHaveBeenCalledWith('owner-1', 'conflict-1', resolution);
   });
 
-  it('exposes mt5 sync over HTTP controller contract', async () => {
-    const response: TradeLogMt5SyncResponse = {
-      source: 'mt5',
-      syncedAt: '2026-07-11T08:30:00.000Z',
-      importedCount: 1,
-      trades: [
-        {
-          id: 'trade-1',
-          symbol: 'GOLD',
-          side: 'long',
-          status: 'open',
-          createdAt: '2026-07-11T08:30:00.000Z',
-          updatedAt: '2026-07-11T08:30:00.000Z',
-        },
-      ],
+  it('exposes scoped stats and campaign gallery operations', async () => {
+    const service = { getStats: jest.fn().mockResolvedValue(tradeStats) };
+    const image = { id: 'image-1', campaignId: 'campaign-1', position: 0 };
+    const gallery = {
+      upload: jest.fn().mockResolvedValue(image),
+      remove: jest.fn().mockResolvedValue(undefined),
     };
-    const service = {
-      syncMt5Trades: jest.fn<Promise<TradeLogMt5SyncResponse>, []>(() => Promise.resolve(response)),
-    };
-    const controller = new TradeLogController(service as never);
+    const controller = createController(service, gallery);
+    const file = { originalname: 'chart.webp' } as Express.Multer.File;
 
-    await expect(controller.syncMt5Trades('test-sync-token')).resolves.toMatchObject({
-      source: 'mt5',
-      importedCount: 1,
-      trades: [{ symbol: 'GOLD' }],
-    });
-  });
-
-  it('rejects mt5 sync without the configured sync token', async () => {
-    delete process.env.MT5_SYNC_TOKEN;
-
-    const service = {
-      syncMt5Trades: jest.fn(),
-    };
-    const controller = new TradeLogController(service as never);
-
-    expect(() => controller.syncMt5Trades(undefined)).toThrow('Valid MT5 sync token required');
-  });
-
-  it('exposes trade stats over HTTP controller contract', async () => {
-    const response: TradeStatsResponse = {
-      overview: {
-        totalTrades: 2,
-        totalRealizedPoints: 8.3,
-        averageRealizedPoints: 4.15,
-        winRate: 50,
-        goodCount: 1,
-        observeCount: 0,
-        badCount: 1,
-        repeatBanCount: 0,
-      },
-      checklistRates: {
-        stopLossDefinedRate: 100,
-        takeProfitDefinedRate: 50,
-        confirmationsAtLeastThreeRate: 50,
-        calmStateRate: 50,
-        ruleViolationTaggedRate: 50,
-        lessonsTaggedRate: 100,
-      },
-      topRuleViolations: [{ label: 'timeframe_inconsistency', count: 1 }],
-      topLessons: [{ label: '기준봉 유지', count: 2 }],
-      topResultLabels: [{ label: '손절', count: 1 }],
-      bySession: [{ key: 'asia', label: 'Asia', count: 2, winRate: 50, realizedPoints: 3.2, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
-      byTimeframe: [{ key: '5m', label: '5m', count: 2, winRate: 50, realizedPoints: 8.3, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
-      bySetupType: [{ key: '투볼', label: '투볼', count: 2, winRate: 50, realizedPoints: 8.3, goodCount: 1, observeCount: 0, badCount: 1, repeatBanCount: 0 }],
-    };
-    const service = {
-      getStats: jest.fn<Promise<TradeStatsResponse>, []>(() => Promise.resolve(response)),
-    };
-    const controller = new TradeLogController(service as never);
-
-    await expect(controller.stats()).resolves.toMatchObject({
-      overview: {
-        totalTrades: 2,
-        totalRealizedPoints: 8.3,
-        goodCount: 1,
-      },
-      topRuleViolations: [{ label: 'timeframe_inconsistency', count: 1 }],
-    });
+    await expect(controller.stats(user, 'account', 'account-1')).resolves.toBe(tradeStats);
+    await expect(controller.uploadImage(user, 'campaign-1', file)).resolves.toBe(image);
+    await expect(controller.removeImage(user, 'campaign-1', 'image-1')).resolves.toBeUndefined();
+    expect(service.getStats).toHaveBeenCalledWith('owner-1', { scope: 'account', accountId: 'account-1' });
+    expect(gallery.upload).toHaveBeenCalledWith('owner-1', 'campaign-1', file);
+    expect(gallery.remove).toHaveBeenCalledWith('owner-1', 'campaign-1', 'image-1');
   });
 });

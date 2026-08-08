@@ -1,24 +1,24 @@
 http://sentra.hoya.kim {
-  encode gzip
+	encode gzip
 
-  @mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/sync$
-  handle @mt5_sync {
-    uri strip_prefix /api
-    reverse_proxy api:3000 {
-      header_up X-MT5-Sync-Token {env.MT5_SYNC_TOKEN}
-    }
-  }
+	@mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/sync$
+	handle @mt5_sync {
+		uri strip_prefix /api
+		reverse_proxy api:3000 {
+			header_up X-MT5-Sync-Token {env.MT5_SYNC_TOKEN}
+		}
+	}
 
-  handle /api/* {
-    uri strip_prefix /api
-    reverse_proxy api:3000
-  }
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:3000
+	}
 
-  handle /health {
-    reverse_proxy api:3000
-  }
+	handle /health {
+		reverse_proxy api:3000
+	}
 
-  handle {
-    reverse_proxy web:80
-  }
+	handle {
+		reverse_proxy web:80
+	}
 }

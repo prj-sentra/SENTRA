@@ -8,5 +8,6 @@ import { TradeLogService } from './trade-log.service';
   imports: [PrismaModule],
   controllers: [TradeLogController],
   providers: [TradeLogService, CampaignImageService],
+  exports: [TradeLogService],
 })
 export class TradeLogModule {}
