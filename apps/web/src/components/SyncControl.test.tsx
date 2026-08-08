@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SyncControl } from './SyncControl';
 
@@ -6,7 +6,7 @@ const account = { id: 'a1', nickname: 'Primary', server: 'Broker', accountLogin:
 
 describe('SyncControl', () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
   it('reports the complete account-scoped summary and clears exactly after 3000ms', async () => {
     render(<SyncControl account={account} onSync={async () => ({ state: 'completed', accountId: 'a1', importedCount: 2, receivedCount: 5, syncedAt: '2026-08-08T12:00:00.000Z' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sync selected/i })); });
