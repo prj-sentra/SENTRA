@@ -146,13 +146,49 @@ async function main(): Promise<void> {
       // A missing filesystem-produced manifest must fail before the legacy
       // metadata table is dropped. The same database must then be cut over
       // successfully once the manifest has been supplied.
+      await client.query(`
+        ${baseTrade('success-root', "'2026-08-08T14:59:59.999Z'")}
+        INSERT INTO "trade_chart_images" ("id","trade_id","file_name","mime_type","byte_size","width","height","original_name","created_at","updated_at")
+          VALUES ('success-image','success-root','success.webp','image/webp',4,640,360,'original.webp','2026-08-08T15:00:00Z','2026-08-08T15:01:00Z')
+      `);
       await expectMigrationFailure(client, sql, 'legacy image file manifest required');
       const sourceAfterFailure = await client.query<{ present: boolean }>(
         `SELECT to_regclass('public.trade_chart_images') IS NOT NULL AS present`,
       );
       if (!sourceAfterFailure.rows[0]?.present) throw new Error('target migration dropped legacy image metadata before reconciliation');
       await client.query(manifestSql);
+      await client.query(`
+        INSERT INTO "legacy_trade_chart_image_file_manifest" ("image_id","file_name","byte_size","sha256")
+          VALUES ('success-image','success.webp',4,repeat('a',64))
+      `);
       await executeMigration(client, migrationName, sql);
+      const populated = await client.query<{
+        image_count: string;
+        campaign_count: string;
+        analysis_count: string;
+        audit_count: string;
+        position: number;
+        content_sha256: string;
+        original_name: string | null;
+        trading_date: string;
+      }>(`
+        SELECT
+          (SELECT count(*)::text FROM "trade_campaign_images" WHERE "id"='success-image') image_count,
+          (SELECT count(*)::text FROM "trade_campaigns" WHERE "root_trade_id"='success-root') campaign_count,
+          (SELECT count(*)::text FROM "trade_analyses" WHERE "trade_id"='success-root') analysis_count,
+          (SELECT count(*)::text FROM "secure_gallery_file_migration_audit" WHERE "image_id"='success-image') audit_count,
+          image."position", image."content_sha256", image."original_name",
+          campaign."trading_date"::text
+        FROM "trade_campaign_images" image
+        JOIN "trade_campaigns" campaign ON campaign."id"=image."campaign_id"
+        WHERE image."id"='success-image'
+      `);
+      const proof = populated.rows[0];
+      if (!proof || proof.image_count !== '1' || proof.campaign_count !== '1' || proof.analysis_count !== '1' || proof.audit_count !== '1'
+        || proof.position !== 0 || proof.content_sha256 !== 'a'.repeat(64) || proof.original_name !== 'original.webp'
+        || proof.trading_date !== '2026-08-08') {
+        throw new Error(`populated migration reconciliation failed: ${JSON.stringify(proof)}`);
+      }
 
       // A rerun is rejected without damaging the completed destination.
       await expectMigrationFailure(client, sql, 'already exists');
