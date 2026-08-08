@@ -37,6 +37,8 @@ export class Mt5SyncService {
       });
       const syncedAt = new Date();
       const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM mt5_accounts WHERE id = ${accountId} FOR UPDATE`);
+        const fenceAt = new Date();
         const liveAccount = await tx.mt5Account.findFirst({
           where: {
             id: accountId,
@@ -48,7 +50,7 @@ export class Mt5SyncService {
             credentialCiphertext: { equals: account.credentialCiphertext },
             credentialIv: { equals: account.credentialIv },
             credentialTag: { equals: account.credentialTag },
-            lease: { leaseId, expiresAt: { gt: syncedAt } },
+            lease: { leaseId, expiresAt: { gt: fenceAt } },
           },
         });
         if (!liveAccount) throw new StaleSyncResult();
@@ -61,10 +63,10 @@ export class Mt5SyncService {
           : undefined;
         await tx.mt5SyncStatus.upsert({
           where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
-          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastDealTime, lastReceivedDealCount: payload.deals.length },
-          update: { lastSyncAt: syncedAt, ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
+          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, cursor: payload.cursor, lastSyncAt: syncedAt, lastDealTime, lastReceivedDealCount: payload.deals.length },
+          update: { cursor: payload.cursor, lastSyncAt: syncedAt, ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
-        const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: syncedAt } } });
+        const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
         return importedCount;
       });
@@ -86,6 +88,7 @@ export class Mt5SyncService {
     const now = new Date();
     const leaseId = randomUUID();
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM mt5_accounts WHERE id = ${accountId} FOR UPDATE`);
       const account = await tx.mt5Account.findFirst({ where: { id: accountId, ownerId, active: true } });
       if (!account) throw new NotFoundException('MT5 account not found');
       await tx.mt5SyncLease.deleteMany({ where: { accountId, expiresAt: { lte: now } } });
@@ -96,7 +99,7 @@ export class Mt5SyncService {
         throw error;
       }
       const status = await tx.mt5SyncStatus.findUnique({ where: { accountId } });
-      return { account, leaseId, cursor: status?.lastDealTime?.toISOString() };
+      return { account, leaseId, cursor: status?.cursor ?? undefined };
     });
   }
 
@@ -124,7 +127,7 @@ export class Mt5SyncService {
   }
 
   private async projectTrades(tx: Prisma.TransactionClient, ownerId: string, accountId: string, server: string, accountLogin: bigint, incoming: Mt5DealFact[]): Promise<number> {
-    const positionIds = [...new Set(incoming.map((deal) => deal.positionId).filter((id) => id > 0))];
+    const positionIds = [...new Set(incoming.map((deal) => deal.positionId).filter((id) => BigInt(id) > 0n))];
     for (const positionId of positionIds) {
       const deals = await tx.mt5Deal.findMany({ where: { server, accountLogin, positionId: BigInt(positionId) }, orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }] });
       if (!deals.length) continue;
@@ -141,10 +144,31 @@ export class Mt5SyncService {
         ...(exits.length && { exitPrice: weighted(exits) }), realizedPnl: deals.reduce((sum, deal) => sum + Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee), 0),
         openedAt: opened.timeMscUtc, ...(closed && { closedAt: exits[exits.length - 1].timeMscUtc }),
       };
-      await tx.trade.upsert({
+      const trade = await tx.trade.upsert({
         where: { mt5Server_mt5AccountLogin_mt5PositionId: { mt5Server: server, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId) } },
-        create: { ...data, mt5Server: server, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId) },
-        update: data,
+        create: {
+          ...data, mt5Server: server, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId),
+          analysis: { create: {} },
+          entry: { create: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc } },
+          ...(exits.length && { exit: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc } } }),
+        },
+        update: {
+          ...data,
+          analysis: { upsert: { create: {}, update: {} } },
+          entry: { upsert: { create: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc }, update: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc } } },
+          ...(exits.length && { exit: { upsert: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc }, update: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc } } } }),
+        },
+      });
+      const tradingDate = new Date(Date.UTC(opened.timeMscUtc.getUTCFullYear(), opened.timeMscUtc.getUTCMonth(), opened.timeMscUtc.getUTCDate()));
+      const campaign = await tx.tradeCampaign.upsert({
+        where: { rootTradeId: trade.id },
+        create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId },
+        update: {},
+      });
+      await tx.campaignMembership.upsert({
+        where: { tradeId: trade.id },
+        create: { tradeId: trade.id, campaignId: campaign.id, source: 'AUTO' },
+        update: {},
       });
     }
     return positionIds.length;

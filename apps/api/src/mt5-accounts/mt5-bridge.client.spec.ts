@@ -34,6 +34,27 @@ describe('Mt5BridgeClient', () => {
       .rejects.toBeInstanceOf(BadGatewayException);
   });
 
+  it('accepts lossless decimal identifier strings and rejects numeric identifiers', async () => {
+    const deal = {
+      ticket: '9007199254740993', order: '9007199254740994', positionId: '9007199254740995',
+      time: 1_700_000_000, timeMsc: 1_700_000_000_000, type: 0, entry: 0, magic: '9007199254740996',
+      reason: 0, volume: 1, price: 1.2, commission: 0, swap: 0, profit: 0, fee: 0,
+      symbol: 'EURUSD', comment: '', externalId: '',
+    };
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      server: 'broker-live', accountLogin: 123, cursor: 'opaque:cursor', deals: [deal], orders: [],
+    }), { status: 200 })) as typeof fetch;
+
+    await expect(new Mt5BridgeClient().sync({ server: 'broker-live', accountLogin: 123, password: 'secret' }))
+      .resolves.toMatchObject({ cursor: 'opaque:cursor', deals: [{ ticket: '9007199254740993' }] });
+
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      server: 'broker-live', accountLogin: 123, cursor: 'opaque:cursor', deals: [{ ...deal, ticket: 9007199254740992 }], orders: [],
+    }), { status: 200 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().sync({ server: 'broker-live', accountLogin: 123, password: 'secret' }))
+      .rejects.toThrow('invalid payload');
+  });
+
   it('rejects oversized responses before parsing', async () => {
     global.fetch = jest.fn().mockResolvedValue(new Response('', {
       status: 200, headers: { 'content-length': String(1024 * 1024 + 1) },

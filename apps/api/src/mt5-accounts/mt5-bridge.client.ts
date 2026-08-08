@@ -8,14 +8,14 @@ export interface Mt5BridgeRequest {
 }
 
 export interface Mt5DealFact {
-  ticket: number;
-  order: number;
-  positionId: number;
+  ticket: string;
+  order: string;
+  positionId: string;
   time: number;
   timeMsc: number;
   type: number;
   entry: number;
-  magic: number;
+  magic: string;
   reason: number;
   volume: number;
   price: number;
@@ -29,8 +29,8 @@ export interface Mt5DealFact {
 }
 
 export interface Mt5OrderFact {
-  ticket: number;
-  positionId: number;
+  ticket: string;
+  positionId: string;
   timeSetup: number;
   timeSetupMsc: number;
   timeDone: number;
@@ -59,8 +59,10 @@ export interface Mt5BridgeResponse {
 }
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
-const DEAL_NUMBER_FIELDS = ['ticket', 'order', 'positionId', 'time', 'timeMsc', 'type', 'entry', 'magic', 'reason', 'volume', 'price', 'commission', 'swap', 'profit', 'fee'] as const;
-const ORDER_NUMBER_FIELDS = ['ticket', 'positionId', 'timeSetup', 'timeSetupMsc', 'timeDone', 'timeDoneMsc', 'type', 'state', 'reason', 'volumeInitial', 'volumeCurrent', 'priceOpen', 'sl', 'tp', 'priceCurrent', 'priceStopLimit'] as const;
+const DEAL_NUMBER_FIELDS = ['time', 'timeMsc', 'type', 'entry', 'reason', 'volume', 'price', 'commission', 'swap', 'profit', 'fee'] as const;
+const DEAL_BIGINT_FIELDS = ['ticket', 'order', 'positionId', 'magic'] as const;
+const ORDER_NUMBER_FIELDS = ['timeSetup', 'timeSetupMsc', 'timeDone', 'timeDoneMsc', 'type', 'state', 'reason', 'volumeInitial', 'volumeCurrent', 'priceOpen', 'sl', 'tp', 'priceCurrent', 'priceStopLimit'] as const;
+const ORDER_BIGINT_FIELDS = ['ticket', 'positionId'] as const;
 const STRING_FIELDS = ['symbol', 'comment', 'externalId'] as const;
 
 @Injectable()
@@ -99,14 +101,15 @@ export class Mt5BridgeClient {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (value.server !== request.server || value.accountLogin !== request.accountLogin) throw new BadGatewayException('MT5 bridge identity mismatch');
     if (typeof value.cursor !== 'string' || !Array.isArray(value.deals) || !Array.isArray(value.orders)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
-    for (const deal of value.deals) this.validateFact(deal, DEAL_NUMBER_FIELDS);
-    for (const order of value.orders) this.validateFact(order, ORDER_NUMBER_FIELDS);
+    for (const deal of value.deals) this.validateFact(deal, DEAL_NUMBER_FIELDS, DEAL_BIGINT_FIELDS);
+    for (const order of value.orders) this.validateFact(order, ORDER_NUMBER_FIELDS, ORDER_BIGINT_FIELDS);
     return value as unknown as Mt5BridgeResponse;
   }
 
-  private validateFact(value: unknown, numberFields: readonly string[]): void {
+  private validateFact(value: unknown, numberFields: readonly string[], bigintFields: readonly string[]): void {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (numberFields.some((field) => typeof value[field] !== 'number' || !Number.isFinite(value[field]))) throw new BadGatewayException('MT5 bridge returned an invalid payload');
+    if (bigintFields.some((field) => typeof value[field] !== 'string' || !/^(0|[1-9]\d*)$/.test(value[field] as string))) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (STRING_FIELDS.some((field) => typeof value[field] !== 'string')) throw new BadGatewayException('MT5 bridge returned an invalid payload');
   }
 

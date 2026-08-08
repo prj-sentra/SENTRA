@@ -106,6 +106,8 @@ export interface Mt5SyncResponse {
   state: Mt5SyncState;
   accountId: string;
   importedCount?: number;
+  receivedCount?: number;
+  cursor?: string;
   syncedAt?: string;
   message?: string;
 }

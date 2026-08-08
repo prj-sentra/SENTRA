@@ -44,7 +44,7 @@ export class Mt5AccountsService {
     const patch = validatePatchAccount(request);
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM mt5_accounts WHERE id = ${id}::uuid FOR UPDATE`);
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM mt5_accounts WHERE id = ${id} FOR UPDATE`);
         const current = await tx.mt5Account.findFirst({ where: { id, ownerId } });
         if (!current) throw new NotFoundException('MT5 account not found');
         if (patch.active === true && current.replacedById) throw new ConflictException('A replaced MT5 account cannot be reactivated');

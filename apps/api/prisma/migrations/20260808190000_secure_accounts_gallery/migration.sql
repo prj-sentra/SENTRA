@@ -64,7 +64,7 @@ ALTER TABLE "mt5_deals" ALTER COLUMN "account_id" SET NOT NULL; ALTER TABLE "mt5
 ALTER TABLE "mt5_orders" ADD COLUMN "account_id" TEXT;
 UPDATE "mt5_orders" o SET "server" = a."canonical_server", "account_id" = a."id" FROM "mt5_accounts" a WHERE a."canonical_server" = lower(regexp_replace(btrim(o."server"), '[[:space:]]+', ' ', 'g')) AND a."account_login" = o."account_login";
 ALTER TABLE "mt5_orders" ALTER COLUMN "account_id" SET NOT NULL; ALTER TABLE "mt5_orders" ADD FOREIGN KEY ("account_id") REFERENCES "mt5_accounts"("id") ON DELETE RESTRICT; CREATE INDEX "mt5_orders_account_id_idx" ON "mt5_orders"("account_id");
-ALTER TABLE "mt5_sync_status" ADD COLUMN "account_id" TEXT;
+ALTER TABLE "mt5_sync_status" ADD COLUMN "account_id" TEXT, ADD COLUMN "cursor" TEXT;
 UPDATE "mt5_sync_status" s SET "server" = a."canonical_server", "account_id" = a."id" FROM "mt5_accounts" a WHERE a."canonical_server" = lower(regexp_replace(btrim(s."server"), '[[:space:]]+', ' ', 'g')) AND a."account_login" = s."account_login";
 ALTER TABLE "mt5_sync_status" ALTER COLUMN "account_id" SET NOT NULL; ALTER TABLE "mt5_sync_status" ADD FOREIGN KEY ("account_id") REFERENCES "mt5_accounts"("id") ON DELETE RESTRICT; CREATE UNIQUE INDEX "mt5_sync_status_account_id_key" ON "mt5_sync_status"("account_id");
 
