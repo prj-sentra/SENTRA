@@ -9,6 +9,22 @@ function draftFor(trade: TradeRecord): Draft {
   return { ...analysis, economicIndicators: analysis.economicIndicators.map(({ id, type, impact }) => ({ id, type, impact })) };
 }
 
+export function canonicalAnalysisPatch(draft: Draft, expectedUpdatedAt: string): PatchTradeAnalysisRequest {
+  return {
+    ...draft,
+    marketZoneHigh: draft.marketZoneEnabled ? draft.marketZoneHigh ?? null : null,
+    marketZoneLow: draft.marketZoneEnabled ? draft.marketZoneLow ?? null : null,
+    chartPatternTimeframe: draft.chartPatternObserved ? draft.chartPatternTimeframe ?? null : null,
+    chartPatternType: draft.chartPatternObserved ? draft.chartPatternType ?? null : null,
+    retailBuyAveragePrice: draft.retailPositionEnabled ? draft.retailBuyAveragePrice ?? null : null,
+    retailSellAveragePrice: draft.retailPositionEnabled ? draft.retailSellAveragePrice ?? null : null,
+    retailBuyRatio: draft.retailPositionEnabled ? draft.retailBuyRatio ?? null : null,
+    fibonacciStartPrice: draft.fibonacciEnabled ? draft.fibonacciStartPrice ?? null : null,
+    fibonacciEndPrice: draft.fibonacciEnabled ? draft.fibonacciEndPrice ?? null : null,
+    expectedUpdatedAt,
+  };
+}
+
 export function TradeAnalysisEditor({ trade, onSave }: { trade: TradeRecord; onSave: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void> }) {
   const [draft, setDraft] = useState<Draft>(() => draftFor(trade));
   const [saving, setSaving] = useState(false);
@@ -24,7 +40,7 @@ export function TradeAnalysisEditor({ trade, onSave }: { trade: TradeRecord; onS
     if (draft.retailPositionEnabled && (draft.retailBuyAveragePrice == null || draft.retailSellAveragePrice == null || draft.retailBuyRatio == null || draft.retailBuyRatio < 0 || draft.retailBuyRatio > 100)) return setError('Retail position requires both prices and a buy ratio from 0 to 100.');
     if (draft.fibonacciEnabled && (draft.fibonacciStartPrice == null || draft.fibonacciEndPrice == null)) return setError('Fibonacci requires start and end prices.');
     setError(null); setSaving(true);
-    try { await onSave(trade.id, { ...draft, expectedUpdatedAt: trade.analysis.updatedAt }); }
+    try { await onSave(trade.id, canonicalAnalysisPatch(draft, trade.analysis.updatedAt)); }
     catch { setError('Analysis changed elsewhere. Latest values were reloaded.'); }
     finally { setSaving(false); }
   }

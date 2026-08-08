@@ -16,4 +16,10 @@ describe('SyncControl', () => {
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+  it('shows the safe failed response message without invented counts or time', async () => {
+    render(<SyncControl account={account} onSync={async () => ({ state: 'failed', accountId: 'a1', message: 'Synchronization result expired' })} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /sync selected/i })); });
+    expect(screen.getByRole('status')).toHaveTextContent('failed · Primary · Synchronization result expired');
+    expect(screen.getByRole('status')).not.toHaveTextContent('imported');
+  });
 });

@@ -8,10 +8,12 @@ export interface SyncControlProps {
 }
 
 export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5AccountRef): string {
+  if (response.state === 'failed') return `failed · ${account.nickname} · ${response.message ?? 'Synchronization failed.'}`;
+  if (response.state === 'in_progress') return `in progress · ${account.nickname} · ${response.message ?? 'Synchronization is already in progress.'}`;
   const imported = response.importedCount ?? 0;
   const received = response.receivedCount ?? 0;
-  const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString() : 'not reported';
-  return `${response.state} · ${imported} imported / ${received} received · ${account.nickname} · ${syncedAt}`;
+  const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString() : 'time not reported';
+  return `completed · ${imported} imported / ${received} received · ${account.nickname} · ${syncedAt}`;
 }
 
 export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {

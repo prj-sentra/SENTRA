@@ -65,7 +65,7 @@ export class Mt5SyncService {
 
         for (const deal of payload.deals) await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt);
         for (const order of payload.orders) await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt);
-        const importedCount = await this.projectTrades(tx, ownerId, accountId, account.canonicalServer, account.accountLogin, payload.deals);
+        const importedCount = await this.projectTrades(tx, ownerId, accountId, account.canonicalServer, account.accountLogin, payload.deals, payload.orders);
         const lastDealTime = payload.deals.length
           ? new Date(Math.max(...payload.deals.map((deal) => deal.timeMsc)))
           : undefined;
@@ -134,8 +134,11 @@ export class Mt5SyncService {
     return tx.mt5Order.upsert({ where: { server_accountLogin_ticket: { server, accountLogin, ticket: BigInt(order.ticket) } }, create: data, update: data });
   }
 
-  private async projectTrades(tx: Prisma.TransactionClient, ownerId: string, accountId: string, server: string, accountLogin: bigint, incoming: Mt5DealFact[]): Promise<number> {
-    const positionIds = [...new Set(incoming.map((deal) => deal.positionId).filter((id) => BigInt(id) > 0n))];
+  private async projectTrades(tx: Prisma.TransactionClient, ownerId: string, accountId: string, server: string, accountLogin: bigint, incomingDeals: Mt5DealFact[], incomingOrders: Mt5OrderFact[]): Promise<number> {
+    const positionIds = [...new Set([
+      ...incomingDeals.map((deal) => deal.positionId),
+      ...incomingOrders.map((order) => order.positionId),
+    ].filter((id) => BigInt(id) > 0n))];
     for (const positionId of positionIds) {
       const deals = await tx.mt5Deal.findMany({ where: { server, accountLogin, positionId: BigInt(positionId) }, orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }] });
       const orders = await tx.mt5Order.findMany({

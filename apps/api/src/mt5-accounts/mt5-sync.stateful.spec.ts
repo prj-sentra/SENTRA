@@ -78,7 +78,7 @@ describe('Mt5SyncService stateful persistence boundary', () => {
     const newer = { ...older, ticket: '21', timeSetupMsc: 2000, timeDoneMsc: 2000, sl: 0, tp: 4 };
     const upstream = bridge([
       { server: 'broker', accountLogin: 7, cursor: 'first', deals: [deal], orders: [older, newer] },
-      { server: 'broker', accountLogin: 7, cursor: 'replay', deals: [deal], orders: [] },
+      { server: 'broker', accountLogin: 7, cursor: 'order-only', deals: [], orders: [{ ...newer, ticket: '22', timeSetupMsc: 3000, timeDoneMsc: 3000, tp: 5 }] },
     ]);
     const service = new Mt5SyncService(db, cipher as never, upstream as never);
 
@@ -87,7 +87,7 @@ describe('Mt5SyncService stateful persistence boundary', () => {
     state.trade.analysis = { thesis: 'authored' };
 
     await service.sync('owner-1', 'account-1');
-    expect(state.trade).toMatchObject({ takeProfitPrice: 4, stopLossPrice: 1.5 });
+    expect(state.trade).toMatchObject({ takeProfitPrice: 5, stopLossPrice: 1.5 });
     expect(state.trade.analysis).toEqual({ thesis: 'authored' });
   });
 
