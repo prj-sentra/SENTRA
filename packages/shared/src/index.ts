@@ -320,3 +320,79 @@ export interface HealthResponse {
   service: string;
   timestamp: string;
 }
+
+export type AppUserStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'DISABLED';
+
+export interface SignupRequest {
+  username: string;
+  password: string;
+}
+
+export interface SignupResponse {
+  status: 'request_received';
+}
+
+export interface SafeUser {
+  id: string;
+  username: string;
+  status: AppUserStatus;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+export interface SafeMt5AccountRef {
+  id: string;
+  nickname: string;
+  server: string;
+  accountLogin: number;
+  active: boolean;
+  replacedById: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMt5AccountRequest {
+  nickname: string;
+  server: string;
+  accountLogin: number;
+  password: string;
+}
+
+export interface UpdateMt5AccountRequest {
+  nickname?: string;
+  server?: string;
+  accountLogin?: number;
+  password?: string;
+  active?: boolean;
+}
+
+export type TradeAccountScope =
+  | { scope: 'all' }
+  | { scope: 'manual' }
+  | { scope: 'account'; accountId: string };
+
+export type Mt5SyncState = 'in_progress' | 'completed' | 'failed';
+
+export interface Mt5SyncResponse {
+  state: Mt5SyncState;
+  accountId: string;
+  importedCount?: number;
+  syncedAt?: string;
+  message?: string;
+}
+
+export interface TradeCampaignImage {
+  id: string;
+  campaignId: string;
+  position: number;
+  mimeType: string;
+  byteSize: number;
+  width: number;
+  height: number;
+  createdAt: string;
+  streamUrl: string;
+}
+
+export interface ReorderTradeCampaignImagesRequest {
+  imageIds: string[];
+}

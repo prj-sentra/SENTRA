@@ -1,7 +1,8 @@
 http://sentra.hoya.kim {
   encode gzip
 
-  handle /api/trade-log/mt5/sync {
+  @mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/sync$
+  handle @mt5_sync {
     uri strip_prefix /api
     reverse_proxy api:3000 {
       header_up X-MT5-Sync-Token {env.MT5_SYNC_TOKEN}
