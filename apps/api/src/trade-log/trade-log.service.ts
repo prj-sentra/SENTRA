@@ -40,6 +40,7 @@ const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>(
     rootTrade: { include: tradeWithRelations.include },
     memberships: { include: { trade: { include: tradeWithRelations.include } }, orderBy: { createdAt: 'asc' } },
     conflicts: { orderBy: { createdAt: 'asc' } },
+    images: { orderBy: [{ position: 'asc' }, { id: 'asc' }] },
   },
 });
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
@@ -451,7 +452,18 @@ export class TradeLogService {
       seedBalance: root.seedBalance,
       riskAmount,
       riskPercent,
-      chartImage: root.chartImage,
+      images: campaign.images.map((image) => ({
+        id: image.id,
+        campaignId: image.campaignId,
+        position: image.position,
+        mimeType: image.mimeType,
+        byteSize: image.byteSize,
+        width: image.width,
+        height: image.height,
+        originalName: image.originalName ?? undefined,
+        createdAt: image.createdAt.toISOString(),
+        updatedAt: image.updatedAt.toISOString(),
+      })),
       regret: root.analysis.regret,
       members,
       conflicts: campaign.conflicts.map((conflict) => ({
