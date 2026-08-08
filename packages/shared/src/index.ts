@@ -34,11 +34,10 @@ export interface UpdateTradeRequest { strategy?: string | null; thesis?: string 
 export interface UpdateTradeExecutionNoteRequest { note?: string | null; }
 export interface TradeEntry { price: number; quantity?: number; occurredAt: string; note?: string; }
 export interface TradeExit { price: number; quantity?: number; occurredAt: string; reason?: 'target_hit' | 'stop_loss' | 'manual' | 'invalidated' | 'time_exit'; note?: string; }
-export interface TradeChartImage { mimeType: string; byteSize: number; width: number; height: number; originalName?: string; updatedAt: string; }
-export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; strategy?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: 'target_hit' | 'stop_loss' | 'manual' | 'invalidated' | 'time_exit'; realizedPnl?: number; takeProfitPrice?: number; stopLossPrice?: number; openedAt?: string; closedAt?: string; seedBalance?: number; riskAmount?: number; riskPercent?: number; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; chartImage?: TradeChartImage; createdAt: string; updatedAt: string; }
+export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; strategy?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: 'target_hit' | 'stop_loss' | 'manual' | 'invalidated' | 'time_exit'; realizedPnl?: number; takeProfitPrice?: number; stopLossPrice?: number; openedAt?: string; closedAt?: string; seedBalance?: number; riskAmount?: number; riskPercent?: number; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; createdAt: string; updatedAt: string; }
 export type CampaignMembershipSource = 'auto' | 'manual';
 export interface CampaignConflict { id: string; tradeId: string; candidateCampaignIds: string[]; status: 'unresolved' | 'resolved'; resolvedCampaignId?: string; createdAt: string; resolvedAt?: string; }
-export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; takeProfitPrice?: number; stopLossPrice?: number; seedBalance?: number; riskAmount?: number; riskPercent?: number; chartImage?: TradeChartImage; regret?: string; members: TradeRecord[]; conflicts: CampaignConflict[]; }
+export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; takeProfitPrice?: number; stopLossPrice?: number; seedBalance?: number; riskAmount?: number; riskPercent?: number; images: TradeCampaignImage[]; regret?: string; members: TradeRecord[]; conflicts: CampaignConflict[]; }
 export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
 export interface RelinkTradeCampaignRequest { tradeId: string; campaignId?: string; }
 export interface ResolveCampaignConflictRequest { campaignId: string; }
@@ -107,8 +106,6 @@ export interface Mt5SyncResponse {
   state: Mt5SyncState;
   accountId: string;
   importedCount?: number;
-  receivedCount?: number;
-  cursor?: string;
   syncedAt?: string;
   message?: string;
 }
@@ -121,8 +118,9 @@ export interface TradeCampaignImage {
   byteSize: number;
   width: number;
   height: number;
+  originalName?: string;
   createdAt: string;
-  streamUrl: string;
+  updatedAt: string;
 }
 
 export interface ReorderTradeCampaignImagesRequest {

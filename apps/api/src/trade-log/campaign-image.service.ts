@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
@@ -24,7 +25,7 @@ export interface CampaignImageRecord {
 
 @Injectable()
 export class CampaignImageService {
-  private readonly root = resolve(process.env.TRADE_IMAGE_DIR?.trim() || resolve(process.cwd(), 'data', 'trade-images'));
+  private readonly root = resolve(process.env.TRADE_IMAGE_DIR?.trim() || '/data/trade-images');
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -78,10 +79,17 @@ export class CampaignImageService {
     await this.requireCampaign(ownerId, campaignId);
     if (!Array.isArray(imageIds) || new Set(imageIds).size !== imageIds.length) throw new BadRequestException('imageIds must be unique');
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE`;
       const rows = await tx.tradeCampaignImage.findMany({ where: { campaignId }, orderBy: { position: 'asc' } });
       if (rows.length !== imageIds.length || rows.some((row) => !imageIds.includes(row.id))) throw new BadRequestException('imageIds must contain the complete campaign gallery');
-      await tx.tradeCampaignImage.updateMany({ where: { campaignId }, data: { position: { increment: MAX_IMAGES } } });
-      for (const [position, id] of imageIds.entries()) await tx.tradeCampaignImage.update({ where: { id }, data: { position } });
+      if (imageIds.length === 0) return;
+      const assignments = imageIds.map((id, position) => Prisma.sql`WHEN ${id} THEN ${position}`);
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "trade_campaign_images"
+        SET "position" = CASE "id" ${Prisma.join(assignments, ' ')} END,
+            "updated_at" = CURRENT_TIMESTAMP
+        WHERE "campaign_id" = ${campaignId}
+      `);
     });
     return this.list(ownerId, campaignId);
   }

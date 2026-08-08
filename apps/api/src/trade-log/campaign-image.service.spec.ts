@@ -27,9 +27,29 @@ describe('CampaignImageService ownership and ordering', () => {
   it('requires an exact complete unique reorder list', async () => {
     const prisma = prismaMock();
     prisma.tradeCampaign.findFirst.mockResolvedValue({ id: 'campaign-1' });
-    prisma.$transaction = jest.fn(async (callback: any) => callback({ tradeCampaignImage: { findMany: jest.fn().mockResolvedValue([imageRow]) } }));
+    prisma.$transaction = jest.fn(async (callback: any) => callback({
+      $queryRaw: jest.fn(),
+      tradeCampaignImage: { findMany: jest.fn().mockResolvedValue([imageRow]) },
+    }));
     await expect(new CampaignImageService(prisma).reorder('owner-a', 'campaign-1', ['image-1', 'image-1'])).rejects.toBeInstanceOf(BadRequestException);
     await expect(new CampaignImageService(prisma).reorder('owner-a', 'campaign-1', [])).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('locks the campaign and reorders with one database statement', async () => {
+    const prisma = prismaMock();
+    prisma.tradeCampaign.findFirst.mockResolvedValue({ id: 'campaign-1' });
+    prisma.tradeCampaignImage.findMany.mockResolvedValue([{ ...imageRow, position: 0 }]);
+    const tx = {
+      $queryRaw: jest.fn(),
+      $executeRaw: jest.fn(),
+      tradeCampaignImage: { findMany: jest.fn().mockResolvedValue([imageRow]) },
+    };
+    prisma.$transaction = jest.fn(async (callback: any) => callback(tx));
+
+    await new CampaignImageService(prisma).reorder('owner-a', 'campaign-1', ['image-1']);
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
   it('scopes image lookup through campaign ownership', async () => {
