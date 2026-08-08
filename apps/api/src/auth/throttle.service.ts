@@ -71,9 +71,9 @@ abstract class DatabaseThrottle {
     `;
   }
 
-  async clear(ip: string, principal: string): Promise<void> {
+  async clearPrincipal(principal: string): Promise<void> {
     if (this.purpose === 'login') {
-      await this.prisma.loginThrottle.deleteMany({ where: { keyDigest: { in: this.keys(ip, principal) } } });
+      await this.prisma.loginThrottle.deleteMany({ where: { keyDigest: this.key('principal', principal) } });
     }
   }
 }
