@@ -4,9 +4,11 @@ import { ImageLightbox } from './ImageLightbox';
 
 it('navigates, traps focus, closes with Escape, and restores focus', () => {
   const close = vi.fn();
+  const previous = vi.fn();
+  const following = vi.fn();
   const trigger = document.createElement('button');
   document.body.append(trigger); trigger.focus();
-  const { unmount } = render(<ImageLightbox src="/chart.png" alt="Chart 2" onClose={close} onPrevious={() => undefined} onNext={() => undefined} />);
+  const { unmount } = render(<ImageLightbox src="/chart.png" alt="Chart 2" onClose={close} onPrevious={previous} onNext={following} />);
   const closeButton = screen.getByRole('button', { name: 'Close image preview' });
   const next = screen.getByRole('button', { name: 'Next image' });
   expect(closeButton).toHaveFocus();
@@ -14,6 +16,10 @@ it('navigates, traps focus, closes with Escape, and restores focus', () => {
   expect(closeButton).toHaveFocus();
   closeButton.focus(); fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
   expect(next).toHaveFocus();
+  fireEvent.keyDown(document, { key: 'ArrowLeft' });
+  fireEvent.keyDown(document, { key: 'ArrowRight' });
+  expect(previous).toHaveBeenCalledOnce();
+  expect(following).toHaveBeenCalledOnce();
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(close).toHaveBeenCalledOnce();
   unmount(); expect(trigger).toHaveFocus(); trigger.remove();
