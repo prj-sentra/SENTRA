@@ -5,7 +5,7 @@ import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
 import { lockOwnedMt5Account } from './mt5-account-lock';
-import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
 import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
 
 const LEASE_MS = 60_000;
@@ -171,7 +171,11 @@ export class Mt5SyncService {
         this.prisma.mt5SyncLease.deleteMany({ where: { accountId, leaseId } }),
         this.prisma.mt5SyncStatus.updateMany({ where: { accountId }, data: { lastError: this.safeErrorCategory(error) } }),
       ]);
-      return { state: 'failed', accountId, message: 'MT5 synchronization failed' };
+      const category = this.safeErrorCategory(error);
+      const message = category === 'MT5_SYNC_BRIDGE_UNAUTHORIZED'
+        ? 'MT5 브리지 인증 토큰이 일치하지 않습니다. 브리지와 API의 MT5_BRIDGE_TOKEN을 동일하게 설정하세요.'
+        : 'MT5 synchronization failed';
+      return { state: 'failed', accountId, message };
     }
   }
 
@@ -559,6 +563,7 @@ export class Mt5SyncService {
   }
   private safeErrorCategory(error: unknown): string {
     if (!(error instanceof Error)) return 'MT5_SYNC_UNKNOWN';
+    if (error instanceof Mt5BridgeUnauthorized) return 'MT5_SYNC_BRIDGE_UNAUTHORIZED';
     if (error.message.includes('configuration')) return 'MT5_SYNC_CONFIGURATION';
     if (error.message.includes('too large')) return 'MT5_SYNC_RESPONSE_TOO_LARGE';
     if (error.message.includes('identity mismatch')) return 'MT5_SYNC_IDENTITY_MISMATCH';

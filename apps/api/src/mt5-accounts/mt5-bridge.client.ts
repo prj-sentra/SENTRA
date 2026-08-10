@@ -93,6 +93,12 @@ export class Mt5BridgeCursorRejected extends BadGatewayException {
   }
 }
 
+export class Mt5BridgeUnauthorized extends BadGatewayException {
+  constructor() {
+    super('MT5 bridge rejected its bearer token');
+  }
+}
+
 @Injectable()
 export class Mt5BridgeClient {
   async sync(request: Mt5BridgeRequest): Promise<Mt5BridgeResponse> {
@@ -114,6 +120,7 @@ export class Mt5BridgeClient {
       const text = await response.text();
       if (Buffer.byteLength(text) > MAX_RESPONSE_BYTES) throw new BadGatewayException('MT5 bridge response is too large');
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) throw new Mt5BridgeUnauthorized();
         if (response.status === 400) {
           try {
             const body = JSON.parse(text) as unknown;

@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { Mt5BridgeClient, Mt5BridgeCursorRejected } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5BridgeUnauthorized } from './mt5-bridge.client';
 
 const request = { server: 'broker-live', accountLogin: 123, password: 'secret', historyFromMsc: 0, historyToMsc: 1_700_000_001_000 };
 const v4 = (patch: Record<string, unknown> = {}) => ({
@@ -44,6 +44,10 @@ describe('Mt5BridgeClient', () => {
     await expect(new Mt5BridgeClient().sync({ ...request, cursor: 'stale' })).rejects.toBeInstanceOf(Mt5BridgeCursorRejected);
     response({ error: 'other bad request' }, 400);
     await expect(new Mt5BridgeClient().sync({ ...request, cursor: 'stale' })).rejects.toBeInstanceOf(BadGatewayException);
+  });
+  it('classifies bridge bearer-token rejection without exposing the token', async () => {
+    response({ error: 'unauthorized' }, 401);
+    await expect(new Mt5BridgeClient().sync(request)).rejects.toBeInstanceOf(Mt5BridgeUnauthorized);
   });
 
   it('accepts lossless IDs and rejects numeric or PostgreSQL-overflow identifiers', async () => {
