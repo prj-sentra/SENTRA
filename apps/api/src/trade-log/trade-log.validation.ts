@@ -35,13 +35,13 @@ function enumValue(value: unknown, values: readonly string[], message: string, n
 
 
 const analysisPatchFields = new Set<keyof PatchTradeAnalysisRequest>([
-  'expectedUpdatedAt', 'note', 'baseTimeframe', 'primaryTrend', 'bollingerBandCount',
+  'expectedUpdatedAt', 'baseTimeframe', 'primaryTrend', 'bollingerBandCount',
   'bollingerDirection', 'maArrangement', 'cross', 'stopLossLine', 'plannedTakeProfitPrice', 'plannedStopLossPrice',
   'marketZoneEnabled', 'marketZoneHigh', 'marketZoneLow',
   'chartPatternObserved', 'chartPatternTimeframe', 'chartPatternType',
   'retailPositionEnabled', 'retailBuyAveragePrice', 'retailSellAveragePrice',
   'retailBuyRatio', 'fibonacciEnabled', 'fibonacciStartPrice',
-  'fibonacciEndPrice', 'regret', 'economicIndicators',
+  'fibonacciEndPrice', 'economicIndicators',
 ]);
 
 export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisRequest): void {
@@ -52,7 +52,7 @@ export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisReq
   date(request.expectedUpdatedAt, 'expectedUpdatedAt must be a valid ISO date');
   const fields: Array<[keyof PatchTradeAnalysisRequest, readonly string[]]> = [['primaryTrend', enumValues.primaryTrend], ['bollingerBandCount', enumValues.bollingerBandCount], ['bollingerDirection', enumValues.bollingerDirection], ['maArrangement', enumValues.maArrangement], ['cross', enumValues.cross], ['chartPatternType', enumValues.chartPatternType]];
   for (const [field, values] of fields) enumValue(request[field], values, `${field} is invalid`);
-  for (const field of ['note', 'baseTimeframe', 'chartPatternTimeframe', 'regret'] as const) string(request[field], `${field} must be a string or null`, true);
+  for (const field of ['baseTimeframe', 'chartPatternTimeframe'] as const) string(request[field], `${field} must be a string or null`, true);
   for (const field of ['marketZoneEnabled', 'chartPatternObserved', 'retailPositionEnabled', 'fibonacciEnabled'] as const) if (request[field] !== undefined && typeof request[field] !== 'boolean') fail(`${field} must be boolean`);
   for (const field of ['stopLossLine', 'plannedTakeProfitPrice', 'plannedStopLossPrice', 'marketZoneHigh', 'marketZoneLow', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'fibonacciStartPrice', 'fibonacciEndPrice'] as const) positive(request[field], `${field} must be positive`, true);
   if ((request.plannedTakeProfitPrice !== undefined || request.plannedStopLossPrice !== undefined)

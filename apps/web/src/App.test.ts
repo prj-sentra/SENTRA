@@ -6,7 +6,7 @@ import { moveGalleryImage } from './components/gallery-order';
 describe('redesigned journal web contracts', () => {
   it('canonicalizes disabled analysis conditionals and keeps the optimistic token', () => {
     const patch = canonicalAnalysisPatch({
-      note: '진입 근거:\n청산 근거:\nTP 설정 근거:\nSL 설정 근거:',
+      baseTimeframe: '1h',
       marketZoneEnabled: false,
       chartPatternObserved: false,
       retailPositionEnabled: false,

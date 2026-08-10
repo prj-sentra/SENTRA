@@ -4,29 +4,29 @@ import { TradeDetail } from './TradeDetail';
 
 afterEach(() => cleanup());
 
-const member = (id: string, note: string, complete = false) => ({
+const member = (id: string, baseTimeframe: string, complete = false) => ({
   id, symbol: 'XAUUSD', side: id === 'trade-1' ? 'long' : 'short', status: 'open', analysisComplete: complete, quantityLots: 1, realizedPnl: id === 'trade-1' ? 120 : -45,
   openedAt: '2026-08-10T12:00:00.000Z',
   analysis: {
-    schemaVersion: 1, updatedAt: '2026-08-10T12:00:00.000Z', createdAt: '2026-08-10T11:00:00.000Z', note, regret: null,
-    baseTimeframe: null, primaryTrend: null, bollingerBandCount: null, bollingerDirection: null, maArrangement: null, cross: null, stopLossLine: null,
+    schemaVersion: 1, updatedAt: '2026-08-10T12:00:00.000Z', createdAt: '2026-08-10T11:00:00.000Z',
+    baseTimeframe, primaryTrend: null, bollingerBandCount: null, bollingerDirection: null, maArrangement: null, cross: null, stopLossLine: null,
     marketZoneEnabled: false, marketZoneHigh: null, marketZoneLow: null, chartPatternObserved: false, chartPatternTimeframe: null, chartPatternType: null,
     retailPositionEnabled: false, retailBuyAveragePrice: null, retailSellAveragePrice: null, retailBuyRatio: null, fibonacciEnabled: false, fibonacciStartPrice: null, fibonacciEndPrice: null,
     economicIndicators: [],
   },
 });
 
-const campaign = { id: 'campaign-1', members: [member('trade-1', 'first'), member('trade-2', 'second', true)] } as any;
+const campaign = { id: 'campaign-1', members: [member('trade-1', '1m'), member('trade-2', '5m', true)] } as any;
 
 describe('TradeDetail split execution ownership', () => {
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {
     const { container } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} />);
     const desktop = container.querySelector('.desktop-trade-detail')!;
-    expect(within(desktop).getByDisplayValue('first')).toBeInTheDocument();
+    expect(within(desktop).getByDisplayValue('1m')).toBeInTheDocument();
 
     const secondDesktopTrade = within(desktop.parentElement!).getByRole('button', { name: /2.*번째 분할 매매/ });
     fireEvent.click(secondDesktopTrade);
-    expect(within(desktop).getByDisplayValue('second')).toBeInTheDocument();
+    expect(within(desktop).getByDisplayValue('5m')).toBeInTheDocument();
     expect(secondDesktopTrade).toHaveAttribute('aria-current', 'step');
   });
 
@@ -44,6 +44,6 @@ describe('TradeDetail split execution ownership', () => {
     expect(first).toHaveAttribute('aria-expanded', 'false');
     expect(second).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('trade-detail-trade-1')).toBeNull();
-    expect(within(document.getElementById('trade-detail-trade-2')!).getByDisplayValue('second')).toBeInTheDocument();
+    expect(within(document.getElementById('trade-detail-trade-2')!).getByDisplayValue('5m')).toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type {
   HealthResponse,
   PatchTradeAnalysisRequest,
+  PatchTradeCampaignMemoRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
   TradeCampaign,
@@ -42,7 +43,7 @@ const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>(
 });
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
 type Tx = Prisma.TransactionClient;
-const analysisFields = ['note','baseTimeframe','primaryTrend','bollingerBandCount','bollingerDirection','maArrangement','cross','stopLossLine','marketZoneEnabled','marketZoneHigh','marketZoneLow','chartPatternObserved','chartPatternTimeframe','chartPatternType','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice','regret'] as const;
+const analysisFields = ['baseTimeframe','primaryTrend','bollingerBandCount','bollingerDirection','maArrangement','cross','stopLossLine','marketZoneEnabled','marketZoneHigh','marketZoneLow','chartPatternObserved','chartPatternTimeframe','chartPatternType','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice'] as const;
 
 @Injectable()
 export class TradeLogService {
@@ -124,6 +125,29 @@ export class TradeLogService {
       }
       const trade = await this.findTrade(tx, ownerId, accountId, id);
       return this.serialize(trade, await this.loadProvenEntryBalanceMap([trade], tx));
+    });
+  }
+
+  async patchCampaignMemo(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignMemoRequest): Promise<void> {
+    if (!request || (request.memo !== null && typeof request.memo !== 'string')
+      || typeof request.expectedUpdatedAt !== 'string' || Number.isNaN(Date.parse(request.expectedUpdatedAt))) {
+      throw new BadRequestException('memo and expectedUpdatedAt are invalid');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ updated_at: Date }>>(Prisma.sql`
+        SELECT updated_at FROM "trade_campaigns"
+        WHERE id = ${id} AND owner_id = ${ownerId}
+          AND (${accountId ?? null}::text IS NULL OR mt5_account_id = ${accountId ?? null})
+        FOR UPDATE
+      `);
+      if (!rows.length) throw new NotFoundException(`Campaign ${id} not found`);
+      if (rows[0].updated_at.getTime() !== new Date(request.expectedUpdatedAt).getTime()) {
+        throw new ConflictException('Campaign memo was updated by another request');
+      }
+      await tx.tradeCampaign.update({
+        where: { id },
+        data: { memo: request.memo?.trim() || null },
+      });
     });
   }
 
@@ -430,7 +454,8 @@ export class TradeLogService {
         createdAt: image.createdAt.toISOString(),
         updatedAt: image.updatedAt.toISOString(),
       })),
-      regret: root.analysis.regret,
+      memo: campaign.memo ?? undefined,
+      updatedAt: campaign.updatedAt.toISOString(),
       analysisComplete: members.every((member) => member.analysisComplete),
       members,
       conflicts: campaign.conflicts.map((conflict) => ({
@@ -446,18 +471,8 @@ export class TradeLogService {
   }
   private analysisComplete(analysis: TradeWithRelations['analysis']): boolean {
     if (!analysis) return false;
-    const required = [analysis.baseTimeframe, analysis.primaryTrend, analysis.maArrangement, analysis.cross, analysis.stopLossLine, analysis.regret];
+    const required = [analysis.baseTimeframe, analysis.primaryTrend, analysis.maArrangement, analysis.cross, analysis.stopLossLine];
     if (required.some((field) => field === null || field === undefined || field === '')) return false;
-    const note = analysis.note ?? '';
-    const headings = ['진입 근거:', '청산 근거:', 'TP 설정 근거:', 'SL 설정 근거:'];
-    if (!headings.every((heading, index) => {
-      const start = note.indexOf(heading);
-      if (start < 0) return false;
-      const bodyStart = start + heading.length;
-      const nextStarts = headings.map((candidate, candidateIndex) => candidateIndex === index ? -1 : note.indexOf(candidate, bodyStart)).filter((candidate) => candidate >= 0);
-      const bodyEnd = nextStarts.length ? Math.min(...nextStarts) : note.length;
-      return Boolean(note.slice(bodyStart, bodyEnd).trim());
-    })) return false;
     if (analysis.cross === 'NONE') return false;
     if (!analysis.bollingerBandCount && analysis.bollingerDirection) return false;
     if (analysis.bollingerBandCount && !analysis.bollingerDirection) return false;
@@ -524,7 +539,6 @@ export class TradeLogService {
       exit: trade.exit ? { price: Number(trade.exit.price), quantity: decimal(trade.exit.quantity), occurredAt: trade.exit.occurredAt.toISOString(), reason: optional(trade.exit.reason) as TradeRecord['exitReason'], note: optional(trade.exit.note) } : undefined,
       analysis: {
         schemaVersion: 1,
-        note: optional(analysis.note),
         baseTimeframe: optional(analysis.baseTimeframe),
         primaryTrend: optional(analysis.primaryTrend)?.toLowerCase() as TradeRecord['analysis']['primaryTrend'],
         bollingerBandCount: optional(analysis.bollingerBandCount)?.toLowerCase() as TradeRecord['analysis']['bollingerBandCount'],
@@ -538,7 +552,7 @@ export class TradeLogService {
         retailPositionEnabled: analysis.retailPositionEnabled, retailBuyAveragePrice: decimal(analysis.retailBuyAveragePrice),
         retailSellAveragePrice: decimal(analysis.retailSellAveragePrice), retailBuyRatio: decimal(analysis.retailBuyRatio),
         fibonacciEnabled: analysis.fibonacciEnabled, fibonacciStartPrice: decimal(analysis.fibonacciStartPrice),
-        fibonacciEndPrice: decimal(analysis.fibonacciEndPrice), regret: optional(analysis.regret),
+        fibonacciEndPrice: decimal(analysis.fibonacciEndPrice),
         economicIndicators: analysis.economicIndicators.map((indicator) => ({ id: indicator.id, type: indicator.type, impact: indicator.impact.toLowerCase() as 'positive' | 'negative', position: indicator.position })),
         createdAt: analysis.createdAt.toISOString(), updatedAt: analysis.updatedAt.toISOString(),
       },

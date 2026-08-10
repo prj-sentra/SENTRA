@@ -15,7 +15,7 @@ const rawTrade = {
     chartPatternObserved: false, chartPatternTimeframe: null, chartPatternType: null,
     retailPositionEnabled: false, retailBuyAveragePrice: null, retailSellAveragePrice: null,
     retailBuyRatio: null, fibonacciEnabled: false, fibonacciStartPrice: null,
-    fibonacciEndPrice: null, regret: null, economicIndicators: [], createdAt: new Date(), updatedAt: new Date() },
+    fibonacciEndPrice: null, economicIndicators: [], createdAt: new Date(), updatedAt: new Date() },
 };
 
 const prisma = () => ({
@@ -134,11 +134,10 @@ describe('TradeLogService analysis completion', () => {
   const completeAnalysis = () => ({
     ...rawTrade.analysis,
     baseTimeframe: 'H1', primaryTrend: 'UP', maArrangement: 'BULLISH', cross: 'GOLDEN_20_60',
-    stopLossLine: 100, regret: '없음',
-    note: '진입 근거:\n추세 확인\n청산 근거:\n목표 도달\nTP 설정 근거:\n저항선\nSL 설정 근거:\n지지선',
+    stopLossLine: 100,
   });
 
-  it('accepts multiline required headings with a real cross and no Bollinger touch', () => {
+  it('accepts complete technical analysis with a real cross and no Bollinger touch', () => {
     const service = new TradeLogService(prisma() as never);
     expect((service as any).analysisComplete(completeAnalysis())).toBe(true);
     expect((service as any).analysisComplete({ ...completeAnalysis(), cross: 'NONE' })).toBe(false);
@@ -154,10 +153,6 @@ describe('TradeLogService analysis completion', () => {
     expect((service as any).analysisComplete({ ...completeAnalysis(), fibonacciEnabled: true, fibonacciStartPrice: 100, fibonacciEndPrice: null })).toBe(false);
   });
 
-  it('rejects an empty multiline required heading body', () => {
-    const service = new TradeLogService(prisma() as never);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), note: '진입 근거:\n청산 근거:\n목표\nTP 설정 근거:\n목표\nSL 설정 근거:\n손절' })).toBe(false);
-  });
 });
 describe('TradeLogService initial-plan metric serialization', () => {
   const plannedMetricTrade = (overrides: Record<string, unknown> = {}) => ({
@@ -218,6 +213,7 @@ describe('TradeLogService initial-plan metric serialization', () => {
     const service = new TradeLogService(prisma() as never);
     const campaign = (service as any).serializeCampaign({
       id: 'campaign-1', rootTradeId: unproven.id, mt5AccountId: 'account-1', tradingDate: new Date('2026-08-10T00:00:00.000Z'),
+      updatedAt: new Date('2026-08-10T12:00:00.000Z'),
       rootTrade: unproven, memberships: [{ trade: unproven }], images: [], conflicts: [],
     });
     expect(campaign.seedBalance).toBeUndefined();

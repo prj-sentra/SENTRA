@@ -10,34 +10,35 @@ export type TradeAnalysisEconomicIndicatorImpact = 'positive' | 'negative';
 
 export interface TradeAnalysisEconomicIndicator { id: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; position: number; }
 export interface TradeAnalysis {
-  schemaVersion: 1; note?: string; baseTimeframe?: string; primaryTrend?: TradeAnalysisPrimaryTrend;
+  schemaVersion: 1; baseTimeframe?: string; primaryTrend?: TradeAnalysisPrimaryTrend;
   bollingerBandCount?: TradeAnalysisBollingerBandCount; bollingerDirection?: TradeAnalysisBollingerDirection;
   maArrangement?: TradeAnalysisMaArrangement; cross?: TradeAnalysisCross; stopLossLine?: number;
   marketZoneEnabled: boolean; marketZoneHigh?: number; marketZoneLow?: number;
   chartPatternObserved: boolean; chartPatternTimeframe?: string; chartPatternType?: TradeAnalysisChartPatternType;
   retailPositionEnabled: boolean; retailBuyAveragePrice?: number; retailSellAveragePrice?: number; retailBuyRatio?: number;
-  fibonacciEnabled: boolean; fibonacciStartPrice?: number; fibonacciEndPrice?: number; regret?: string;
+  fibonacciEnabled: boolean; fibonacciStartPrice?: number; fibonacciEndPrice?: number;
   economicIndicators: TradeAnalysisEconomicIndicator[]; createdAt: string; updatedAt: string;
 }
 export interface TradeAnalysisEconomicIndicatorInput { id?: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; }
 export interface PatchTradeAnalysisRequest {
-  expectedUpdatedAt: string; note?: string | null; baseTimeframe?: string | null; primaryTrend?: TradeAnalysisPrimaryTrend | null;
+  expectedUpdatedAt: string; baseTimeframe?: string | null; primaryTrend?: TradeAnalysisPrimaryTrend | null;
   bollingerBandCount?: TradeAnalysisBollingerBandCount | null; bollingerDirection?: TradeAnalysisBollingerDirection | null;
   maArrangement?: TradeAnalysisMaArrangement | null; cross?: TradeAnalysisCross | null; stopLossLine?: number | null;
   plannedTakeProfitPrice?: number | null; plannedStopLossPrice?: number | null;
   marketZoneEnabled?: boolean; marketZoneHigh?: number | null; marketZoneLow?: number | null;
   chartPatternObserved?: boolean; chartPatternTimeframe?: string | null; chartPatternType?: TradeAnalysisChartPatternType | null;
   retailPositionEnabled?: boolean; retailBuyAveragePrice?: number | null; retailSellAveragePrice?: number | null; retailBuyRatio?: number | null;
-  fibonacciEnabled?: boolean; fibonacciStartPrice?: number | null; fibonacciEndPrice?: number | null; regret?: string | null;
+  fibonacciEnabled?: boolean; fibonacciStartPrice?: number | null; fibonacciEndPrice?: number | null;
   economicIndicators?: TradeAnalysisEconomicIndicatorInput[];
 }
+export interface PatchTradeCampaignMemoRequest { memo: string | null; expectedUpdatedAt: string; }
 export interface TradeEntry { price: number; quantity?: number; occurredAt: string; note?: string; }
 export type TradeExitReason = 'target_hit' | 'stop_loss' | 'manual' | 'forced_liquidation' | 'automated' | 'rollover' | 'variation_margin' | 'split' | 'corporate_action' | 'other' | 'invalidated' | 'time_exit';
 export interface TradeExit { price: number; quantity?: number; occurredAt: string; reason?: TradeExitReason; note?: string; }
 export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; accountId: string; mt5Server?: string; strategy?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: TradeExitReason; realizedPnl?: number; openedAt?: string; closedAt?: string; seedBalance?: number; plannedTakeProfitPrice?: number; plannedStopLossPrice?: number; riskAmount?: number; riskPercent?: number; returnPercent?: number; rr?: number; analysisComplete: boolean; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; createdAt: string; updatedAt: string; }
 export type CampaignMembershipSource = 'auto' | 'manual';
 export interface CampaignConflict { id: string; tradeId: string; candidateCampaignIds: string[]; status: 'unresolved' | 'resolved'; resolvedCampaignId?: string; createdAt: string; resolvedAt?: string; }
-export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; regret?: string; analysisComplete: boolean; members: TradeRecord[]; conflicts: CampaignConflict[]; }
+export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; members: TradeRecord[]; conflicts: CampaignConflict[]; }
 export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
 export interface RelinkTradeCampaignRequest { accountId: string; tradeId: string; campaignId?: string; }
 export interface ResolveCampaignConflictRequest { accountId: string; campaignId: string; }

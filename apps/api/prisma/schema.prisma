@@ -167,6 +167,7 @@ model TradeCampaign {
   tradingDate  DateTime             @map("trading_date") @db.Date
   ownerId      String               @map("owner_id")
   mt5AccountId String?              @map("mt5_account_id")
+  memo         String?
   owner        AppUser              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   mt5Account   Mt5Account?          @relation(fields: [mt5AccountId], references: [id], onDelete: Restrict)
   images       TradeCampaignImage[]
@@ -215,7 +216,6 @@ model TradeAnalysis {
   id                     String                           @id @default(uuid())
   tradeId                String                           @unique @map("trade_id")
   schemaVersion          Int                              @default(1) @map("schema_version")
-  note                   String?                          @default("진입 근거:\n청산 근거:\nTP 설정 근거:\nSL 설정 근거:")
   baseTimeframe          String?                          @map("base_timeframe")
   primaryTrend           TradeAnalysisPrimaryTrend?       @map("primary_trend")
   bollingerBandCount     TradeAnalysisBollingerBandCount? @map("bollinger_band_count")
@@ -236,7 +236,6 @@ model TradeAnalysis {
   fibonacciEnabled       Boolean                          @default(false) @map("fibonacci_enabled")
   fibonacciStartPrice    Decimal?                         @map("fibonacci_start_price") @db.Decimal(65, 30)
   fibonacciEndPrice      Decimal?                         @map("fibonacci_end_price") @db.Decimal(65, 30)
-  regret                 String?
   createdAt              DateTime                         @default(now()) @map("created_at")
   updatedAt              DateTime                         @updatedAt @map("updated_at")
   trade                  Trade                            @relation(fields: [tradeId], references: [id], onDelete: Cascade)

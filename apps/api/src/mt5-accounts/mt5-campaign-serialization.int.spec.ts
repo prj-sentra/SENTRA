@@ -116,14 +116,14 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
       data: {
         id: tradeId, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: 'OPEN', openedAt,
         mt5Server: 'Broker Server', mt5ServerCanonical: 'broker server', mt5AccountLogin: 7001n, mt5PositionId: 5001n,
-        analysis: { create: { note: 'authored analysis' } },
+        analysis: { create: { baseTimeframe: '1h' } },
       },
     });
     for (const [campaignId, rootId] of [[targetId, fixtureId('target-root')], [alternateId, fixtureId('alternate-root')]] as const) {
       await database.trade.create({
         data: {
           id: rootId, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: 'OPEN', openedAt,
-          analysis: { create: { note: `${campaignId} analysis` } },
+          analysis: { create: { baseTimeframe: campaignId === targetId ? '4h' : '1D' } },
           campaignRoot: { create: { id: campaignId, ownerId, mt5AccountId: accountId, tradingDate: openedAt } },
           campaignMembership: { create: { campaignId, source: 'AUTO' } },
         },
@@ -159,7 +159,7 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
     const membership = await database.campaignMembership.findUnique({ where: { tradeId: fixture.tradeId } });
     expect(membership).toMatchObject({ campaignId: fixture.targetId, source: 'MANUAL' });
     expect(await database.tradeCampaign.count({ where: { ownerId: fixture.ownerId, memberships: { none: {} } } })).toBe(0);
-    expect((await database.trade.findUniqueOrThrow({ where: { id: fixture.tradeId }, include: { analysis: true } })).analysis?.note).toBe('authored analysis');
+    expect((await database.trade.findUniqueOrThrow({ where: { id: fixture.tradeId }, include: { analysis: true } })).analysis?.baseTimeframe).toBe('1h');
     if (conflict) {
       const resolved = await database.campaignConflict.findUniqueOrThrow({ where: { id: fixture.conflictId! } });
       expect(resolved).toMatchObject({ status: 'RESOLVED', resolvedCampaignId: fixture.targetId });

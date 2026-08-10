@@ -14,14 +14,16 @@ const campaign = {
   realizedPnl: 125,
   exitReason: '목표가 도달',
   analysisComplete: false,
+  updatedAt: '2026-08-10T12:00:00.000Z',
 } as any;
 
-describe('TradeRecordCard regret preview', () => {
+describe('TradeRecordCard memo preview', () => {
   it('uses the required-writing fallback and clamp hook without showing execution TP or SL', () => {
     render(<TradeRecordCard
       campaign={campaign}
       imageUrl={vi.fn()}
       onPatchAnalysis={vi.fn()}
+      onPatchMemo={vi.fn()}
       onUploadImage={vi.fn()}
       onReorderImages={vi.fn()}
       onDeleteImage={vi.fn()}
@@ -52,6 +54,7 @@ describe('TradeRecordCard regret preview', () => {
       }}
       imageUrl={vi.fn()}
       onPatchAnalysis={vi.fn()}
+      onPatchMemo={vi.fn()}
       onUploadImage={vi.fn()}
       onReorderImages={vi.fn()}
       onDeleteImage={vi.fn()}
@@ -63,19 +66,20 @@ describe('TradeRecordCard regret preview', () => {
     expect(meta).not.toHaveTextContent('→');
   });
 
-  it('renders regret line breaks in a read-only textarea', () => {
+  it('edits one memo for the whole campaign', () => {
     render(<TradeRecordCard
-      campaign={{ ...campaign, regret: '첫 번째 줄\n두 번째 줄' }}
+      campaign={{ ...campaign, memo: '첫 번째 줄\n두 번째 줄' }}
       imageUrl={vi.fn()}
       onPatchAnalysis={vi.fn()}
+      onPatchMemo={vi.fn()}
       onUploadImage={vi.fn()}
       onReorderImages={vi.fn()}
       onDeleteImage={vi.fn()}
     />);
 
-    const regret = screen.getByLabelText('아쉬운 점') as HTMLTextAreaElement;
-    expect(regret.readOnly).toBe(true);
-    expect(regret.value).toBe('첫 번째 줄\n두 번째 줄');
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+    const memo = screen.getByLabelText('거래 메모') as HTMLTextAreaElement;
+    expect(memo.value).toBe('첫 번째 줄\n두 번째 줄');
   });
 
   it('opens the complete image viewer from the summary cover', () => {
@@ -83,6 +87,7 @@ describe('TradeRecordCard regret preview', () => {
       campaign={{ ...campaign, images: [{ id: 'second', position: 1 }, { id: 'first', position: 0 }] }}
       imageUrl={(_, imageId) => `/${imageId}.webp`}
       onPatchAnalysis={vi.fn()}
+      onPatchMemo={vi.fn()}
       onUploadImage={vi.fn()}
       onReorderImages={vi.fn()}
       onDeleteImage={vi.fn()}

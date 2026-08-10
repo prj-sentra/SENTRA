@@ -4,7 +4,7 @@ describe('trade analysis validation', () => {
   const version = '2026-08-01T00:00:00.000Z';
 
   it('allows tri-state optional fields and omitted indicators', () => {
-    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, primaryTrend: null, regret: null })).not.toThrow();
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, primaryTrend: null })).not.toThrow();
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, marketZoneEnabled: false })).not.toThrow();
   });
 

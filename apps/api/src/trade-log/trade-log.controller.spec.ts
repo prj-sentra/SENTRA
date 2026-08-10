@@ -1,4 +1,4 @@
-import type { PatchTradeAnalysisRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignMemoRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse } from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
 
 function createController(service: object, chartImageService: object = {}): TradeLogController { return new TradeLogController(service as never, chartImageService as never); }
@@ -12,6 +12,13 @@ describe('TradeLogController', () => {
     const request: PatchTradeAnalysisRequest = { expectedUpdatedAt: '2026-08-01T00:00:00.000Z', marketZoneEnabled: true, marketZoneHigh: 120, marketZoneLow: 100, economicIndicators: [{ type: 'CPI', impact: 'negative' }] };
     await expect(controller.patchAnalysis(user, 'trade-1', 'account-1', request)).resolves.toBe(tradeRecord);
     expect(service.patchTradeAnalysis).toHaveBeenCalledWith('owner-1', 'account-1', 'trade-1', request);
+  });
+  it('forwards campaign memo patches to the service', async () => {
+    const service = { patchCampaignMemo: jest.fn().mockResolvedValue(undefined) };
+    const controller = createController(service);
+    const request: PatchTradeCampaignMemoRequest = { memo: '복기 메모', expectedUpdatedAt: '2026-08-01T00:00:00.000Z' };
+    await expect(controller.patchCampaignMemo(user, 'campaign-1', 'account-1', request)).resolves.toBeUndefined();
+    expect(service.patchCampaignMemo).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-1', request);
   });
   it('requires selected account forwarding for dated campaigns', async () => {
     const response = { date: '2026-08-01', campaigns: [], diagnostics: { missingOpenedAtTradeIds: [] } } as TradeCampaignDateResponse;
