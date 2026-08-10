@@ -19,7 +19,7 @@ const trade = (metrics: Partial<TradeRecord> = {}): TradeRecord => ({
 });
 
 describe('ExecutionTradeRow summary metrics', () => {
-  it('shows the execution time and six requested metrics', () => {
+  it('shows the five requested execution metrics', () => {
     render(<ExecutionTradeRow trade={trade({
       openedAt: '2026-08-10T01:00:00.000Z',
       closedAt: '2026-08-10T02:00:00.000Z',
@@ -35,15 +35,15 @@ describe('ExecutionTradeRow summary metrics', () => {
       returnPercent: 5,
     })} />);
 
-    expect(screen.getByText(/26\. 8\. 10\..*-/)).toBeInTheDocument();
-    for (const label of ['진입가', '수량', '청산가', '청산 사유', '시드 변화', 'PnL']) {
+    for (const label of ['진입시간 / 청산시간', '진입가 / 청산가', '수량', '청산 사유', 'PNL']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    for (const excluded of ['TP', 'SL', 'Risk', 'Return', 'RR']) {
+    for (const excluded of ['시드 변화', 'TP', 'SL', 'Risk', 'Return', 'RR']) {
       expect(screen.queryByText(excluded)).toBeNull();
     }
-    expect(screen.getByText('시드 변화').nextElementSibling).toHaveTextContent('10,000 → 10,250');
-    expect(screen.getByText('250')).toHaveClass('pnl', 'positive');
+    expect(screen.getByText('진입시간 / 청산시간').nextElementSibling).toHaveTextContent(/26\. 8\. 10\..*\/.*26\. 8\. 10\./);
+    expect(screen.getByText('진입가 / 청산가').nextElementSibling).toHaveTextContent('100 / 110');
+    expect(screen.getByText('250')).not.toHaveClass('pnl');
   });
 
   it('does not show ticker or execution status labels', () => {

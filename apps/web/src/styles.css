@@ -1017,18 +1017,10 @@ button.trade-cover { cursor: pointer; }
 .split-trade-navigation button.complete { color: #198038; border-color: #198038; }
 .split-trade-navigation button.incomplete { color: var(--danger); border-color: var(--danger); }
 .split-trade-navigation button.active { color: #fff; border-color: var(--blue); background: var(--blue); box-shadow: 0 0 0 3px rgb(15 98 254 / 14%); }
-.execution-time { margin: 0; color: var(--text-muted); font-size: 12px; }
-.execution-metrics { display: grid; grid-template-areas: "entry exit seed" "quantity reason pnl"; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 28px; margin: 0; }
+.execution-metrics { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(170px, 1fr) minmax(90px, .55fr) minmax(140px, 1fr) minmax(90px, .6fr); gap: 20px; align-items: start; margin: 0; }
 .execution-metrics > div { min-width: 0; }
-.execution-metrics .entry-price { grid-area: entry; }
-.execution-metrics .quantity { grid-area: quantity; }
-.execution-metrics .exit-price { grid-area: exit; }
-.execution-metrics .exit-reason { grid-area: reason; }
-.execution-metrics .seed-change { grid-area: seed; }
-.execution-metrics .trade-pnl { grid-area: pnl; }
 .execution-row dt { color: var(--text-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
 .execution-row dd { overflow-wrap: anywhere; margin: 6px 0 0; color: var(--text-primary); font-size: 18px; font-weight: 650; }
-.execution-row dd.pnl { font-size: clamp(26px, 2.5vw, 38px); line-height: 1.1; }
 .desktop-trade-detail { display: block; }
 .mobile-trade-detail { display: none; }
 .mobile-trade-panel { border-top: 1px solid var(--border); }
@@ -1051,7 +1043,7 @@ button.trade-cover { cursor: pointer; }
 .gallery-upload-error img { width: 64px; height: 48px; object-fit: cover; }
 .gallery-upload-error p { margin: 0; color: var(--danger); }
 @container (max-width: 1000px) {
-  .execution-metrics { grid-template-areas: "entry quantity" "exit reason" "seed pnl"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .execution-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container (max-width: 719px) {
   .trade-cover { display: none; }
@@ -1059,7 +1051,7 @@ button.trade-cover { cursor: pointer; }
   .trade-summary-metrics { display: none; }
   .trade-summary-body { padding: 16px; }
   .trade-summary-body header > strong { display: none; }
-  .execution-metrics { grid-template-areas: "entry" "quantity" "exit" "reason" "seed" "pnl"; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .execution-metrics { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .gallery-upload-error { grid-template-columns: 48px 1fr; }
   .gallery-upload-error button { grid-column: 2; }
 }
