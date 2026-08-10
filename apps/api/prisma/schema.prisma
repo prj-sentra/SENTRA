@@ -137,6 +137,8 @@ model Trade {
   realizedPnl               Decimal?                @map("realized_pnl")
   takeProfitPrice           Decimal?                @map("take_profit_price")
   stopLossPrice             Decimal?                @map("stop_loss_price")
+  plannedTakeProfitPrice    Decimal?                @map("planned_take_profit_price")
+  plannedStopLossPrice      Decimal?                @map("planned_stop_loss_price")
   openedAt                  DateTime?                @map("opened_at")
   closedAt                  DateTime?                @map("closed_at")
   seedBalance               Decimal?                @map("seed_balance")

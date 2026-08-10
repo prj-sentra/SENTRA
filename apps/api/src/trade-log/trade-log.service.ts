@@ -26,6 +26,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
 import { validateTradeAnalysisPatchRequest } from './trade-log.validation';
+import { calculateTradePlanMetrics } from './trade-plan-metrics';
 
 export interface TradeScopeInput { accountId?: string; }
 
@@ -99,6 +100,27 @@ export class TradeLogService {
         where: { id: current.id },
         data,
       });
+      if (request.plannedTakeProfitPrice !== undefined && request.plannedStopLossPrice !== undefined) {
+        if (request.plannedTakeProfitPrice === null || request.plannedStopLossPrice === null) {
+          await tx.trade.update({ where: { id }, data: {
+            plannedTakeProfitPrice: null, plannedStopLossPrice: null, riskAmount: null, riskPercent: null,
+            returnPercent: null, initialPlanId: null, initialPlanMetricContractVersion: null,
+          } });
+        } else {
+          const metricTrade = await this.findTrade(tx, ownerId, accountId, id);
+          if (!metricTrade.initialPlan) throw new BadRequestException('TP/SL calculation data is unavailable for this trade');
+          const takeProfit = new Prisma.Decimal(request.plannedTakeProfitPrice);
+          const stopLoss = new Prisma.Decimal(request.plannedStopLossPrice);
+          const metrics = calculateTradePlanMetrics(metricTrade.initialPlan, takeProfit, stopLoss);
+          if (!metrics) throw new BadRequestException('TP and SL must be on the profitable and losing sides of the entry price');
+          await tx.trade.update({ where: { id }, data: {
+            plannedTakeProfitPrice: takeProfit, plannedStopLossPrice: stopLoss,
+            riskAmount: metrics.riskAmount, riskPercent: metrics.riskPercent, returnPercent: metrics.returnPercent,
+            initialPlanId: metricTrade.initialPlan.id,
+            initialPlanMetricContractVersion: metricTrade.initialPlan.metricContractVersion,
+          } });
+        }
+      }
       const trade = await this.findTrade(tx, ownerId, accountId, id);
       return this.serialize(trade, await this.loadProvenEntryBalanceMap([trade], tx));
     });
@@ -484,11 +506,12 @@ export class TradeLogService {
         && trade.riskAmount !== null
         && trade.returnPercent !== null
         ? {
-          initialTakeProfitPrice: Number(trade.initialPlan.takeProfitPrice),
+          plannedTakeProfitPrice: decimal(trade.plannedTakeProfitPrice),
           riskAmount: decimal(trade.riskAmount),
           riskPercent: decimal(trade.riskPercent),
-          initialStopLossPrice: Number(trade.initialPlan.stopLossPrice),
+          plannedStopLossPrice: decimal(trade.plannedStopLossPrice),
           returnPercent: decimal(trade.returnPercent),
+          rr: Number(trade.returnPercent) / Number(trade.riskPercent),
         }
         : {}),
       openedAt: trade.openedAt?.toISOString(), closedAt: trade.closedAt?.toISOString(),

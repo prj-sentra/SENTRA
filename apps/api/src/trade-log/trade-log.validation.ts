@@ -36,7 +36,7 @@ function enumValue(value: unknown, values: readonly string[], message: string, n
 
 const analysisPatchFields = new Set<keyof PatchTradeAnalysisRequest>([
   'expectedUpdatedAt', 'note', 'baseTimeframe', 'primaryTrend', 'bollingerBandCount',
-  'bollingerDirection', 'maArrangement', 'cross', 'stopLossLine',
+  'bollingerDirection', 'maArrangement', 'cross', 'stopLossLine', 'plannedTakeProfitPrice', 'plannedStopLossPrice',
   'marketZoneEnabled', 'marketZoneHigh', 'marketZoneLow',
   'chartPatternObserved', 'chartPatternTimeframe', 'chartPatternType',
   'retailPositionEnabled', 'retailBuyAveragePrice', 'retailSellAveragePrice',
@@ -54,7 +54,10 @@ export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisReq
   for (const [field, values] of fields) enumValue(request[field], values, `${field} is invalid`);
   for (const field of ['note', 'baseTimeframe', 'chartPatternTimeframe', 'regret'] as const) string(request[field], `${field} must be a string or null`, true);
   for (const field of ['marketZoneEnabled', 'chartPatternObserved', 'retailPositionEnabled', 'fibonacciEnabled'] as const) if (request[field] !== undefined && typeof request[field] !== 'boolean') fail(`${field} must be boolean`);
-  for (const field of ['stopLossLine', 'marketZoneHigh', 'marketZoneLow', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'fibonacciStartPrice', 'fibonacciEndPrice'] as const) positive(request[field], `${field} must be positive`, true);
+  for (const field of ['stopLossLine', 'plannedTakeProfitPrice', 'plannedStopLossPrice', 'marketZoneHigh', 'marketZoneLow', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'fibonacciStartPrice', 'fibonacciEndPrice'] as const) positive(request[field], `${field} must be positive`, true);
+  if ((request.plannedTakeProfitPrice !== undefined || request.plannedStopLossPrice !== undefined)
+    && (request.plannedTakeProfitPrice === undefined || request.plannedStopLossPrice === undefined
+      || (request.plannedTakeProfitPrice === null) !== (request.plannedStopLossPrice === null))) fail('TP and SL must be entered or cleared together');
   if (request.retailBuyRatio !== undefined && request.retailBuyRatio !== null && (typeof request.retailBuyRatio !== 'number' || !Number.isFinite(request.retailBuyRatio) || request.retailBuyRatio < 0 || request.retailBuyRatio > 100)) fail('retailBuyRatio must be 0 through 100');
   if (request.economicIndicators !== undefined) {
     if (!Array.isArray(request.economicIndicators)) fail('economicIndicators must be an array');

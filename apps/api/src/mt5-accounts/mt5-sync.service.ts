@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
 import { lockOwnedMt5Account } from './mt5-account-lock';
 import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
+import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
 
 const LEASE_MS = 60_000;
 const UNCORRECTED_TIME_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
@@ -392,7 +393,18 @@ export class Mt5SyncService {
           },
         });
       }
-      const metrics = initialPlan ? this.initialPlanMetrics(initialPlan) : null;
+      const existingTrade = await tx.trade.findUnique({
+        where: { mt5ServerCanonical_mt5AccountLogin_mt5PositionId: { mt5ServerCanonical: canonicalServer, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId) } },
+        select: {
+          riskAmount: true, riskPercent: true, returnPercent: true, initialPlanId: true,
+          initialPlanMetricContractVersion: true, plannedTakeProfitPrice: true, plannedStopLossPrice: true,
+        },
+      });
+      const metrics = initialPlan
+        ? existingTrade?.plannedTakeProfitPrice && existingTrade.plannedStopLossPrice
+          ? calculateTradePlanMetrics(initialPlan, existingTrade.plannedTakeProfitPrice, existingTrade.plannedStopLossPrice)
+          : this.initialPlanMetrics(initialPlan)
+        : null;
       const metricData = initialPlan && metrics
         ? {
           accountCurrency: initialPlan.accountCurrency,
@@ -406,10 +418,6 @@ export class Mt5SyncService {
           riskAmount: null, riskPercent: null, returnPercent: null,
           initialPlanId: null, initialPlanMetricContractVersion: null,
         };
-      const existingTrade = await tx.trade.findUnique({
-        where: { mt5ServerCanonical_mt5AccountLogin_mt5PositionId: { mt5ServerCanonical: canonicalServer, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId) } },
-        select: { riskAmount: true, riskPercent: true, returnPercent: true, initialPlanId: true, initialPlanMetricContractVersion: true },
-      });
       this.assertMetricState(existingTrade, initialPlan, metrics);
       const data = {
         ownerId, mt5AccountId: accountId, symbol: opened.symbol, side: opened.type === 1 ? TradeSide.SHORT : TradeSide.LONG,

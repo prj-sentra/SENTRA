@@ -172,6 +172,8 @@ describe('TradeLogService initial-plan metric serialization', () => {
     riskAmount: 10,
     riskPercent: 1,
     returnPercent: 2,
+    plannedTakeProfitPrice: 120,
+    plannedStopLossPrice: 90,
     initialPlanId: 'plan-1',
     initialPlanMetricContractVersion: 1,
     initialPlan: { id: 'plan-1', metricContractVersion: 1, takeProfitPrice: 120, stopLossPrice: 90 },
@@ -189,24 +191,25 @@ describe('TradeLogService initial-plan metric serialization', () => {
     const result = await new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'trade-1');
 
     expect(result).not.toEqual(expect.objectContaining({
-      initialTakeProfitPrice: expect.anything(),
-      initialStopLossPrice: expect.anything(),
+      plannedTakeProfitPrice: expect.anything(),
+      plannedStopLossPrice: expect.anything(),
       riskAmount: expect.anything(),
       riskPercent: expect.anything(),
       returnPercent: expect.anything(),
     }));
   });
 
-  it('exposes both initial TP/SL and metrics only for a matching complete provenance pair', async () => {
+  it('exposes user TP/SL and metrics only for a matching complete provenance pair', async () => {
     const db = prisma();
     db.trade.findFirst.mockResolvedValue(plannedMetricTrade());
 
     await expect(new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'trade-1')).resolves.toMatchObject({
-      initialTakeProfitPrice: 120,
-      initialStopLossPrice: 90,
+      plannedTakeProfitPrice: 120,
+      plannedStopLossPrice: 90,
       riskAmount: 10,
       riskPercent: 1,
       returnPercent: 2,
+      rr: 2,
     });
   });
 
