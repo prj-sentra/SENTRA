@@ -1,0 +1,38 @@
+services:
+  mt5-history-reader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mt5-history-reader
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      MT5_BROKER_SERVER: ${MT5_BROKER_SERVER:-XMGlobal-MT5 14}
+      MT5_RPC_BIND_HOST: ${MT5_RPC_BIND_HOST:-0.0.0.0}
+      MT5_RPC_HOST: ${MT5_RPC_HOST:-127.0.0.1}
+      MT5_RPC_PORT: ${MT5_RPC_PORT:-18812}
+      MT5_LOOKBACK_DAYS: ${MT5_LOOKBACK_DAYS:-30}
+      MT5_INIT_TIMEOUT_MS: ${MT5_INIT_TIMEOUT_MS:-60000}
+      MT5_RPC_READY_TIMEOUT_SECONDS: ${MT5_RPC_READY_TIMEOUT_SECONDS:-60}
+      MT5_OUTPUT_PATH: /app/output/mt5-history.json
+    ports:
+      - "${MT5_RPC_PORT:-18812}:18812"
+    volumes:
+      - mt5-wineprefix:/opt/wineprefix
+      - ./output:/app/output
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import os, socket; socket.create_connection(('127.0.0.1', int(os.environ.get('MT5_RPC_PORT', '18812'))), 2).close()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stdin_open: true
+    tty: true
+
+volumes:
+  mt5-wineprefix:

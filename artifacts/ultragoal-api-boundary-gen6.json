@@ -1,0 +1,58 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:bbdc39ee8c53ee421ab5d491173781ead15901ce7d479dc6a4dce99854bb048b",
+  "priorSourceHash": "sha256:6fe3d8746e3871d6e638f4c96d56ebbf53d31dc98ed65e5cae0508ebf5fd9076",
+  "status": "blocked",
+  "e2eStatus": "partial",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/shared build","result":"passed","detail":"Shared TypeScript package build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api build","result":"passed","detail":"Prisma generate and Nest production build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck","result":"passed","detail":"API tsc --noEmit passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api test","result":"passed","detail":"16 Jest suites, 92 tests, 0 snapshots passed."},
+    {"command":"Explicitly recreate only sentra-ultragoal-pg and its mounted data volume; MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public pnpm test:migration:secure-accounts-gallery","result":"passed","detail":"Fresh PostgreSQL 16 instance was healthy and full populated secure accounts/gallery migration matrix passed."},
+    {"command":"docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet","result":"passed","detail":"Passed with required production settings."},
+    {"command":"Caddy validate plus adapted routing assertion","result":"passed","detail":"Caddy returned Valid configuration; adapted output contained anchored ^/api/mt5-accounts/[^/]+/sync$, X-Mt5-Sync-Token, and strip_path_prefix."}
+  ],
+  "contractCoverage": [
+    {"contract":"Shared/API build and type contract","status":"covered","evidence":"Shared build, API Prisma/Nest build, and API typecheck passed.","blocker":null},
+    {"contract":"API package test contract","status":"covered","evidence":"All current 16 suites and 92 tests passed.","blocker":null},
+    {"contract":"Fresh populated migration matrix","status":"covered","evidence":"Verifier executed against fresh isolated port-55434 PostgreSQL and passed populated/missing/mismatched manifest fail-closed assertions.","blocker":null},
+    {"contract":"Production Compose and Caddy trusted routing","status":"covered","evidence":"Production Compose interpolation, Caddy validation, and exact adapted sync route assertion passed.","blocker":null},
+    {"contract":"HTTP authentication acceptance","status":"covered-partial","evidence":"auth.http.spec.ts creates a real Nest HTTP adapter, proves enumeration-safe signup response equivalence, HttpOnly cookie issue, logout revoke/clear, and rejected PENDING/DISABLED login no-cookie responses.","blocker":"It mounts AuthController with doubles rather than the full production module/guard graph; no HTTP IDOR or Origin routing probe is present."},
+    {"contract":"Bootstrap/canonical/manifest","status":"covered","evidence":"Bootstrap fail-closed/activation tests, canonical API/SQL parity inspection, and populated manifest verifier pass.","blocker":null}
+  ],
+  "surfaceEvidence": [
+    {"surface":"HTTP authentication/cookie","status":"live-adapter-covered","evidence":"auth.http.spec.ts starts Nest on loopback and executes fetch requests for signup, login, logout, and rejected login states."},
+    {"surface":"Origin, pending authorization, and HTTP IDOR","status":"partial","evidence":"Guard/service tests cover exact Origin, missing session, owner scopes, and pending state internals.","blocker":"No full-module HTTP test invokes guards plus real controller routes for Origin, pending admin, or IDOR."},
+    {"surface":"Bootstrap","status":"unit-covered","evidence":"Admin bootstrap test proves disabled legacy sentinel activation and absent sentinel failure."},
+    {"surface":"Canonical identity","status":"covered-unit-static","evidence":"NFKC/whitespace/lowercase canonicalization is shared by validation and migration SQL; fixture rejects noncanonical server."},
+    {"surface":"Manifest migration","status":"covered","evidence":"Fresh populated verifier asserts missing/mismatched manifests fail before legacy metadata is dropped, then passes reconciliation."},
+    {"surface":"Account lease and secret redaction","status":"unit-covered","evidence":"MT5 account service tests cover foreign hiding, exact live lease conflict, replacement fence, and no credential serialization."},
+    {"surface":"Sync duplicate/stale persistence","status":"partial","evidence":"Bridge mismatch and Seoul date boundary cases are tested; static sync code checks account identity/credentials/live lease before persistence.","blocker":"No duplicate fact, stale lease, cursor persistence, or PostgreSQL race test exists."},
+    {"surface":"Gallery","status":"partial","evidence":"Ownership, reorder, filesystem owned read, and filename redaction cases are tested.","blocker":"No upload endpoint or concurrent ten-image-cap integration test exists."},
+    {"surface":"Caddy sync route","status":"covered","evidence":"Exact anchored path gets the trusted token and /api stripping in adapted config."}
+  ],
+  "adversarialCases": [
+    {"case":"HTTP signup enumeration","expected":"Identical 202 responses","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"HTTP authenticated login/logout cookie lifecycle","expected":"HttpOnly session cookie issued, revoked, and cleared","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"HTTP rejected PENDING/DISABLED login","expected":"401 without Set-Cookie","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"Missing bootstrap legacy sentinel","expected":"Fail closed","status":"passed","evidence":"admin-users.service.spec.ts"},
+    {"case":"Canonical collision/noncanonical broker identity","expected":"Fail closed","status":"passed","evidence":"Migration verifier proofs and fixture."},
+    {"case":"Missing/mismatched legacy file manifest","expected":"Failure before destructive metadata drop","status":"passed","evidence":"Fresh populated migration verifier."},
+    {"case":"Foreign account scope/malformed selected scope","expected":"No cross-owner read / BadRequest","status":"passed","evidence":"trade-log.owner-scope.spec.ts"},
+    {"case":"Wrong Origin/missing session","expected":"Forbidden/Unauthorized","status":"passed-unit-only","evidence":"auth/guards.spec.ts"},
+    {"case":"Foreign account, live lease, replacement race, credential serialization","expected":"Hidden/rejected/redacted","status":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Bridge identity mismatch and Seoul sync boundary","expected":"Reject mismatch/correct date","status":"passed","evidence":"mt5-bridge.client.spec.ts and mt5-sync.service.spec.ts"},
+    {"case":"Duplicate/stale sync persistence","expected":"No duplicate or stale persistence","status":"blocked","evidence":"No persistence/concurrency test."},
+    {"case":"Foreign gallery, invalid reorder, owned filesystem redaction","expected":"No disclosure/BadRequest/redacted file record","status":"passed","evidence":"campaign-image.service.spec.ts"},
+    {"case":"Concurrent upload cap","expected":"No more than ten durable images","status":"blocked","evidence":"No upload/concurrency test."}
+  ],
+  "blockers": [
+    {"id":"B1","severity":"blocking","finding":"No full-module HTTP test covers Origin guard, session guard, pending admin authorization, or resource IDOR.","impact":"The new real auth-controller adapter evidence does not prove production guard/controller composition for Origin, pending route access, or HTTP owner isolation."},
+    {"id":"B2","severity":"blocking","finding":"No MT5 sync persistence or isolated PostgreSQL concurrency suite exists.","impact":"Duplicate facts, stale leases, cursor advancement, and full-history persistence remain unproved under real races."},
+    {"id":"B3","severity":"blocking","finding":"No gallery upload endpoint or concurrent cap integration suite exists.","impact":"Live image upload durability and ten-image cap behavior under contention remain unproved."}
+  ],
+  "artifactRefs": [{"kind":"api-package-test-report","path":"artifacts/ultragoal-api-boundary-gen6.json","sourceHash":"sha256:bbdc39ee8c53ee421ab5d491173781ead15901ce7d479dc6a4dce99854bb048b"}]
+}

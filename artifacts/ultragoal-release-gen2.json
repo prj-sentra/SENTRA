@@ -1,0 +1,236 @@
+{
+  "kind": "ultragoal-release-final",
+  "schemaVersion": 2,
+  "sourceHash": "sha256:4c09db884ce0cf09b5c8a95879e1ccdf34266216bfc532077f17fdb6a411f924",
+  "priorSourceHash": "sha256:b3ef4528640e996c1a28c42b0442cef13a9f18a9c2f9247f754c3abd9d5622f0",
+  "status": "blocked",
+  "e2eStatus": "passed",
+  "redTeamStatus": "blocked",
+  "snapshot": {
+    "method": "git archive --format=tar HEAD",
+    "path": "/tmp/g005-gen2",
+    "archiveSha256": "4c09db884ce0cf09b5c8a95879e1ccdf34266216bfc532077f17fdb6a411f924",
+    "workingTreeExcluded": true
+  },
+  "e2eCommands": [
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- install --frozen-lockfile",
+      "status": "passed",
+      "note": "pnpm 10.26.0; dependency build-script warning emitted"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:generate",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- build",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- test",
+      "status": "passed",
+      "result": "API 17 suites/99 tests; web 4 files/6 tests"
+    },
+    {
+      "command": "DATABASE_URL=postgresql://gen2:gen2@127.0.0.1:55433/gen2_verify npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:migrate",
+      "status": "passed",
+      "result": "16 migrations applied to fresh PostgreSQL 16"
+    },
+    {
+      "command": "MIGRATION_VERIFY_DATABASE_URL=postgresql://gen2:gen2@127.0.0.1:55433/gen2_harness npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api test:migration:secure-accounts-gallery",
+      "status": "passed"
+    },
+    {
+      "command": "MT5_SYNC_TOKEN=gen2-sync-token CADDY_SITE_ADDRESS=:8081 WEB_ORIGIN=http://localhost AUTH_THROTTLE_KEY=gen2-throttle-key-at-least-32-characters MT5_CREDENTIAL_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= MT5_BRIDGE_BASE_URL=http://bridge.invalid MT5_BRIDGE_TOKEN=gen2-bridge-token docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet",
+      "status": "passed"
+    },
+    {
+      "command": "docker run --rm -e CADDY_SITE_ADDRESS=:8081 -e MT5_SYNC_TOKEN=gen2-sync-token -v $PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile",
+      "status": "passed"
+    }
+  ],
+  "redTeamCommands": [
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- test",
+      "status": "passed",
+      "scope": "API authorization/session/origin/throttle/account replacement/sync lease-cursor/gallery and web product-contract tests"
+    },
+    {
+      "command": "source search for literal Campaign/Member labels across apps/web/src",
+      "status": "passed",
+      "result": "Only domain identifiers; product-contract.test.ts rejects rendered Campaign/Member copy"
+    },
+    {
+      "command": "visual inspection artifacts/production-campaign-journal.png and artifacts/production-campaign-journal-mobile.png",
+      "status": "failed",
+      "result": "Both supplied screenshots visibly contain CAMPAIGN JOURNAL and 2 MEMBERS"
+    }
+  ],
+  "contractCoverage": [
+    {
+      "id": "C01-auth-origin-session",
+      "refs": [
+        "apps/api/src/auth/auth.http.spec.ts",
+        "apps/api/src/auth/guards.spec.ts",
+        "apps/api/src/auth/session.service.ts"
+      ],
+      "status": "passed",
+      "summary": "Exact mutation Origin, session validation/revocation, HttpOnly cookie, and generic inactive-user rejection."
+    },
+    {
+      "id": "C02-throttle",
+      "refs": [
+        "apps/api/src/auth/throttle.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "IP and normalized-principal limits resist ordering/concurrency cases."
+    },
+    {
+      "id": "C03-idOR-accounts-replacement",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts",
+        "apps/api/src/mt5-accounts/credential-cipher.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Owner-scoped account access, encrypted write-only credentials, exact lease mutation block, replacement fence."
+    },
+    {
+      "id": "C04-sync-lease-cursor",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.service.spec.ts",
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts",
+        "infra/caddy/Caddyfile"
+      ],
+      "status": "passed",
+      "summary": "Trusted exact sync proxy route, lease, cursor, and stateful sync tests."
+    },
+    {
+      "id": "C05-gallery-scope",
+      "refs": [
+        "apps/api/src/trade-log/trade-log.owner-scope.spec.ts",
+        "apps/api/src/trade-log/campaign-image.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Owner scope and gallery service behavior covered by API suite."
+    },
+    {
+      "id": "C06-migration",
+      "refs": [
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts",
+        "apps/api/prisma/migrations"
+      ],
+      "status": "passed",
+      "summary": "Fresh 16-migration deployment and populated failure/reconciliation matrix pass."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "id": "S01-build",
+      "refs": [
+        "clean archive /tmp/g005-gen2"
+      ],
+      "status": "passed",
+      "summary": "Frozen install, Prisma generation, build, typecheck, and root tests passed."
+    },
+    {
+      "id": "S02-production-routing",
+      "refs": [
+        "docker-compose.prod.yml",
+        "infra/caddy/Caddyfile"
+      ],
+      "status": "passed",
+      "summary": "Production Compose configuration and Caddy validation pass; exact /api/mt5-accounts/<id>/sync route injects the trusted header."
+    },
+    {
+      "id": "S03-frontend-contract",
+      "refs": [
+        "apps/web/src/product-contract.test.ts",
+        "apps/web/src/TradeRecordCard.tsx"
+      ],
+      "status": "passed",
+      "summary": "Web test suite 4/6 includes no rendered Campaign/Member copy contract; current source uses TRADES."
+    },
+    {
+      "id": "S04-browser-desktop",
+      "refs": [
+        "artifacts/production-campaign-journal.png"
+      ],
+      "status": "failed",
+      "summary": "1440x1000 screenshot shows date navigation and no apparent horizontal overflow, but visibly renders CAMPAIGN JOURNAL and 2 MEMBERS."
+    },
+    {
+      "id": "S05-browser-mobile",
+      "refs": [
+        "artifacts/production-campaign-journal-mobile.png"
+      ],
+      "status": "failed",
+      "summary": "390x844 screenshot shows date navigation and no apparent horizontal overflow, but visibly renders CAMPAIGN JOURNAL and 2 MEMBERS."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "id": "R01-origin-session",
+      "refs": [
+        "apps/api/src/auth/guards.spec.ts",
+        "apps/api/src/auth/auth.http.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Wrong Origin and missing session denied; inactive accounts receive no session cookie."
+    },
+    {
+      "id": "R02-throttle",
+      "refs": [
+        "apps/api/src/auth/throttle.service.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Both keyed dimensions blocked independent of database row ordering."
+    },
+    {
+      "id": "R03-account-idor-replacement",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Foreign ID hidden, credential mutation conflicts under live lease, concurrent replacement fenced."
+    },
+    {
+      "id": "R04-sync-cursor",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Stateful lease/cursor synchronization regressions covered."
+    },
+    {
+      "id": "R05-migration",
+      "refs": [
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts"
+      ],
+      "status": "passed",
+      "case": "Identity, manifest, multi-campaign, image-limit, rerun, and reconciliation migration adversarial cases pass."
+    },
+    {
+      "id": "R06-browser-copy",
+      "refs": [
+        "artifacts/production-campaign-journal.png",
+        "artifacts/production-campaign-journal-mobile.png"
+      ],
+      "status": "failed",
+      "case": "Supplied desktop and mobile screenshots retain forbidden Campaign/Member copy."
+    }
+  ],
+  "artifactRefs": [],
+  "blockers": [
+    {
+      "id": "B01-browser-copy",
+      "detail": "The supplied visual evidence violates the required no Campaign/Member copy condition: desktop and mobile show CAMPAIGN JOURNAL and 2 MEMBERS. It is not source-hash-bound, and current clean source/tests conflict with it; fresh hash-bound browser automation is required to resolve the contradiction."
+    }
+  ],
+  "advisories": [
+    "No api-package-test-report or web-automation-transcript artifact bound to sha256:4c09db884ce0cf09b5c8a95879e1ccdf34266216bfc532077f17fdb6a411f924 was available. Existing screenshots were inspected as requested but cannot establish release conformance for the new archive."
+  ]
+}

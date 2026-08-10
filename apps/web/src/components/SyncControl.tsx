@@ -8,12 +8,12 @@ export interface SyncControlProps {
 }
 
 export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5AccountRef): string {
-  if (response.state === 'failed') return `failed · ${account.nickname} · ${response.message ?? 'Synchronization failed.'}`;
-  if (response.state === 'in_progress') return `in progress · ${account.nickname} · ${response.message ?? 'Synchronization is already in progress.'}`;
+  if (response.state === 'failed') return `동기화 실패 · ${account.nickname} · ${response.message ?? '동기화에 실패했습니다.'}`;
+  if (response.state === 'in_progress') return `동기화 진행 중 · ${account.nickname} · ${response.message ?? '이미 동기화가 진행 중입니다.'}`;
   const imported = response.importedCount ?? 0;
   const received = response.receivedCount ?? 0;
-  const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString() : 'time not reported';
-  return `completed · ${imported} imported / ${received} received · ${account.nickname} · ${syncedAt}`;
+  const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString('ko-KR') : '시간 정보 없음';
+  return `동기화 완료 · ${imported}건 반영 / ${received}건 수신 · ${account.nickname} · ${syncedAt}`;
 }
 
 export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {
@@ -41,7 +41,7 @@ export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) 
       showResult(formatSyncResult(response, account));
       if (response.state === 'completed') await onCompleted?.(response);
     } catch {
-      showResult('Synchronization failed. Try again.');
+      showResult('동기화에 실패했습니다. 다시 시도하세요.');
     } finally {
       setSyncing(false);
     }
@@ -51,9 +51,9 @@ export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) 
   return (
     <div className="sync-control">
       <button className="secondary-button" type="button" onClick={sync} disabled={unavailable || syncing}>
-        {syncing ? 'Syncing…' : 'Sync selected account'}
+        {syncing ? '동기화 중…' : 'MT5 동기화'}
       </button>
-      {unavailable ? <span className="muted">{account ? 'Inactive accounts cannot be synchronized.' : 'Select an MT5 account to synchronize.'}</span> : null}
+      {unavailable ? <span className="muted">{account ? '비활성 계정은 동기화할 수 없습니다.' : '동기화할 MT5 계정을 선택하세요.'}</span> : null}
       {result ? <span className="muted" role="status">{result}</span> : null}
     </div>
   );

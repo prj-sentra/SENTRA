@@ -1,0 +1,56 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:dea27e0b81b8be0d465b21a9b084d6f551b99b7269510eebf5b93c2f22c1244f",
+  "priorSourceHash": "sha256:9accb677517bc10bbb59bb72e227fbae7a52986fa3c70842e8810ec1e33e172a",
+  "status": "blocked",
+  "e2eStatus": "partial",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/shared build","result":"passed","detail":"Shared TypeScript build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api build","result":"passed","detail":"Prisma generation and Nest production build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck","result":"passed","detail":"API tsc --noEmit passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api test","result":"passed","detail":"17 suites, 96 tests, 0 snapshots passed."},
+    {"command":"Explicitly reset only sentra-ultragoal-pg plus its mounted data volume; MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public pnpm test:migration:secure-accounts-gallery","result":"passed","detail":"Fresh PostgreSQL 16 target at port 55434 was healthy and full populated migration matrix passed."},
+    {"command":"docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet","result":"passed","detail":"Production Compose config interpolation passed with required values."},
+    {"command":"Caddy validate and adapted exact-route assertion","result":"passed","detail":"Caddy returned Valid configuration; adapted configuration includes exact ^/api/mt5-accounts/[^/]+/sync$, X-Mt5-Sync-Token injection, and /api strip_path_prefix."}
+  ],
+  "contractCoverage": [
+    {"contract":"Shared/API build, generation, and typecheck","status":"covered","evidence":"All passed.","blocker":null},
+    {"contract":"Full registered API suite","status":"covered","evidence":"17 suites / 96 tests passed.","blocker":null},
+    {"contract":"Fresh populated migration matrix","status":"covered","evidence":"Fresh verifier passed populated success plus missing/mismatched manifest and canonical-collision fail-closed scenarios.","blocker":null},
+    {"contract":"Canonical rewrite","status":"covered-static-matrix","evidence":"Migration canonicalizes legacy Trade/Deal/Order/SyncStatus server fields to canonical account server; canonical collision is rejected before rewrite. Fresh matrix passed.","blocker":null},
+    {"contract":"Production Compose and Caddy trusted routing","status":"covered","evidence":"Compose config, Caddy validation, and exact adapted sync-route/token assertion passed.","blocker":null},
+    {"contract":"Atomic throttle admission","status":"failed","evidence":"throttle.service.ts increments two keys in a transaction then performs findMany block admission outside the transaction. The current test only mocks this sequencing and does not establish atomic admission under concurrency.","blocker":"Admission read is not in the mutation transaction; concurrent requests can observe an inconsistent state and the claimed atomic admission contract is not proved."},
+    {"contract":"Empty cursor propagation","status":"covered-stateful","evidence":"mt5-sync.service.ts forwards cursor whenever cursor !== undefined, including empty string; stateful sync test covers cursor advancement through empty batches.","blocker":"Stateful persistence is an in-memory Prisma-shaped fake, not PostgreSQL."}
+  ],
+  "surfaceEvidence": [
+    {"surface":"Canonical migration rewrite","status":"covered","evidence":"SQL uses canonical_mt5_server for identity creation and rewrites trades, deals, orders, and sync status; fresh populated matrix passed."},
+    {"surface":"Throttle admission","status":"failed","evidence":"assertAllowed calls $transaction(increment operations) and subsequently executes findMany outside that transaction; fail() is intentionally no-op after reservation.","blocker":"No atomic read-modify-admission operation or concurrent PostgreSQL test."},
+    {"surface":"Empty sync cursor","status":"stateful-covered","evidence":"sync request spreads cursor when cursor !== undefined, preserving empty strings; stateful test verifies empty deal batch cursor advancement."},
+    {"surface":"HTTP auth/cookie lifecycle","status":"live-adapter-covered","evidence":"auth.http.spec.ts starts loopback Nest adapter and fetches signup/login/logout cases."},
+    {"surface":"Origin/session/pending/HTTP IDOR","status":"partial","evidence":"Guard and owner-scope unit/service tests cover exact Origin, missing session, and scope behavior.","blocker":"No full production-module routed acceptance test."},
+    {"surface":"Stateful sync persistence","status":"stateful-covered","evidence":"Idempotent replay, duplicate claim, stale fenced rollback, projection, analysis preservation, and cursor behavior are exercised."},
+    {"surface":"Sync PostgreSQL concurrency","status":"not-covered","evidence":"No real PostgreSQL sync race suite exists.","blocker":"In-memory fake cannot prove transactional/constraint semantics."},
+    {"surface":"Gallery","status":"partial","evidence":"Ownership/reorder/filesystem redaction unit coverage exists.","blocker":"No upload endpoint/concurrent ten-image-cap integration."},
+    {"surface":"Caddy sync route","status":"covered","evidence":"Exact adapted route/token/prefix assertion passed."}
+  ],
+  "adversarialCases": [
+    {"case":"Canonical identity collision before rewrite","expected":"Fail closed","status":"passed","evidence":"Fresh migration verifier."},
+    {"case":"Populated legacy manifest missing/mismatch","expected":"Fail before destructive metadata drop","status":"passed","evidence":"Fresh migration verifier."},
+    {"case":"Canonical server field rewrite","expected":"All legacy links point to canonical account server","status":"passed","evidence":"Migration SQL inspected and populated matrix passed."},
+    {"case":"Atomic concurrent throttle admission","expected":"At most permitted password-work admissions","status":"blocked","evidence":"Admission read is outside increment transaction; current throttle test has no concurrent database execution."},
+    {"case":"Empty cursor forwarding and empty batch advancement","expected":"Empty string cursor forwarded and persisted","status":"passed-stateful","evidence":"mt5-sync.service.ts cursor !== undefined condition and mt5-sync.stateful.spec.ts."},
+    {"case":"HTTP signup enumeration/login cookie/logout/rejected account","expected":"Safe equivalent response/cookie lifecycle/no cookie on rejected states","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"Wrong Origin/missing session","expected":"Forbidden/Unauthorized","status":"passed-unit-only","evidence":"auth/guards.spec.ts"},
+    {"case":"Foreign scope/account lease/replacement/secret redaction","expected":"No disclosure, conflict where required, no credentials","status":"passed","evidence":"Owner scope and MT5 account service tests."},
+    {"case":"Sync replay/duplicate claim/stale commit","expected":"Idempotency/no upstream on duplicate/rollback stale results","status":"passed-stateful","evidence":"mt5-sync.stateful.spec.ts"},
+    {"case":"Concurrent gallery upload cap","expected":"At most ten durable images","status":"blocked","evidence":"No upload/concurrency integration case."}
+  ],
+  "blockers": [
+    {"id":"B1","severity":"blocking","finding":"Throttle admission is not atomic as claimed.","impact":"The increment operations occur in one transaction, but blockedUntil admission is read in a later findMany outside it. Concurrent requests lack a serializable read-modify-admission decision and no PostgreSQL concurrency test demonstrates the password-work budget."},
+    {"id":"B2","severity":"blocking","finding":"No full production-module HTTP authorization/IDOR acceptance suite.","impact":"Origin/session guard composition, pending authorization, and owner isolation remain unproved over production-routed requests."},
+    {"id":"B3","severity":"blocking","finding":"Sync stateful persistence uses an in-memory fake and gallery has no upload/cap integration.","impact":"Database race/constraint semantics for sync and live upload durability/cap behavior under contention are unproved."}
+  ],
+  "artifactRefs": [{"kind":"api-package-test-report","path":"artifacts/ultragoal-api-boundary-approved.json","sourceHash":"sha256:dea27e0b81b8be0d465b21a9b084d6f551b99b7269510eebf5b93c2f22c1244f"}]
+}

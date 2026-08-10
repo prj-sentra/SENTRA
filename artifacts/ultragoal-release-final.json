@@ -1,0 +1,236 @@
+{
+  "kind": "ultragoal-release-final",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:b3ef4528640e996c1a28c42b0442cef13a9f18a9c2f9247f754c3abd9d5622f0",
+  "status": "blocked",
+  "e2eStatus": "blocked",
+  "redTeamStatus": "blocked",
+  "snapshot": {
+    "method": "git archive --format=tar HEAD",
+    "path": "/tmp/g005-release-qa",
+    "archiveSha256": "b3ef4528640e996c1a28c42b0442cef13a9f18a9c2f9247f754c3abd9d5622f0",
+    "contamination": "No untracked working-tree files were extracted."
+  },
+  "e2eCommands": [
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- install --frozen-lockfile",
+      "status": "passed",
+      "note": "corepack was unavailable; used the repository-pinned pnpm version through npm exec. pnpm warned that dependency build scripts were ignored."
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:generate",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- build",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- test",
+      "status": "passed",
+      "result": "17 suites; 96 tests"
+    },
+    {
+      "command": "MIGRATION_VERIFY_DATABASE_URL=postgresql://g005:g005@127.0.0.1:55432/g005_release_qa npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api test:migration:secure-accounts-gallery",
+      "status": "failed",
+      "result": "column opened_at of relation trades does not exist"
+    },
+    {
+      "command": "DATABASE_URL=postgresql://g005:g005@127.0.0.1:55432/g005_release_deploy npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:migrate",
+      "status": "failed",
+      "result": "P3018 / PostgreSQL 42703: column mt5_account_login does not exist while applying 20260808190000_secure_accounts_gallery"
+    },
+    {
+      "command": "MT5_SYNC_TOKEN=release-qa-sync-token CADDY_SITE_ADDRESS=:8080 WEB_ORIGIN=http://localhost AUTH_THROTTLE_KEY=release-qa-throttle-key MT5_CREDENTIAL_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef MT5_BRIDGE_BASE_URL=http://bridge.invalid MT5_BRIDGE_TOKEN=release-qa-bridge-token docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet",
+      "status": "passed"
+    },
+    {
+      "command": "docker run --rm -e CADDY_SITE_ADDRESS=:8080 -e MT5_SYNC_TOKEN=release-qa-sync-token -v $PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile",
+      "status": "passed"
+    }
+  ],
+  "redTeamCommands": [
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- test",
+      "status": "passed",
+      "coverage": "Auth HTTP/guards/session/throttle, accounts encryption/IDOR/replacement, MT5 sync and stateful lease/cursor, trade owner scope, gallery image services."
+    },
+    {
+      "command": "source inspection of apps/api/src/{auth,mt5-accounts,trade-log} and infra/caddy/Caddyfile",
+      "status": "passed-with-findings"
+    },
+    {
+      "command": "case-insensitive source search for wiki, password, MT5_SYNC_TOKEN, MT5_BRIDGE_TOKEN and VITE_*TOKEN in apps/web",
+      "status": "failed",
+      "result": "apps/web/src/styles.css retains .wiki-* selectors."
+    }
+  ],
+  "contractCoverage": [
+    {
+      "id": "C01",
+      "refs": [
+        "apps/api/src/auth/auth.http.spec.ts",
+        "apps/api/src/auth/guards.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "HTTP cookie, logout revocation, pending/disabled rejection, exact Origin, and unauthenticated denial."
+    },
+    {
+      "id": "C02",
+      "refs": [
+        "apps/api/src/auth/throttle.service.spec.ts",
+        "apps/api/src/auth/password.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "HMAC-keyed IP/principal throttle and malformed-password-hash fail-closed behavior."
+    },
+    {
+      "id": "C03",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts",
+        "apps/api/src/mt5-accounts/credential-cipher.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Owner-scoped account access, encrypted write-only credentials, live-lease mutation block, and atomic replacement fence."
+    },
+    {
+      "id": "C04",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.service.spec.ts",
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts",
+        "infra/caddy/Caddyfile"
+      ],
+      "status": "passed",
+      "summary": "Trusted sync token route and sync lease/cursor state tests."
+    },
+    {
+      "id": "C05",
+      "refs": [
+        "apps/api/src/trade-log/trade-log.owner-scope.spec.ts",
+        "apps/api/src/trade-log/campaign-image.service.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Trade owner scope and campaign gallery service coverage."
+    },
+    {
+      "id": "C06",
+      "refs": [
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts",
+        "apps/api/prisma/migrations/20260808190000_secure_accounts_gallery/migration.sql"
+      ],
+      "status": "failed",
+      "summary": "Fresh populated migration verification and production migration cannot complete because prerequisite schema migrations are absent from the archive."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "id": "S01",
+      "refs": [
+        "apps/web/src/auth/AuthScreen.tsx",
+        "apps/web/src/components/AccountEditor.tsx"
+      ],
+      "status": "source-reviewed",
+      "summary": "Login/signup fields use password inputs; signup is enumeration-safe client-side; account credentials are cleared after submit."
+    },
+    {
+      "id": "S02",
+      "refs": [
+        "apps/web/src/App.tsx",
+        "apps/web/src/styles.css"
+      ],
+      "status": "blocked",
+      "summary": "Frontend build/typecheck pass, but forbidden terminology review found retained .wiki-* CSS selectors."
+    },
+    {
+      "id": "S03",
+      "refs": [
+        "artifacts/production-campaign-journal.png",
+        "artifacts/production-campaign-journal-mobile.png"
+      ],
+      "status": "leader-observed-not-source-bound",
+      "summary": "Leader reported authenticated representative journal views at 1440x1000 and 390x844. These pre-existing screenshots are not hash-bound to this archive and are supplemental only."
+    },
+    {
+      "id": "S04",
+      "refs": [
+        "infra/caddy/Caddyfile",
+        "docker-compose.prod.yml"
+      ],
+      "status": "passed",
+      "summary": "Production Compose resolves and Caddy validates; exact /api/mt5-accounts/<id>/sync matcher strips /api and injects X-MT5-Sync-Token."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "id": "R01",
+      "refs": [
+        "apps/api/src/auth/guards.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Wrong mutation Origin and absent session are denied."
+    },
+    {
+      "id": "R02",
+      "refs": [
+        "apps/api/src/auth/auth.http.spec.ts",
+        "apps/api/src/auth/auth.service.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Existing signup is enumeration-safe; disabled/pending login emits no cookie."
+    },
+    {
+      "id": "R03",
+      "refs": [
+        "apps/api/src/auth/throttle.service.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Throttle checks both IP and principal regardless of row order."
+    },
+    {
+      "id": "R04",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts"
+      ],
+      "status": "passed",
+      "case": "Foreign account is hidden; credential change during exact live lease is rejected; replacement conflict fences concurrent request."
+    },
+    {
+      "id": "R05",
+      "refs": [
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts"
+      ],
+      "status": "failed",
+      "case": "Fresh/populated migration matrix cannot reach its intended adversarial gallery reconciliation cases because the committed migration chain lacks columns it assumes."
+    }
+  ],
+  "artifactRefs": [],
+  "evidence": {
+    "build": "passed",
+    "typecheck": "passed",
+    "tests": "passed: 96 API tests in 17 suites",
+    "prismaGenerate": "passed",
+    "migration": "failed",
+    "compose": "passed configuration validation",
+    "caddy": "passed syntax validation",
+    "browser": "leader-supplied, supplemental and not hash-bound"
+  },
+  "blockers": [
+    {
+      "id": "B01",
+      "severity": "release-blocker",
+      "detail": "The fresh committed migration chain has only seven migrations. Applying 20260808190000_secure_accounts_gallery fails with PostgreSQL 42703 because trades.mt5_account_login (and other prerequisite MT5 schema) is absent. The populated migration harness independently fails earlier because trades.opened_at is absent."
+    },
+    {
+      "id": "B02",
+      "severity": "release-blocker",
+      "detail": "Forbidden terminology validation found obsolete .wiki-* selectors in apps/web/src/styles.css."
+    }
+  ],
+  "advisories": [
+    "No hash-bound api-package-test-report or web-automation-transcript artifact was available in the clean archive; prior workspace artifacts declare a different source hash and were not treated as release evidence."
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "sourceHash": "sha256:538338440cb49065326358c5302c4d85a508f94c56feeb22c66770a7817ebd6e",
+  "priorSourceHash": "sha256:4162018fbfca3c4b251ae159a0c5758a8207f0de1d842fa15ba8b37e813766e3",
+  "status": "blocked",
+  "e2eStatus": "blocked",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/shared build",
+      "result": "passed",
+      "detail": "TypeScript shared package build completed. The host lacks pnpm/corepack, so the repository-pinned pnpm version was invoked through npx."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck",
+      "result": "passed",
+      "detail": "API tsc --noEmit completed."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/api test",
+      "result": "passed",
+      "detail": "Jest: 11 suites, 74 tests, 0 snapshots; all passed."
+    },
+    {
+      "command": "docker rm -f sentra-ultragoal-pg; docker volume rm <dedicated-volume>; docker run --name sentra-ultragoal-pg -p 55434:5432 postgres:16-alpine",
+      "result": "passed",
+      "detail": "Only the dedicated sentra-ultragoal-pg container and its anonymous volume were reset; its PostgreSQL health check became healthy."
+    },
+    {
+      "command": "MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public npx --yes pnpm@10.26.0 --filter @trading-journal/api test:migration:secure-accounts-gallery",
+      "result": "passed",
+      "detail": "Fresh isolated PostgreSQL migration verifier reported secure accounts/gallery migration verification passed. The verifier rejects a non-empty database and statically requires fail-closed migration proof strings before applying ordered migrations and fixture SQL."
+    },
+    {
+      "command": "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet",
+      "result": "passed",
+      "detail": "Executed with CADDY_SITE_ADDRESS=https://qa.example.test, WEB_ORIGIN=https://qa.example.test, a 32+ character AUTH_THROTTLE_KEY, and a base64-size MT5_CREDENTIAL_ENCRYPTION_KEY."
+    },
+    {
+      "command": "CADDY_SITE_ADDRESS=https://qa.example.test MT5_SYNC_TOKEN=qa-sync-token docker run --rm ... caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile",
+      "result": "passed",
+      "detail": "Caddy adapted the configuration and returned Valid configuration."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 exec jest --config apps/api/jest.config.cjs --listTests",
+      "result": "passed",
+      "detail": "Enumerated 11 API Jest suites; no HTTP/Supertest test suite is registered."
+    }
+  ],
+  "contractCoverage": [
+    {
+      "contract": "Approved repair objective: registered MT5 module, auth/session/origin/throttle hardening, account/sync fencing, gallery constraints, shared contracts, production topology, and migration verification",
+      "status": "partial",
+      "evidence": "apps/api/src/app.module.ts imports Mt5AccountsModule; package build/typecheck/Jest, isolated migration verification, Compose config, and Caddy validation passed.",
+      "blocker": "The approved objective explicitly requires route/IDOR/race/PostgreSQL and full-history verification; the current Jest registration has no HTTP suite and no Mt5SyncService test suite."
+    },
+    {
+      "contract": "Migration fail-closed proof",
+      "status": "covered",
+      "evidence": "verify-secure-accounts-gallery-migration.ts requires nine fail-closed proof markers, rejects non-empty databases, transactionally applies migrations, and passed on a freshly reset dedicated PostgreSQL instance.",
+      "blocker": null
+    },
+    {
+      "contract": "Production trusted boundary configuration",
+      "status": "covered",
+      "evidence": "Production Compose interpolation and Caddy validation passed with CADDY_SITE_ADDRESS and required production secrets supplied.",
+      "blocker": null
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "surface": "Module route registration",
+      "method": "static inspection plus API compilation",
+      "result": "covered",
+      "evidence": "AppModule imports AuthModule, Mt5AccountsModule, and TradeLogModule; API typecheck passed."
+    },
+    {
+      "surface": "Pending/admin/session/Origin/throttle",
+      "method": "Jest and static inspection",
+      "result": "partial",
+      "evidence": "guards.spec.ts verifies exact mutation Origin and unauthenticated private-route denial; auth service/session code provides pending transitions, cookie sessions, invalidation, dummy password work, and atomic throttle SQL.",
+      "blocker": "No live HTTP invocation proves guard ordering, cookie issuance/revocation, pending endpoints, or throttle behavior through Nest routing."
+    },
+    {
+      "surface": "IDOR and selected scopes",
+      "method": "Jest",
+      "result": "covered at service boundary",
+      "evidence": "trade-log.owner-scope.spec.ts verifies owner default, manual scope, foreign account rejection, and malformed scope rejection."
+    },
+    {
+      "surface": "Credential redaction and account replacement lease race",
+      "method": "Jest",
+      "result": "covered at service boundary",
+      "evidence": "mt5-accounts.service.spec.ts verifies serialized result omission of credential data, foreign-account hiding, live-lease mutation rejection, and updateMany replacement fence conflict."
+    },
+    {
+      "surface": "Bridge identity mismatch, duplicate/stale sync fencing",
+      "method": "Jest and static inspection",
+      "result": "partial",
+      "evidence": "mt5-bridge.client.spec.ts rejects mismatched bridge identity; mt5-sync.service.ts statically fences live account credential tag and lease before upsert/delete.",
+      "blocker": "No Mt5SyncService Jest suite or isolated PostgreSQL concurrent scenario exercises duplicate facts, stale lease, or cursor persistence."
+    },
+    {
+      "surface": "Gallery reorder/cap/path",
+      "method": "Jest",
+      "result": "partial",
+      "evidence": "campaign-image.service.spec.ts checks unique/complete order rejection and one-statement locked reorder; service enforces MAX_IMAGES=10 and moves temporary image to final path.",
+      "blocker": "No real filesystem/HTTP scenario proves successful persisted image retrieval and ten-image cap under concurrent upload."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "case": "Foreign selected account scope",
+      "expected": "Forbidden without trade query",
+      "result": "passed",
+      "evidence": "trade-log.owner-scope.spec.ts"
+    },
+    {
+      "case": "Malformed manual scope with account id",
+      "expected": "BadRequest without trade query",
+      "result": "passed",
+      "evidence": "trade-log.owner-scope.spec.ts"
+    },
+    {
+      "case": "Wrong Origin on mutation",
+      "expected": "Forbidden",
+      "result": "passed",
+      "evidence": "auth/guards.spec.ts"
+    },
+    {
+      "case": "Unauthenticated private route",
+      "expected": "Unauthorized",
+      "result": "passed",
+      "evidence": "auth/guards.spec.ts"
+    },
+    {
+      "case": "Foreign MT5 account update",
+      "expected": "NotFound and no existence disclosure",
+      "result": "passed",
+      "evidence": "mt5-accounts.service.spec.ts"
+    },
+    {
+      "case": "Credential replacement during live exact lease",
+      "expected": "Conflict and no update",
+      "result": "passed",
+      "evidence": "mt5-accounts.service.spec.ts"
+    },
+    {
+      "case": "Concurrent replacement fence failure",
+      "expected": "Conflict when updateMany count is zero",
+      "result": "passed",
+      "evidence": "mt5-accounts.service.spec.ts"
+    },
+    {
+      "case": "Secret serialization",
+      "expected": "No credential field in response JSON",
+      "result": "passed",
+      "evidence": "mt5-accounts.service.spec.ts"
+    },
+    {
+      "case": "Bridge response identity mismatch",
+      "expected": "BadGatewayException",
+      "result": "passed",
+      "evidence": "mt5-bridge.client.spec.ts"
+    },
+    {
+      "case": "Duplicate/stale/mismatch sync persistence",
+      "expected": "No stale or duplicate writes; exact identity only",
+      "result": "blocked",
+      "evidence": "Only bridge mismatch is tested. No Mt5SyncService suite or live PostgreSQL concurrency test is registered."
+    },
+    {
+      "case": "Duplicate/empty gallery reorder",
+      "expected": "BadRequest",
+      "result": "passed",
+      "evidence": "campaign-image.service.spec.ts"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "B1",
+      "severity": "blocking",
+      "finding": "No HTTP-level API test harness or live Nest API invocation is present.",
+      "impact": "The requested real API surface verification cannot establish route registration, pending/session cookie behavior, Origin ordering, throttling, or HTTP IDOR behavior end-to-end.",
+      "attempted": "Enumerated Jest tests and ran the complete registered API suite; all 11 are direct unit/service/controller tests."
+    },
+    {
+      "id": "B2",
+      "severity": "blocking",
+      "finding": "Duplicate/stale sync and lease persistence have no Mt5SyncService test suite or real PostgreSQL race scenario.",
+      "impact": "The approved plan's full-history/race/PostgreSQL verification requirement is not met; static fences and a bridge-client mismatch unit test are insufficient proof.",
+      "attempted": "Ran full API Jest and inspected mt5-sync.service.ts plus registered test list."
+    },
+    {
+      "id": "B3",
+      "severity": "blocking",
+      "finding": "Gallery cap/path behavior is not exercised through filesystem or HTTP integration.",
+      "impact": "The service-level reorder assertions do not prove persisted retrieval/path cleanup or cap behavior under real upload concurrency.",
+      "attempted": "Ran campaign image unit tests within the full Jest suite and inspected the image service."
+    }
+  ],
+  "artifactRefs": [
+    {
+      "kind": "api-package-test-report",
+      "path": "artifacts/ultragoal-api-boundary-gen2.json",
+      "sourceHash": "sha256:538338440cb49065326358c5302c4d85a508f94c56feeb22c66770a7817ebd6e"
+    }
+  ]
+}

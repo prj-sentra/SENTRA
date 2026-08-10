@@ -10,8 +10,6 @@ import type {
   TradeLogAssistantActionsResponse,
   TradeRecord,
   TradeStatsResponse,
-  UpdateTradeExecutionNoteRequest,
-  UpdateTradeRequest,
 } from '@trading-journal/shared';
 import { CurrentUser, type AuthenticatedUser } from '../auth/current-user.decorator';
 import { CampaignImageService, type CampaignImageRecord } from './campaign-image.service';
@@ -36,45 +34,30 @@ export class TradeLogController {
   campaigns(
     @CurrentUser() user: AuthenticatedUser,
     @Query('date') date?: string,
-    @Query('scope') scope?: 'all' | 'manual' | 'account',
     @Query('accountId') accountId?: string,
   ): Promise<TradeCampaignDateResponse> {
-    return this.tradeLogService.listCampaigns(user.id, date, { scope, accountId });
+    return this.tradeLogService.listCampaigns(user.id, date, accountId);
   }
 
   @Get('stats')
   stats(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('scope') scope?: 'all' | 'manual' | 'account',
     @Query('accountId') accountId?: string,
   ): Promise<TradeStatsResponse> {
-    return this.tradeLogService.getStats(user.id, { scope, accountId });
+    return this.tradeLogService.getStats(user.id, accountId);
   }
 
   @Get('trades/:id')
-  trade(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string): Promise<TradeRecord> {
-    return this.tradeLogService.getTrade(user.id, id);
+  trade(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Query('accountId') accountId?: string): Promise<TradeRecord> {
+    return this.tradeLogService.getTrade(user.id, accountId, id);
   }
 
-  @Patch('trades/:id')
-  updateTrade(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTrade(user.id, id, request);
-  }
 
   @Patch('trades/:id/analysis')
-  patchAnalysis(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: PatchTradeAnalysisRequest): Promise<TradeRecord> {
-    return this.tradeLogService.patchTradeAnalysis(user.id, id, request);
+  patchAnalysis(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Query('accountId') accountId: string | undefined, @Body() request: PatchTradeAnalysisRequest): Promise<TradeRecord> {
+    return this.tradeLogService.patchTradeAnalysis(user.id, accountId, id, request);
   }
 
-  @Patch('trades/:id/entry/note')
-  updateEntryNote(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTradeEntryNote(user.id, id, request);
-  }
-
-  @Patch('trades/:id/exit/note')
-  updateExitNote(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
-    return this.tradeLogService.updateTradeExitNote(user.id, id, request);
-  }
 
   @Post('campaigns/relink')
   relinkCampaign(@CurrentUser() user: AuthenticatedUser, @Body() request: RelinkTradeCampaignRequest): Promise<void> {
@@ -86,30 +69,29 @@ export class TradeLogController {
     return this.tradeLogService.resolveCampaignConflict(user.id, id, request);
   }
   @Get('campaigns/:campaignId/images')
-  images(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string): Promise<CampaignImageRecord[]> {
-    return this.campaignImageService.list(user.id, campaignId);
+  images(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Query('accountId') accountId?: string): Promise<CampaignImageRecord[]> {
+    return this.campaignImageService.list(user.id, accountId, campaignId);
   }
-
   @Post('campaigns/:campaignId/images')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
-  uploadImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @UploadedFile() file?: Express.Multer.File): Promise<CampaignImageRecord> {
-    return this.campaignImageService.upload(user.id, campaignId, file);
+  uploadImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Query('accountId') accountId: string | undefined, @UploadedFile() file?: Express.Multer.File, @Body('uploadId') uploadId?: string): Promise<CampaignImageRecord> {
+    return this.campaignImageService.upload(user.id, accountId, campaignId, uploadId, file);
   }
 
   @Put('campaigns/:campaignId/images/order')
-  reorderImages(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Body() request: { imageIds: string[] }): Promise<CampaignImageRecord[]> {
-    return this.campaignImageService.reorder(user.id, campaignId, request?.imageIds);
+  reorderImages(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Query('accountId') accountId: string | undefined, @Body() request: { imageIds: string[] }): Promise<CampaignImageRecord[]> {
+    return this.campaignImageService.reorder(user.id, accountId, campaignId, request?.imageIds);
   }
 
   @Get('campaigns/:campaignId/images/:imageId')
-  async image(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string, @Res({ passthrough: true }) response: Response): Promise<StreamableFile> {
-    const image = await this.campaignImageService.get(user.id, campaignId, imageId);
+  async image(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string, @Query('accountId') accountId: string | undefined, @Res({ passthrough: true }) response: Response): Promise<StreamableFile> {
+    const image = await this.campaignImageService.get(user.id, accountId, campaignId, imageId);
     response.set({ 'Content-Type': image.record.mimeType, 'Content-Length': image.buffer.byteLength.toString(), 'Cache-Control': 'private, max-age=31536000, immutable' });
     return new StreamableFile(image.buffer);
   }
 
   @Delete('campaigns/:campaignId/images/:imageId')
-  removeImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string): Promise<void> {
-    return this.campaignImageService.remove(user.id, campaignId, imageId);
+  removeImage(@CurrentUser() user: AuthenticatedUser, @Param('campaignId') campaignId: string, @Param('imageId') imageId: string, @Query('accountId') accountId: string | undefined): Promise<void> {
+    return this.campaignImageService.remove(user.id, accountId, campaignId, imageId);
   }
 }

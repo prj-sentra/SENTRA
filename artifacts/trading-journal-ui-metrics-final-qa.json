@@ -1,0 +1,18 @@
+{
+  "kind": "api-package-test-report",
+  "status": "passed",
+  "generatedAt": "2026-08-10T03:45:00Z",
+  "commands": [
+    {"command":"pnpm typecheck","result":"passed"},
+    {"command":"pnpm test","result":"API 140 passed, 9 skipped; web 23 passed"},
+    {"command":"pnpm build","result":"passed"},
+    {"command":"trade-initial-plan-metric-backfill.int.spec.ts with disposable PostgreSQL","result":"3 passed"},
+    {"command":"test:migration:initial-plan-metric-pair with disposable PostgreSQL","result":"passed"}
+  ],
+  "contracts": [
+    {"id":"atomic-metrics","result":"passed","evidence":"Stateful sync, serializer, migration, and PostgreSQL lifecycle tests"},
+    {"id":"journal-ui","result":"passed","evidence":"23 rendered component tests and production build"},
+    {"id":"recovery","result":"passed","evidence":"Plan-only recovery, conflict rollback, one-run convergence, and idempotency tests"}
+  ],
+  "blockers": []
+}

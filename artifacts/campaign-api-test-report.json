@@ -1,0 +1,43 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:65de21845695d1a85ec6cd32dd087852fb188c3834d9d43dfa6e2e6ff2520dc6",
+  "observedAt": "2026-08-08T15:03:58.477376+00:00",
+  "environment": "isolated production-database clone campaign_qa",
+  "results": [
+    {
+      "request": "GET /trade-log/campaigns",
+      "status": 200,
+      "date": "2026-08-08",
+      "previousDate": "2026-08-07",
+      "campaignCount": 1
+    },
+    {
+      "request": "GET /trade-log/campaigns?date=2026-08-07",
+      "status": 200,
+      "date": "2026-08-07",
+      "nextDate": "2026-08-08",
+      "campaignCount": 1
+    },
+    {
+      "request": "POST /trade-log/trades",
+      "status": 404
+    },
+    {
+      "request": "POST /trade-log/trades/not-a-trade/entries",
+      "status": 404
+    },
+    {
+      "request": "POST /trade-log/trades/not-a-trade/exits",
+      "status": 404
+    }
+  ],
+  "verification": [
+    "API Jest: 81 passed",
+    "Web Vitest: 7 passed",
+    "Workspace typecheck passed",
+    "Workspace build passed",
+    "PostgreSQL migration/MT5 harness passed",
+    "Playwright campaign journal automation passed"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:6fe3d8746e3871d6e638f4c96d56ebbf53d31dc98ed65e5cae0508ebf5fd9076",
+  "priorSourceHash": "sha256:f252332a4a1bb568f3807c627a83ed803849179349ea4f56c9f9e7dc6d3cc3f4",
+  "status": "blocked",
+  "e2eStatus": "blocked",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/shared build","result":"passed"},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api prisma:generate","result":"passed","detail":"Prisma Client v6.19.0 generated."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck","result":"passed"},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api test","result":"passed","detail":"14 suites, 85 tests, 0 snapshots."},
+    {"command":"Explicitly reset only sentra-ultragoal-pg plus its mounted volume; MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public pnpm test:migration:secure-accounts-gallery","result":"passed","detail":"Fresh PostgreSQL 16 target became healthy; populated legacy-image migration verifier passed, including missing and mismatched manifest fail-closed branches before source metadata drop."},
+    {"command":"docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet","result":"passed","detail":"Required production values supplied."},
+    {"command":"Caddy validate and caddy adapt assertion","result":"passed","detail":"Validation returned Valid configuration; adapted JSON contained exact ^/api/mt5-accounts/[^/]+/sync$, X-Mt5-Sync-Token injection, and strip_path_prefix."}
+  ],
+  "contractCoverage": [
+    {"contract":"Build/type/package test","status":"covered","evidence":"Shared build, Prisma generate, API typecheck, and all registered 14-suite tests passed.","blocker":null},
+    {"contract":"Populated migration manifest fail-closed","status":"covered","evidence":"Verifier seeds a populated legacy image, asserts missing manifest failure without source-table loss, asserts mismatched manifest failure, then completes validated migration.","blocker":null},
+    {"contract":"Bootstrap/canonical contracts","status":"covered-unit-static","evidence":"Bootstrap tests cover disabled sentinel activation and absent sentinel failure; canonical server uses NFKC/whitespace/lowercase in API and migration, and verifier fixture rejects noncanonical server.","blocker":null},
+    {"contract":"Production trusted route","status":"covered","evidence":"Compose config and exact Caddy-adapt route/token assertion passed.","blocker":null},
+    {"contract":"Live HTTP contract","status":"not-covered","evidence":"No registered HTTP/Supertest/Nest e2e suite or isolated live API probe was found.","blocker":"Route/session/cookie/Origin/IDOR behavior remains unproven through actual HTTP."}
+  ],
+  "surfaceEvidence": [
+    {"surface":"Bootstrap","status":"unit-covered","evidence":"admin-users.service.spec.ts verifies atomic sentinel bootstrap and fail-closed missing sentinel."},
+    {"surface":"Canonical identity","status":"covered-unit-static","evidence":"Account validation and SQL function normalize NFKC, whitespace, and lowercase; fixture rejects noncanonical account server."},
+    {"surface":"Manifest/migration","status":"covered","evidence":"Fresh populated migration verifier demonstrates missing/mismatched manifest failure and successful reconciliation."},
+    {"surface":"Module/Caddy sync route","status":"covered","evidence":"API builds and adapted Caddy exact-route assertion passed."},
+    {"surface":"HTTP/IDOR/Origin/cookie/pending","status":"partial","evidence":"Service/guard unit coverage and inspection only.","blocker":"No live HTTP invocation."},
+    {"surface":"Account/lease/redaction","status":"unit-covered","evidence":"Account service tests cover foreign hiding, live lease, replacement fence, and redaction."},
+    {"surface":"Sync","status":"partial","evidence":"Bridge mismatch and Seoul date boundary tests pass; service statically fences account credentials/lease.","blocker":"No PostgreSQL duplicate/stale/cursor persistence race test."},
+    {"surface":"Gallery","status":"partial","evidence":"Ownership/reorder/filesystem read/redaction unit coverage passes.","blocker":"No upload endpoint/concurrent cap integration case."}
+  ],
+  "adversarialCases": [
+    {"case":"Missing bootstrap sentinel","status":"passed","evidence":"admin-users.service.spec.ts"},
+    {"case":"Canonical collision/noncanonical server","status":"passed","evidence":"migration verifier static proof and populated fixture rejection."},
+    {"case":"Missing and mismatched legacy file manifests","status":"passed","evidence":"verify-secure-accounts-gallery-migration.ts fresh populated run."},
+    {"case":"Foreign selected scope/malformed scope","status":"passed","evidence":"trade-log.owner-scope.spec.ts"},
+    {"case":"Wrong Origin/missing session","status":"passed","evidence":"auth/guards.spec.ts"},
+    {"case":"Foreign account/live lease/replacement fence/secret redaction","status":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Bridge identity mismatch/Seoul sync date boundary","status":"passed","evidence":"mt5-bridge.client.spec.ts and mt5-sync.service.spec.ts"},
+    {"case":"Duplicate/stale sync persistence","status":"blocked","evidence":"No full persistence or PostgreSQL race test."},
+    {"case":"Foreign gallery/reorder/path redaction","status":"passed","evidence":"campaign-image.service.spec.ts"},
+    {"case":"Concurrent gallery upload cap","status":"blocked","evidence":"No live endpoint/concurrency scenario."}
+  ],
+  "blockers": [
+    {"id":"B1","severity":"blocking","finding":"No live Nest HTTP test/probe exists.","impact":"Cannot establish route availability, HTTP IDOR, Origin/CORS guard ordering, cookie issuance/revocation, or pending authorization on a running API."},
+    {"id":"B2","severity":"blocking","finding":"No MT5 sync persistence/race suite exists.","impact":"Duplicate/stale fact handling, cursor advancement, and lease fencing have no isolated PostgreSQL concurrency proof."},
+    {"id":"B3","severity":"blocking","finding":"No gallery upload/concurrent-cap integration suite exists.","impact":"Live upload durability and ten-image cap behavior under contention remain unproved."}
+  ],
+  "artifactRefs": [{"kind":"api-package-test-report","path":"artifacts/ultragoal-api-boundary-gen5.json","sourceHash":"sha256:6fe3d8746e3871d6e638f4c96d56ebbf53d31dc98ed65e5cae0508ebf5fd9076"}]
+}

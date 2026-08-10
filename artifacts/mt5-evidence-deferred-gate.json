@@ -1,0 +1,12 @@
+{
+  "deferredToBatch": {
+    "ranLanes": ["targetedVerification"],
+    "targetedVerification": {
+      "status": "passed",
+      "commands": [
+        "python3 stdlib HTMLParser + Decimal validation over /home/hoya/mt5-history.html"
+      ],
+      "evidence": "Parsed 169 deal-ledger rows from the UTF-16 MT5 report. Every displayed running balance equals the prior balance plus cost, commission, swap, and profit/balance delta; zero mismatches. The report binds account 391597374, XMGlobal-MT5 14, USD Hedge, initial balance event 395.19, 11 balance adjustments, and final checkpoint 1000.00. Receipt: artifacts/mt5-entry-balance-evidence-validation.json. Remaining timezone/enum/live-checkpoint facts are explicitly identified for runtime validation rather than fabricated."
+    }
+  }
+}

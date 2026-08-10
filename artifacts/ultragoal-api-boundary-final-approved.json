@@ -1,0 +1,143 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:dea27e0b81b8be0d465b21a9b084d6f551b99b7269510eebf5b93c2f22c1244f",
+  "status": "passed",
+  "e2eStatus": "passed",
+  "redTeamStatus": "passed",
+  "observedAt": "2026-08-08",
+  "evidence": [
+    {
+      "command": "git rev-parse HEAD",
+      "result": "passed",
+      "detail": "HEAD is bbe89d51b3981ad25b633f944341ea69ddce481e, the Architect-reviewed commit bound to the required source hash."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/shared build",
+      "result": "passed",
+      "detail": "Shared TypeScript build passed."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/api prisma:generate",
+      "result": "passed",
+      "detail": "Prisma Client 6.19.0 generated from the API schema."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck",
+      "result": "passed",
+      "detail": "API tsc --noEmit passed."
+    },
+    {
+      "command": "npx --yes pnpm@10.26.0 --filter @trading-journal/api test",
+      "result": "passed",
+      "detail": "17 Jest suites and 96 tests passed."
+    },
+    {
+      "command": "Recreated isolated sentra-ultragoal-pg and its sole anonymous data volume; MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public npx --yes pnpm@10.26.0 --filter @trading-journal/api test:migration:secure-accounts-gallery",
+      "result": "passed",
+      "detail": "Fresh PostgreSQL 16 database passed the full populated secure-accounts/gallery migration verifier."
+    },
+    {
+      "command": "Production Compose config plus Docker Caddy validate/adapt exact-route assertion",
+      "result": "passed",
+      "detail": "Compose interpolation succeeded with production-required values; Caddy returned Valid configuration and adapted output contained ^/api/mt5-accounts/[^/]+/sync$, X-Mt5-Sync-Token, and strip_path_prefix."
+    }
+  ],
+  "contractCoverage": [
+    {
+      "contract": "G001 canonical legacy account identity migration",
+      "status": "passed",
+      "evidence": "Fresh populated PostgreSQL verifier passed, including canonical identity and fail-closed migration scenarios."
+    },
+    {
+      "contract": "G002 throttle reserves IP and principal dimensions before password work",
+      "status": "passed",
+      "evidence": "Source inspection confirms assertAllowed transactionally upserts both HMAC dimensions before AuthService reaches verify/hash; post-reservation blocked state rejects with 429 and fail performs no second mutation. Full API suite passed."
+    },
+    {
+      "contract": "G003 opaque empty cursor persistence and forwarding",
+      "status": "passed",
+      "evidence": "Source uses cursor !== undefined and the passed stateful sync suite covers empty-string cursor persistence, empty batch advancement, and next-request forwarding."
+    },
+    {
+      "contract": "Production trusted sync proxy route",
+      "status": "passed",
+      "evidence": "Production Compose and adapted Caddy configuration validate the exact sync path, trusted token header injection, and API prefix stripping."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "surface": "Migration/persistence",
+      "status": "passed",
+      "evidence": "Fresh real PostgreSQL verifier completed successfully."
+    },
+    {
+      "surface": "Authentication admission and password-work boundary",
+      "status": "passed",
+      "evidence": "Both dimensions are reserved in one transaction before AuthService lookup and scrypt verification; a request whose reservation reaches the limit observes blockedUntil and cannot enter scrypt."
+    },
+    {
+      "surface": "Stateful MT5 cursor boundary",
+      "status": "passed",
+      "evidence": "Passed stateful tests cover empty opaque cursor propagation and persisted advancement."
+    },
+    {
+      "surface": "Production Caddy boundary",
+      "status": "passed",
+      "evidence": "Validated and adapted exact route configuration."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "case": "Canonical identity collision and manifest failure before destructive migration work",
+      "expected": "Fail closed",
+      "status": "passed",
+      "evidence": "Fresh migration verifier."
+    },
+    {
+      "case": "Near-limit concurrent throttle reservations",
+      "expected": "No request that reaches a blocked reservation enters scrypt",
+      "status": "passed",
+      "evidence": "Transactional dual upserts precede the blockedUntil read, and AuthService invokes assertAllowed before password verification or hashing; conservative reservations may reject near-boundary requests."
+    },
+    {
+      "case": "Empty opaque sync cursor",
+      "expected": "Empty string remains present rather than being omitted",
+      "status": "passed",
+      "evidence": "cursor !== undefined implementation and passed mt5-sync.stateful.spec.ts coverage."
+    },
+    {
+      "case": "Trusted proxy path overmatching",
+      "expected": "Only exact account sync route receives sync token injection",
+      "status": "passed",
+      "evidence": "Adapted Caddy assertion requires anchored ^/api/mt5-accounts/[^/]+/sync$ route."
+    }
+  ],
+  "blockers": [],
+  "advisories": [
+    {
+      "id": "G005-1",
+      "severity": "advisory",
+      "finding": "A full monorepo pnpm build currently fails in apps/web because its shared imports expect TradeChartImage and chartImage fields absent from packages/shared.",
+      "impact": "This is outside the requested shared/API G001-G003 command set and does not invalidate their passing API/security/persistence contracts; G005 owns integrated release fidelity."
+    },
+    {
+      "id": "G005-2",
+      "severity": "advisory",
+      "finding": "No additional full AppModule HTTP, real-PostgreSQL sync-concurrency, or filesystem-gallery-cap contention expansion was run.",
+      "impact": "Architect CLEAR/APPROVE identifies no current delta defect; retain this broader production-equivalent fidelity work for G005."
+    }
+  ],
+  "artifactRefs": [
+    {
+      "kind": "api-package-test-report",
+      "path": "artifacts/ultragoal-api-boundary-final-approved.json",
+      "sourceHash": "sha256:dea27e0b81b8be0d465b21a9b084d6f551b99b7269510eebf5b93c2f22c1244f"
+    },
+    {
+      "kind": "architect-final-review",
+      "path": "agent://104-ApiArchitectFinal",
+      "sourceHash": "sha256:dea27e0b81b8be0d465b21a9b084d6f551b99b7269510eebf5b93c2f22c1244f"
+    }
+  ]
+}

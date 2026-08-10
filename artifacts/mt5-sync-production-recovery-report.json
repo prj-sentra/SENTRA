@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "api-production-recovery-report",
+  "recordedAt": "2026-08-09T19:04:25.264Z",
+  "sourceHash": "sha256:99f35af8aad99b3f1bfd77256f1e0c9322ea133e0b1ea99ad8600c6fe60aa89c",
+  "backup": {
+    "format": "pg_dump custom",
+    "sha256": "5077df3e265810af7d317f765c67843cb7c7d84de0035f6b01da83f6773eb668",
+    "restoreDatabase": "trading_journal_recovery_verify",
+    "restoreVerified": true,
+    "restoredCounts": { "trades": 78, "campaigns": 78, "memberships": 78, "analyses": 78 }
+  },
+  "recovery": {
+    "incidentStart": "2026-08-09T17:37:19.000Z",
+    "incidentEnd": "2026-08-09T17:37:21.000Z",
+    "reviewedCandidateCount": 39,
+    "manifestSha256": "1c273b50211e8195fadce23b95a58f13eeb92937ca1658214ab134c840ec3371",
+    "deletedCount": 39,
+    "exactDeleteReturningMatched": true,
+    "note": "The production cleanup used the first fail-closed exact-ID manifest revision. Subsequent source hardening added broader protected snapshots and was validated independently against the restored database."
+  },
+  "postflight": {
+    "trades": 78,
+    "campaigns": 39,
+    "memberships": 78,
+    "analyses": 78,
+    "images": 0,
+    "emptyCampaigns": 0
+  },
+  "deployment": {
+    "apiImage": "sha256:a86a146e4787817a076cd0967e0e6e67cb1cf2dd85aaf573740264183765d732",
+    "health": "healthy"
+  },
+  "controlledReplays": [
+    { "state": "completed", "receivedCount": 0, "importedCount": 0, "kind": "unchanged-cursor", "syncedAt": "2026-08-09T19:04:25.183Z", "emptyCampaignsAfter": 0 },
+    { "state": "completed", "receivedCount": 0, "importedCount": 0, "kind": "unchanged-cursor-repeat", "syncedAt": "2026-08-09T19:04:25.264Z", "emptyCampaignsAfter": 0 }
+  ],
+  "verification": {
+    "apiSuites": 20,
+    "apiTests": 133,
+    "typecheck": "passed",
+    "build": "passed",
+    "bridgeTests": 6,
+    "publicRaceCases": 4,
+    "disposableRecoveryApply": "passed"
+  },
+  "limitations": [
+    "No new MT5 history was available after deployment, so production changed-history replay could not be triggered without editing the durable cursor. The cursor was not modified. Changed-history behavior is covered by PostgreSQL-backed service integration tests."
+  ]
+}

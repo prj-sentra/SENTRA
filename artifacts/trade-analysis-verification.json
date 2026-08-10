@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "api-package-test-report",
+  "contract": "Wiki removal and versioned TradeAnalysis redesign",
+  "sourceHash": "sha256:77d349ac4ba96b551e0e2cb8b03c3a1ce4e1675357ac2ac247aedb9fdf32783f",
+  "sourceHashScope": "SHA-256 manifest over 34 changed product/config/runbook/test files, sorted by path; excludes .gjc workflow state, evidence artifacts, and unrelated poc files",
+  "commands": [
+    "npm exec --yes pnpm@10.26.0 -- typecheck",
+    "npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api test",
+    "npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/web test",
+    "TRADE_ANALYSIS_MIGRATION_TEST_ADMIN_URL=postgresql://<redacted>@localhost:5432/postgres npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api test:migration:trade-analysis",
+    "npm exec --yes pnpm@10.26.0 -- build",
+    "docker compose config --quiet",
+    "git diff --check"
+  ],
+  "results": {
+    "typecheck": "passed",
+    "apiTests": "5 suites, 62 tests passed",
+    "webTests": "1 file, 4 tests passed",
+    "postgresMigrationHarness": "passed against live PostgreSQL",
+    "build": "shared, API, and web passed",
+    "composeConfig": "passed",
+    "diffCheck": "passed",
+    "webAutomation": "live isolated API/UI rendered API ONLINE with 2 trades and no 401; browser-context mutation proved metadata/analysis save-reload, stale-token 409, chart lifecycle, retired API 404s, and /wiki canonicalization; the manual execution editor created and corrected an entry, created an exit, and reloaded retained values",
+    "mt5Projection": "real PostgreSQL-backed sync harness covers concurrent first sync, lossless identifiers, multi-fill weighted projection, order TP/SL, monotonic cursor, analysis preservation, and pre-write malformed-envelope rejection",
+    "migrationRetention": "real PostgreSQL harness proves exact Trade, entry, exit, chart, MT5 deal/order values survive; schema version/defaults and full legacy removal are checked; concurrent root-link/delete and reparent races are exercised",
+    "optimisticConcurrency": "two concurrent PATCH waiters and authoritative 409 reload behavior are covered",
+    "sourceBoundVerification": "typecheck, API/web tests, live PostgreSQL migration/MT5/concurrency harness, build, Compose config, and diff check rerun against this exact source hash"
+  },
+  "artifacts": [
+    "artifacts/trade-analysis-ui.png",
+    "artifacts/trade-analysis-ui-automation.json",
+    "artifacts/trade-analysis-source-manifest.json"
+  ]
+}

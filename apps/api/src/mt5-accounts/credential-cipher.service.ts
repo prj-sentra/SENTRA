@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 export interface CredentialEnvelope {
@@ -13,7 +13,11 @@ export class CredentialCipherService {
   private static readonly VERSION = 1;
   private readonly key: Buffer;
 
-  constructor(keyValue = process.env.MT5_CREDENTIAL_ENCRYPTION_KEY) {
+  constructor(
+    @Optional()
+    @Inject('MT5_CREDENTIAL_ENCRYPTION_KEY')
+    keyValue = process.env.MT5_CREDENTIAL_ENCRYPTION_KEY,
+  ) {
     if (!keyValue || !/^[A-Za-z0-9+/]{43}=$/.test(keyValue)) {
       throw new Error('MT5_CREDENTIAL_ENCRYPTION_KEY must be a base64-encoded 32-byte key');
     }

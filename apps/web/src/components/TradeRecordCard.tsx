@@ -1,36 +1,55 @@
 import { useState } from 'react';
-import type { PatchTradeAnalysisRequest, TradeCampaign, UpdateTradeRequest } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { TradeDetail } from './TradeDetail';
 import { TradeImageGallery } from './TradeImageGallery';
 
 export interface TradeRecordCardProps {
   campaign: TradeCampaign;
   imageUrl: (campaignId: string, imageId: string) => string;
-  onUpdateTrade: (tradeId: string, patch: UpdateTradeRequest) => Promise<void>;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
-  onUpdateExecutionNote: (tradeId: string, kind: 'entry' | 'exit', note: string) => Promise<void>;
-  onUploadImage: (campaignId: string, file: File) => Promise<void>;
+  onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
   onReorderImages: (campaignId: string, imageIds: string[]) => Promise<void>;
   onDeleteImage: (campaignId: string, imageId: string) => Promise<void>;
 }
-const metric = (value?: number, suffix = '') => value === undefined ? '—' : `${value.toLocaleString()}${suffix}`;
-const time = (value?: string) => value ? new Date(value).toLocaleString() : '—';
+
+const metric = (value?: number, suffix = '') => value === undefined ? '—' : `${value.toLocaleString('ko-KR')}${suffix}`;
+const time = (value?: string) => value ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—';
+const sideLabel = (side: string) => side === 'long' ? '매수' : '매도';
 
 export function TradeRecordCard(props: TradeRecordCardProps) {
   const { campaign } = props;
   const [expanded, setExpanded] = useState(false);
   const firstImage = [...campaign.images].sort((a, b) => a.position - b.position)[0];
+  const points = campaign.quantityLots === 0 ? undefined : campaign.realizedPnl / campaign.quantityLots;
+  const postSeed = campaign.seedBalance === undefined ? undefined : campaign.seedBalance + campaign.realizedPnl;
+  const regret = campaign.regret?.trim();
+  const regretPreview = regret || '작성 필요';
   return <article className="trade-record-card">
     <div className="trade-card-summary">
-      <div className="trade-cover">{firstImage ? <img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} representative trade chart`} /> : <span>No chart image</span>}</div>
+      <div className="trade-cover">{firstImage ? <img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /> : <span>차트 이미지 없음</span>}</div>
       <div className="trade-summary-body">
-        <header><div><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{campaign.side}</span><span>{campaign.status}</span></div><strong>{campaign.members.length} TRADES</strong></header>
+        <header><div><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span></div><strong>{campaign.members.length}건 분할 매매</strong></header>
         <p className="trade-time">{time(campaign.openedAt)} → {time(campaign.closedAt)}</p>
-        <div className="trade-primary-metrics"><dl><div><dt>Entry</dt><dd>{metric(campaign.entryPrice)}</dd></div><div><dt>Quantity</dt><dd>{metric(campaign.quantityLots, ' lots')}</dd></div><div><dt>Exit</dt><dd>{metric(campaign.exitPrice)}</dd></div><div><dt>Reason</dt><dd>{campaign.exitReason ?? '—'}</dd></div></dl><strong className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{metric(campaign.realizedPnl)}</strong></div>
-        <dl className="trade-risk-row"><div><dt>TP</dt><dd>{metric(campaign.takeProfitPrice)}</dd></div><div><dt>SL</dt><dd>{metric(campaign.stopLossPrice)}</dd></div><div><dt>Seed</dt><dd>{metric(campaign.seedBalance)}</dd></div><div><dt>Risk</dt><dd>{metric(campaign.riskAmount)} / {metric(campaign.riskPercent, '%')}</dd></div></dl>
-        <button className="detail-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? 'Hide details' : 'Show details'}</button>
+        <div className="trade-summary-metrics">
+          <dl>
+            <div><dt>진입가</dt><dd>{metric(campaign.entryPrice)}</dd></div>
+            <div><dt>청산가</dt><dd>{metric(campaign.exitPrice)}</dd></div>
+            <div><dt>수량</dt><dd>{metric(campaign.quantityLots, ' lot')}</dd></div>
+          </dl>
+          <dl>
+            <div><dt>거래 전후 시드</dt><dd>{metric(campaign.seedBalance)} → {metric(postSeed)}</dd></div>
+            <div><dt>PnL</dt><dd className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{metric(campaign.realizedPnl)}</dd></div>
+            <div><dt>포인트</dt><dd title={points === undefined ? '수량이 없어 포인트를 계산할 수 없습니다.' : undefined}>{metric(points)}</dd></div>
+          </dl>
+          <label className="regret-metric">
+            <span>아쉬운 점</span>
+            <textarea aria-label="아쉬운 점" value={regret ?? ''} placeholder="작성 필요" readOnly />
+          </label>
+        </div>
+        <div className="trade-mobile-summary"><div className="mobile-summary-first"><strong>{campaign.symbol}</strong><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{metric(campaign.realizedPnl)}</strong></div><div className="mobile-summary-second"><span><b>성과</b> 포인트 {metric(points)}</span><span className="regret-preview"><b>아쉬운 점</b> {regretPreview}</span><span className={campaign.analysisComplete ? 'complete' : 'incomplete'}><b>작성</b> {campaign.analysisComplete ? '완료' : '필요'}</span></div></div>
+        <button className="detail-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? '상세 닫기' : '상세 보기'}</button>
       </div>
     </div>
-    {expanded ? <div className="expanded-content"><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><TradeDetail campaign={campaign} onUpdateTrade={props.onUpdateTrade} onPatchAnalysis={props.onPatchAnalysis} onUpdateExecutionNote={props.onUpdateExecutionNote} /></div> : null}
+    {expanded ? <div className="expanded-content"><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><TradeDetail campaign={campaign} onPatchAnalysis={props.onPatchAnalysis} /></div> : null}
   </article>;
 }

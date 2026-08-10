@@ -4,7 +4,7 @@ const KEY = Buffer.alloc(32, 7).toString('base64');
 
 describe('CredentialCipherService', () => {
   it('rejects absent, malformed, and wrong-sized keys', () => {
-    expect(() => new CredentialCipherService(undefined)).toThrow();
+    expect(() => new CredentialCipherService('')).toThrow();
     expect(() => new CredentialCipherService('not-base64')).toThrow();
     expect(() => new CredentialCipherService(Buffer.alloc(31).toString('base64'))).toThrow();
   });

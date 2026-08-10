@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 3,
+  "generation": 3,
+  "kind": "api-algorithm-test-report",
+  "sourceHash": "sha256:11eac110b080e8ea946837860ca84ba9b54a69f4200ba37eab7845703846c6f0",
+  "status": "passed",
+  "e2eStatus": "passed",
+  "redTeamStatus": "passed",
+  "manifestVerification": {
+    "result": "passed",
+    "filesListed": 19,
+    "filesVerified": 19,
+    "mismatches": [],
+    "evidence": "SHA-256 independently recomputed for every declared source-manifest file both before and after QA execution."
+  },
+  "evidenceFreeze": {
+    "result": "passed",
+    "validationArtifact": "/home/hoya/trading-journal/artifacts/mt5-entry-balance-evidence-validation.json",
+    "evidenceSource": "/home/hoya/mt5-history.html",
+    "sha256": "065519e97cc495924b9780d59aac312524d6deb16b2000828f2eb1b3fd35a237",
+    "verified": true,
+    "runningBalanceMismatches": [],
+    "proofFreeze": "Bridge unittest passed proof approved-digest binding and validated-proof cache freeze cases."
+  },
+  "commands": [
+    {
+      "command": "python3 -m unittest -v test_server.py",
+      "cwd": "/home/hoya/mt5-window-server",
+      "result": "passed",
+      "evidence": "11/11 tests passed."
+    },
+    {
+      "command": "pnpm --filter @trading-journal/api exec jest --runInBand",
+      "cwd": "/home/hoya/trading-journal",
+      "result": "passed",
+      "evidence": "20 passed suites; 148 passed tests; 2 suites and 9 tests skipped."
+    },
+    {
+      "command": "pnpm --filter @trading-journal/api prisma:generate && pnpm --filter @trading-journal/api exec prisma validate --schema=prisma/schema.prisma && pnpm typecheck && pnpm build",
+      "cwd": "/home/hoya/trading-journal",
+      "result": "passed",
+      "evidence": "Prisma generate/validate plus shared, API, and web typecheck/build passed."
+    },
+    {
+      "command": "Disposable PostgreSQL 16: prisma migrate deploy then test:migration:provenance-mt5-position-entry-balances",
+      "cwd": "/home/hoya/trading-journal",
+      "result": "passed",
+      "evidence": "All 21 migrations applied; named verifier passed; disposable container was removed."
+    },
+    {
+      "command": "pwsh --version",
+      "cwd": "/home/hoya/trading-journal",
+      "result": "platform-unavailable",
+      "evidence": "pwsh is not installed on this Linux host."
+    }
+  ],
+  "contractCoverage": [
+    {
+      "contract": "Canonical and signed decimal acceptance/rejection",
+      "result": "passed",
+      "evidence": "API Jest passed signed canonical decimal coverage; an independent compiled-client invocation rejected trailing decimal 1.20."
+    },
+    {
+      "contract": "Unknown/CREDIT deal class, checkpoint and account mismatch",
+      "result": "passed",
+      "evidence": "Independent bridge invocation mapped unsupported class to UNSUPPORTED_CHECKPOINT; bridge unittest passed account mismatch anchored-unsupported coverage."
+    },
+    {
+      "contract": "Assertion completeness, unanchored positions, and reason enums",
+      "result": "passed",
+      "evidence": "Bridge unittest passed exit-only and non-execution UNANCHORED cases; API Jest passed assertion validation; independent compiled-client invocation rejected unknown anchored reason CREDIT."
+    },
+    {
+      "contract": "Immutable replay and independent cursor streams",
+      "result": "passed",
+      "evidence": "Bridge unittest passed independent digest-stream replay and fact-digest mutation detection; API Jest passed idempotent persistence replay coverage."
+    },
+    {
+      "contract": "Migration shape and source-identified legacy seed handling",
+      "result": "passed",
+      "evidence": "Fresh PostgreSQL migration deployment and named verifier passed."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "surface": "MT5 bridge v3 algorithm",
+      "result": "passed",
+      "evidence": "11 bridge unittests passed, including proof digest/config freeze, checkpoint replay, unanchored assertions, and cursor streams."
+    },
+    {
+      "surface": "API bridge/sync persistence boundary",
+      "result": "passed",
+      "evidence": "20 API Jest suites and 148 tests passed."
+    },
+    {
+      "surface": "Prisma schema/migration and production compilation",
+      "result": "passed",
+      "evidence": "Prisma generate/validate, full typecheck/build, and disposable PostgreSQL migration verifier passed."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "case": "Canonical signed decimal and trailing decimal",
+      "result": "passed",
+      "evidence": "-0.01 accepted by API Jest; 1.20 rejected through compiled Mt5BridgeClient sync invocation."
+    },
+    {
+      "case": "Unknown/CREDIT class and checkpoint/account mismatch",
+      "result": "passed",
+      "evidence": "Synthetic bridge CREDIT/unknown class produced UNSUPPORTED_CHECKPOINT; account mismatch unittest produced UNSUPPORTED_ACCOUNT_NOT_APPROVED."
+    },
+    {
+      "case": "Unanchored positions and assertion/reason completeness",
+      "result": "passed",
+      "evidence": "Exit-only/non-execution cases emitted exact UNANCHORED reason; malformed/duplicate API assertions and unknown CREDIT reason were rejected."
+    },
+    {
+      "case": "Immutable replay and evidence/proof freeze",
+      "result": "passed",
+      "evidence": "Fact mutation changes digest; deal/order stream replay is independently cursor-controlled; evidence digest and approved proof digest/cache checks passed."
+    }
+  ],
+  "blockers": [],
+  "limitations": [
+    "PowerShell validation scripts could not run because pwsh is absent on this Linux host; this is a platform limitation."
+  ]
+}

@@ -7,6 +7,7 @@
 3. Provision a read-only MT5 credential and a unique bridge bearer token.
 4. Set `MT5_BRIDGE_BASE_URL`, `MT5_BRIDGE_TOKEN`, and `MT5_BRIDGE_TIMEOUT_MS` for the API. Set `MT5_SYNC_TOKEN` only for the Caddy sync endpoint that requires it; never reuse either token.
 5. Confirm the public proxy cannot route to the bridge or private API endpoints.
+6. Verify the bridge exposes only contractVersion 3. Before enabling sync, run the isolated provenance verifier: `MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' pnpm --filter @trading-journal/api test:migration:provenance-mt5-position-entry-balances`. The migration preserves cursors and raw/authored/manual data, nulls only legacy MT5 seeds, and is restore-only rollback.
 
 ## Legacy gallery preparation and write freeze
 
@@ -61,6 +62,47 @@ MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' \
 7. Verify another user cannot read, modify, sync, or infer the account by identifier.
 8. Deactivate a test account during an in-flight sync and verify stale output is rejected with no cursor advancement.
 
+## Empty MT5 campaign recovery
+
+This is a one-time incident procedure, not routine maintenance. A reviewed 39-ID set and its incident bounds are execution-time evidence gates, not pre-authorization to delete anything. Never broaden the IDs, weaken a gate to fit the count, delete all empty campaigns, edit cursors, or reset journal data.
+
+Keep one continuous maintenance freeze: disable normal writers and automatic sync, take a fresh production backup, and prove that backup restores in isolation. While still frozen, deploy the repaired API image that is compatible with the current schema. Do not unfreeze between backup, dry-run, apply, changed-history replay, and unchanged-cursor replay.
+
+Generate a new manifest against the frozen production database. The dry run accepts only the independently reviewed ID JSON and per-ID incident-evidence JSON; it validates the exact count, topology, references, incident bounds, and database fingerprint, then records the current script and query hashes before exclusively creating the manifest file.
+
+```sh
+export RECOVERY_DATABASE_URL='postgresql://…/trading_journal'
+export MANIFEST=/secure/evidence/empty-mt5-campaigns.manifest.json
+pnpm --filter @trading-journal/api recover:empty-mt5-campaigns:dry-run -- \
+  --manifest "$MANIFEST" \
+  --reviewed-ids /secure/evidence/reviewed-39-ids.json \
+  --incident-evidence /secure/evidence/reviewed-39-incident-evidence.json \
+  --incident-start '2026-…T…:…:…Z' \
+  --incident-end '2026-…T…:…:…Z'
+```
+
+An independent reviewer must approve the manifest, its SHA-256, the current script SHA-256, and the manifest's database fingerprint during that window. Apply is deliberately unavailable without all bindings, the exact count, incident bounds, and the explicit confirmation token:
+
+```sh
+export MANIFEST_SHA256='reviewed manifest SHA-256'
+export SCRIPT_SHA256="$(sha256sum apps/api/scripts/recover-empty-mt5-campaigns.ts | cut -d ' ' -f 1)"
+export DATABASE_FINGERPRINT='reviewed manifest databaseFingerprint'
+pnpm --filter @trading-journal/api recover:empty-mt5-campaigns:apply -- \
+  --manifest "$MANIFEST" \
+  --manifest-sha256 "$MANIFEST_SHA256" \
+  --script-sha256 "$SCRIPT_SHA256" \
+  --database-fingerprint "$DATABASE_FINGERPRINT" \
+  --incident-start '2026-…T…:…:…Z' \
+  --incident-end '2026-…T…:…:…Z' \
+  --expected-count 39 \
+  --confirm-delete-empty-mt5-campaigns
+```
+
+The apply transaction takes the fixed recovery locks, repeats the manifest topology and baseline checks, and requires `DELETE ... RETURNING` to equal the approved IDs exactly. The manifest’s canonical protected snapshot covers authored root Trade, TradeAnalysis, archive, indicator, entry, and exit content; every conflict row including canonical JSON bytes; all noncandidate campaigns and memberships; image metadata and file SHA-256 evidence where stored; and the affected-account MT5 deals, orders, balances, and sync cursors. It is compared again under lock before deletion and again after exact deletion before commit. A timeout, stale hash/fingerprint, count/bounds mismatch, or locked provenance/baseline/protected-snapshot drift rolls back; it is never permission to retry with different IDs. Independent postflight remains an additional gate, not a substitute for the in-transaction snapshots.
+
+Before replaying, independently record postflight evidence that only the approved returned IDs changed and the protected root, destination membership, conflict, image, fact, cursor, analysis, and authored journal records remain intact. Then, still frozen, enable only operator-trusted sync: first perform a changed-history replay and confirm it creates no empty campaign; then perform an unchanged-cursor replay and confirm it is idempotent. Archive the backup/restore proof, manifest and hashes, reviewed approval, transaction result, postflight comparison, and both replay results before re-enabling normal traffic.
+
+If a gate fails before commit, keep traffic disabled and investigate. If the repaired deployment fails before apply, disable sync and roll back only to a schema-compatible image while frozen. If cleanup committed and rollback is required, keep the freeze and restore the fresh verified pre-apply backup as a coordinated outage; never manually recreate campaigns, memberships, conflicts, images, facts, or cursors and never rerun apply without a new backup, manifest, and approval.
 ## Rollback and rotation
 
 On validation, identity, or fence failures, disable sync initiation and preserve the database for investigation. Do not edit cursors or delete fact rows. Roll back application containers only when their schema contract remains compatible; otherwise restore the verified backup as a coordinated outage.

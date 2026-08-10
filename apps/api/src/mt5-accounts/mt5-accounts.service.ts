@@ -5,19 +5,20 @@ import { CredentialCipherService, CredentialEnvelope } from './credential-cipher
 import { PatchMt5AccountInput, canonicalizeServer, validateCreateAccount, validatePatchAccount } from './mt5-accounts.validation';
 
 const safeAccountSelect = {
-  id: true, nickname: true, canonicalServer: true, accountLogin: true, active: true,
-  replacedById: true, createdAt: true, updatedAt: true,
+  id: true, nickname: true, server: true, canonicalServer: true, accountLogin: true, timeCorrectionHours: true,
+  active: true, replacedById: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.Mt5AccountSelect;
 type SafeAccountRow = Prisma.Mt5AccountGetPayload<{ select: typeof safeAccountSelect }>;
 
 export interface SafeMt5Account {
-  id: string; nickname: string; server: string; accountLogin: number; active: boolean;
+  id: string; nickname: string; server: string; accountLogin: number; timeCorrectionHours: number; active: boolean;
   replacedById: string | null; createdAt: Date; updatedAt: Date;
 }
 
 const serializeAccount = (account: SafeAccountRow): SafeMt5Account => ({
-  id: account.id, nickname: account.nickname, server: account.canonicalServer,
-  accountLogin: Number(account.accountLogin), active: account.active, replacedById: account.replacedById,
+  id: account.id, nickname: account.nickname, server: account.server,
+  accountLogin: Number(account.accountLogin), timeCorrectionHours: account.timeCorrectionHours,
+  active: account.active, replacedById: account.replacedById,
   createdAt: account.createdAt, updatedAt: account.updatedAt,
 });
 
@@ -30,7 +31,7 @@ export class Mt5AccountsService {
     const envelope = this.cipher.encrypt(input.password);
     try {
       return serializeAccount(await this.prisma.mt5Account.create({
-        data: { ownerId, nickname: input.nickname, canonicalServer: input.server, accountLogin: BigInt(input.accountLogin), ...this.envelopeData(envelope) },
+        data: { ownerId, nickname: input.nickname, server: input.server.trim(), canonicalServer: canonicalizeServer(input.server), accountLogin: BigInt(input.accountLogin), ...this.envelopeData(envelope) },
         select: safeAccountSelect,
       }));
     } catch (error) { this.rethrowConflict(error); }
@@ -52,7 +53,8 @@ export class Mt5AccountsService {
         const server = canonicalizeServer(patch.server ?? current.canonicalServer);
         const login = patch.accountLogin ?? Number(current.accountLogin);
         const identityChanged = server !== current.canonicalServer || BigInt(login) !== current.accountLogin;
-        const credentialOrIdentityMutation = identityChanged || patch.password !== undefined || patch.active === false;
+        const exactServerChanged = patch.server !== undefined && patch.server.trim() !== current.server;
+        const credentialOrIdentityMutation = identityChanged || exactServerChanged || patch.password !== undefined || patch.active === false;
         if (credentialOrIdentityMutation) {
           const liveLease = await tx.mt5SyncLease.count({ where: { accountId: id, expiresAt: { gt: new Date() } } });
           if (liveLease) throw new ConflictException('MT5 account synchronization is in progress');
@@ -64,16 +66,22 @@ export class Mt5AccountsService {
         }
 
         const envelope = patch.password ? this.cipher.encrypt(patch.password) : undefined;
-        return serializeAccount(await tx.mt5Account.update({
+        const account = await tx.mt5Account.update({
           where: { id },
           data: {
             ...(patch.nickname !== undefined && { nickname: patch.nickname }),
+            ...(patch.server !== undefined && { server: patch.server.trim() }),
             ...(identityChanged && { canonicalServer: server, accountLogin: BigInt(login) }),
             ...(patch.active !== undefined && { active: patch.active }),
+            ...(patch.timeCorrectionHours !== undefined && { timeCorrectionHours: patch.timeCorrectionHours }),
             ...(envelope && this.envelopeData(envelope)),
           },
           select: safeAccountSelect,
-        }));
+        });
+        if (patch.timeCorrectionHours !== undefined && patch.timeCorrectionHours !== current.timeCorrectionHours) {
+          await tx.mt5SyncStatus.updateMany({ where: { accountId: id }, data: { cursor: null } });
+        }
+        return serializeAccount(account);
       });
     } catch (error) { this.rethrowConflict(error); }
   }
@@ -87,9 +95,9 @@ export class Mt5AccountsService {
     return trades + campaigns + deals + orders + syncStatuses > 0;
   }
 
-  private async replaceLinked(tx: Prisma.TransactionClient, ownerId: string, current: { id: string; nickname: string }, patch: PatchMt5AccountInput, server: string, login: number): Promise<SafeMt5Account> {
+  private async replaceLinked(tx: Prisma.TransactionClient, ownerId: string, current: { id: string; nickname: string; server: string }, patch: PatchMt5AccountInput, server: string, login: number): Promise<SafeMt5Account> {
     const replacement = await tx.mt5Account.create({
-      data: { ownerId, nickname: patch.nickname ?? current.nickname, canonicalServer: server, accountLogin: BigInt(login), active: patch.active ?? true, ...this.envelopeData(this.cipher.encrypt(patch.password as string)) },
+      data: { ownerId, nickname: patch.nickname ?? current.nickname, server: patch.server?.trim() ?? current.server, canonicalServer: server, accountLogin: BigInt(login), active: patch.active ?? true, ...this.envelopeData(this.cipher.encrypt(patch.password as string)) },
       select: safeAccountSelect,
     });
     const deactivated = await tx.mt5Account.updateMany({ where: { id: current.id, replacedById: null }, data: { active: false, replacedById: replacement.id } });

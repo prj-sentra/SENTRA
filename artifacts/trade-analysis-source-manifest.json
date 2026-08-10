@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 2,
+  "kind": "source-state-manifest",
+  "algorithm": "For each changed path sorted as UTF-8 bytes: PRESENT => SHA256.update(pathBytes + NUL + PRESENT + NUL + raw SHA256(fileBytes)); ABSENT => SHA256.update(pathBytes + NUL + ABSENT)",
+  "sourceHash": "sha256:77d349ac4ba96b551e0e2cb8b03c3a1ce4e1675357ac2ac247aedb9fdf32783f",
+  "entries": [
+    {
+      "path": ".env.example",
+      "state": "present",
+      "sha256": "sha256:cde1844f8c319900f60ef719a438df014b15f2a855f3643daf2bd3bc7f01def0"
+    },
+    {
+      "path": "AGENTS.md",
+      "state": "present",
+      "sha256": "sha256:a5a077e8272668c1cfe752af16295ed34e1b755a72c2c772cdc41f8ed4a60d80"
+    },
+    {
+      "path": "apps/api/Dockerfile",
+      "state": "present",
+      "sha256": "sha256:4e6174d774040bcf9d68367bd7e0f9ff4ce2b3b5defe0fff2557accc9ef98827"
+    },
+    {
+      "path": "apps/api/package.json",
+      "state": "present",
+      "sha256": "sha256:813c9f23375d3df6a771d523fcc3140386dbdb18a7ab38b4cdbb83795efdb415"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260722110000_add_mt5_sync_tables/migration.sql",
+      "state": "present",
+      "sha256": "sha256:13fc35fcc88fd76651189250d79a0af4271499ac7e76d0488e8c49823432f900"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260723044500_link_trades_to_mt5_positions/migration.sql",
+      "state": "present",
+      "sha256": "sha256:0840f492a51d89b1b07844279e6be530745f19ce11909b71aad36f449df16222"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260723061000_add_mt5_orders/migration.sql",
+      "state": "present",
+      "sha256": "sha256:9a91690a13f7c078e7ed79a1e07d82c3bb5845b2978d763ce8c0bb43479d659b"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260723080000_add_trade_mt5_columns/migration.sql",
+      "state": "present",
+      "sha256": "sha256:aea8baf69f8a9aa18774f0fc6f435995ad27516069445bcb2f2328d0af9e9767"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260723155000_drop_trade_session/migration.sql",
+      "state": "present",
+      "sha256": "sha256:27bea866102c3a6bd5614413d30734abb692aa9452b8e46b848de677a2f40c27"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260724110000_add_manual_trade_metadata/migration.sql",
+      "state": "present",
+      "sha256": "sha256:1ef49f8253a8a82ed5e55ed57628d32237a71bf7ac80f736c969bb2103b03b39"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260725120000_add_trade_chart_images/migration.sql",
+      "state": "present",
+      "sha256": "sha256:47f6df930b2be11533904716bf6f2d56dc3d8230563560fb08ad3225a4262635"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260807000000_replace_wiki_journal_with_trade_analysis/migration.sql",
+      "state": "present",
+      "sha256": "sha256:488a637cac27baa79416c321d27f18075775cf44afff7803a32c6e9c89fe132e"
+    },
+    {
+      "path": "apps/api/prisma/schema.prisma",
+      "state": "present",
+      "sha256": "sha256:b85b8765594926eeddadd6e64c84699ed5d9a227ca5c43f246bedd9550361b4a"
+    },
+    {
+      "path": "apps/api/scripts/fixtures/trade-analysis-migration.sql",
+      "state": "present",
+      "sha256": "sha256:8ca39baa3d73587b6af33f403bfb5ea20a85601ec5b5bee9d9f3064d0ebba4cb"
+    },
+    {
+      "path": "apps/api/scripts/mt5-sync.bridge.js",
+      "state": "absent"
+    },
+    {
+      "path": "apps/api/scripts/verify-trade-analysis-migration.ts",
+      "state": "present",
+      "sha256": "sha256:e70f9b07a4b6ff6be0023e8157f921e8012b27fdf61301732803d02c09e2cc93"
+    },
+    {
+      "path": "apps/api/src/app.module.ts",
+      "state": "present",
+      "sha256": "sha256:c263032653eff17a9a6b4d9fcad59d962fb89eac7793e44329289a1ca3e27015"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-chart-image.service.spec.ts",
+      "state": "present",
+      "sha256": "sha256:1a5d9e57fee2657c7dfdbd1e9252141cff7465e2dd3eea5d35266d2226efae68"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-chart-image.service.ts",
+      "state": "present",
+      "sha256": "sha256:b563b2a810bcb5cf2ff12d1aa6408628e23965cb95a592ec0d5c13e270e70e2a"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.controller.spec.ts",
+      "state": "present",
+      "sha256": "sha256:228510d76b131ac2e4188dedd2e139981c0d25a6073322a0d3fb40aaabad8187"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.controller.ts",
+      "state": "present",
+      "sha256": "sha256:51553535057b42606cdbdcd7e301e9c8fb570e1ee27d76a37dbfda7eb0824061"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.module.ts",
+      "state": "present",
+      "sha256": "sha256:09bf9115fc4de26e3c0723788c7dbb12b61b0480b732ef114876d1b85bd441e0"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.service.spec.ts",
+      "state": "present",
+      "sha256": "sha256:0d07d3b2ae308f46e4d7e741304fea22e7271a3bf28ee2b1ffbe1174fc705e6b"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.service.ts",
+      "state": "present",
+      "sha256": "sha256:d6430c4bd2db4f1cc10e82d208e6d4a38c8ed0e755dec411a7a4d99f74d9c06e"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.validation.spec.ts",
+      "state": "present",
+      "sha256": "sha256:783d7bbbcf4ecd4e5f4873a8dbe091659b0ddfb68638a59f8f96746154f1f38b"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.validation.ts",
+      "state": "present",
+      "sha256": "sha256:fa4d5f138afacf19c5daee811fa6ac3f64ffcc84e2c80f51c9a104d66f2a4669"
+    },
+    {
+      "path": "apps/api/src/wiki/wiki.controller.spec.ts",
+      "state": "absent"
+    },
+    {
+      "path": "apps/api/src/wiki/wiki.controller.ts",
+      "state": "absent"
+    },
+    {
+      "path": "apps/api/src/wiki/wiki.module.ts",
+      "state": "absent"
+    },
+    {
+      "path": "apps/api/src/wiki/wiki.service.spec.ts",
+      "state": "absent"
+    },
+    {
+      "path": "apps/api/src/wiki/wiki.service.ts",
+      "state": "absent"
+    },
+    {
+      "path": "apps/web/package.json",
+      "state": "present",
+      "sha256": "sha256:75f07eade55cb6b163384377850c61d32becc1567cb6a1e13d6db15f8d43a5b7"
+    },
+    {
+      "path": "apps/web/src/App.test.ts",
+      "state": "present",
+      "sha256": "sha256:5fd8695e9a63b5a2c205f9773eac92519cf13f777daa04a9ae76e76b4d41ef05"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "state": "present",
+      "sha256": "sha256:56028206059a63379585761a77d788af7f22a58d4735bf54b53d6e10493f3f05"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "state": "present",
+      "sha256": "sha256:c80b9f4e0a41c83d6ce1828993ebffa538138c41c7952c8ab6a1b2e5d64d5be5"
+    },
+    {
+      "path": "apps/web/tsconfig.tsbuildinfo",
+      "state": "present",
+      "sha256": "sha256:284ce989932bde180537006499413c546e63870d93cc6e86630964291e6e272d"
+    },
+    {
+      "path": "docker-compose.yml",
+      "state": "present",
+      "sha256": "sha256:ed907db3442460a66390def9925c077f355d4eadba8bd19cd74f7fcad0e26dac"
+    },
+    {
+      "path": "docs/operations/wiki-trade-analysis-cutover.md",
+      "state": "present",
+      "sha256": "sha256:e14599b0e887a9b3dd2c6b4fe1025d7e2ac3556bb33e43edbd4eb0fcf3e6c886"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "state": "present",
+      "sha256": "sha256:1a6d55271c5e86dd4b8e0e57dd76cb03dc4fbeda5cfd80d68355db164f8661cf"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "state": "present",
+      "sha256": "sha256:049739826629be7263e9e3ee0e12f999e424d0273b57e26eadc3cf14455a82cb"
+    }
+  ]
+}

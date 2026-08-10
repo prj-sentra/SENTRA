@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "kind": "mt5-history-evidence-validation",
+  "accountSurrogate": "499cc1159e24aa39",
+  "statementReportSha256": "065519e97cc495924b9780d59aac312524d6deb16b2000828f2eb1b3fd35a237",
+  "userSuppliedProvenance": {
+    "providedByUser": true,
+    "sourceRetainedOutsideRepository": true
+  },
+  "currency": "USD",
+  "currencyScale": 2,
+  "roundingMode": "ROUND_HALF_UP",
+  "runtimeMt5Constants": {
+    "dealTypeBuy": 0,
+    "dealTypeSell": 1,
+    "dealTypeBalance": 2,
+    "dealEntryIn": 0,
+    "dealEntryInOut": 2
+  },
+  "mode": "Hedge",
+  "ledgerRows": 169,
+  "observedLedgerClasses": [
+    "buy",
+    "sell",
+    "balance"
+  ],
+  "observedCashSemantics": "Each ledger row's displayed delta is profit + commission + swap + fee; balance rows are included in the same running arithmetic.",
+  "observedRunningArithmetic": {
+    "perStepCurrency": "USD",
+    "perStepScale": 2,
+    "perStepRounding": "ROUND_HALF_UP",
+    "mismatches": []
+  },
+  "balanceAdjustmentRows": 11,
+  "verified": true,
+  "limitations": [
+    "HTML timestamps have no UTC offset",
+    "The user-supplied report establishes displayed ledger classes and arithmetic, not numeric MT5 enum values; startup binds those values to the installed MetaTrader5 runtime.",
+    "Unknown and CREDIT deal classes are unsupported.",
+    "Live account_info().balance checkpoint requires bridge-host validation"
+  ]
+}

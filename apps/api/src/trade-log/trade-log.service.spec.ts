@@ -26,28 +26,204 @@ const prisma = () => ({
 describe('TradeLogService owner boundary', () => {
   it('always includes ownerId when loading a trade', async () => {
     const db = prisma(); db.trade.findFirst.mockResolvedValue(rawTrade);
-    await expect(new TradeLogService(db as never).getTrade('owner-1', 'trade-1')).resolves.toMatchObject({ id: 'trade-1' });
-    expect(db.trade.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'trade-1', ownerId: 'owner-1' } }));
+    await expect(new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'trade-1')).resolves.toMatchObject({ id: 'trade-1' });
+    expect(db.trade.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'trade-1', ownerId: 'owner-1', mt5AccountId: 'account-1' } }));
   });
 
   it('hides a foreign trade as not found', async () => {
     const db = prisma(); db.trade.findFirst.mockResolvedValue(null);
-    await expect(new TradeLogService(db as never).getTrade('owner-1', 'foreign')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'foreign')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('applies manual and all scopes without accepting an account id', async () => {
+  it('rejects missing and foreign selected accounts', async () => {
     const db = prisma(); const service = new TradeLogService(db as never);
-    await service.getStats('owner-1', { scope: 'manual' });
-    expect(db.trade.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ ownerId: 'owner-1', mt5AccountId: null }) }));
-    await service.getStats('owner-1', { scope: 'all' });
-    expect(db.trade.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ ownerId: 'owner-1' }) }));
-  });
-
-  it('rejects missing and foreign account scopes', async () => {
-    const db = prisma(); const service = new TradeLogService(db as never);
-    await expect(service.getStats('owner-1', { scope: 'account' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getStats('owner-1')).rejects.toBeInstanceOf(BadRequestException);
     db.mt5Account.findFirst.mockResolvedValue(null);
-    await expect(service.getStats('owner-1', { scope: 'account', accountId: 'foreign' })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.getStats('owner-1', 'foreign')).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.mt5Account.findFirst).toHaveBeenCalledWith({ where: { id: 'foreign', ownerId: 'owner-1' }, select: { id: true } });
+  });
+});
+describe('TradeLogService campaign conflict pruning', () => {
+  it('queries only unresolved conflicts whose candidate JSON contains the removed campaign', async () => {
+    const db = prisma();
+    const tx = {
+      campaignConflict: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+      },
+    };
+    const service = new TradeLogService(db as never);
+
+    await (service as any).pruneCampaignConflictCandidates(tx, 'campaign-1');
+
+    expect(tx.campaignConflict.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'UNRESOLVED',
+        candidateCampaignIds: { array_contains: ['campaign-1'] },
+      },
+    });
+    expect(tx.campaignConflict.update).not.toHaveBeenCalled();
+  });
+});
+describe('TradeLogService historical MT5 campaign operations', () => {
+  const trade = {
+    ...rawTrade,
+    mt5AccountId: 'inactive-account',
+    mt5Server: 'Broker',
+    mt5ServerCanonical: 'broker',
+    mt5AccountLogin: 7n,
+    openedAt: new Date('2026-08-01T00:00:00.000Z'),
+  };
+
+  function campaignDb() {
+    const tx: any = {
+      $queryRaw: jest.fn(async (query: any) => {
+        const sql = query.strings?.join('') ?? '';
+        return sql.includes('FROM mt5_accounts')
+          ? [{ id: 'inactive-account', canonicalServer: 'broker', accountLogin: 7n, active: false, replacedById: 'replacement-account' }]
+          : [];
+      }),
+      trade: { findFirst: jest.fn().mockResolvedValue(trade) },
+      campaignMembership: {
+        findUnique: jest.fn().mockResolvedValue({ tradeId: trade.id, campaignId: 'campaign-1', source: 'AUTO' }),
+        upsert: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([{ tradeId: trade.id, trade: { id: trade.id, openedAt: trade.openedAt, mt5PositionId: 9n } }]),
+      },
+      tradeCampaign: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner-1', mt5AccountId: trade.mt5AccountId }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner-1', mt5AccountId: trade.mt5AccountId, rootTrade: trade }),
+        update: jest.fn(),
+      },
+      campaignConflict: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'conflict-1', status: 'UNRESOLVED', tradeId: trade.id, candidateCampaignIds: ['campaign-1'] }),
+        update: jest.fn(),
+      },
+    };
+    return {
+      tx,
+      db: {
+        trade: { findFirst: jest.fn().mockResolvedValue(trade) },
+        campaignConflict: { findFirst: jest.fn().mockResolvedValue({ id: 'conflict-1', trade }) },
+        $transaction: jest.fn(async (callback: any) => callback(tx)),
+      },
+    };
+  }
+
+  it('relinks an owned inactive/replaced account after shared locking while retaining account compatibility checks', async () => {
+    const { db, tx } = campaignDb();
+    const service = new TradeLogService(db as never);
+
+    await expect(service.relinkCampaign('owner-1', { accountId: 'inactive-account', tradeId: trade.id, campaignId: 'campaign-1' })).resolves.toBeUndefined();
+    expect(tx.$queryRaw.mock.calls[0][0].strings.join('')).toContain('FOR UPDATE');
+    expect(tx.$queryRaw.mock.calls[1][0].strings.join('')).toContain('pg_advisory_xact_lock');
+    expect(tx.campaignMembership.upsert).toHaveBeenCalled();
+  });
+
+  it('resolves an owned inactive/replaced account after shared locking and rejects incompatible campaign scope', async () => {
+    const { db, tx } = campaignDb();
+    const service = new TradeLogService(db as never);
+
+    await expect(service.resolveCampaignConflict('owner-1', 'conflict-1', { accountId: 'inactive-account', campaignId: 'campaign-1' })).resolves.toBeUndefined();
+    expect(tx.campaignConflict.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'conflict-1' } }));
+
+    tx.tradeCampaign.findFirst.mockResolvedValueOnce({ id: 'campaign-1', ownerId: 'owner-1', mt5AccountId: 'other-account' });
+    await expect(service.resolveCampaignConflict('owner-1', 'conflict-1', { accountId: 'inactive-account', campaignId: 'campaign-1' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+describe('TradeLogService analysis completion', () => {
+  const completeAnalysis = () => ({
+    ...rawTrade.analysis,
+    baseTimeframe: 'H1', primaryTrend: 'UP', maArrangement: 'BULLISH', cross: 'GOLDEN_20_60',
+    stopLossLine: 100, regret: '없음',
+    note: '진입 근거:\n추세 확인\n청산 근거:\n목표 도달\nTP 설정 근거:\n저항선\nSL 설정 근거:\n지지선',
+  });
+
+  it('accepts multiline required headings with a real cross and no Bollinger touch', () => {
+    const service = new TradeLogService(prisma() as never);
+    expect((service as any).analysisComplete(completeAnalysis())).toBe(true);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), cross: 'NONE' })).toBe(false);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), bollingerDirection: 'NORMAL' })).toBe(false);
+  });
+
+  it('requires Bollinger direction only when a band was touched and enforces enabled conditional groups', () => {
+    const service = new TradeLogService(prisma() as never);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), bollingerBandCount: 'ONE_BAND', bollingerDirection: null })).toBe(false);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), marketZoneEnabled: true, marketZoneHigh: 110, marketZoneLow: null })).toBe(false);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), chartPatternObserved: true, chartPatternTimeframe: null, chartPatternType: null })).toBe(false);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), retailPositionEnabled: true, retailBuyAveragePrice: 100, retailSellAveragePrice: null, retailBuyRatio: 50 })).toBe(false);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), fibonacciEnabled: true, fibonacciStartPrice: 100, fibonacciEndPrice: null })).toBe(false);
+  });
+
+  it('rejects an empty multiline required heading body', () => {
+    const service = new TradeLogService(prisma() as never);
+    expect((service as any).analysisComplete({ ...completeAnalysis(), note: '진입 근거:\n청산 근거:\n목표\nTP 설정 근거:\n목표\nSL 설정 근거:\n손절' })).toBe(false);
+  });
+});
+describe('TradeLogService initial-plan metric serialization', () => {
+  const plannedMetricTrade = (overrides: Record<string, unknown> = {}) => ({
+    ...rawTrade,
+    mt5AccountId: 'account-1',
+    status: 'CLOSED',
+    openedAt: new Date('2026-08-10T10:00:00.000Z'),
+    closedAt: new Date('2026-08-10T11:00:00.000Z'),
+    entry: { price: 100, quantity: 1, occurredAt: new Date('2026-08-10T10:00:00.000Z'), note: null },
+    exit: { price: 110, quantity: 1, occurredAt: new Date('2026-08-10T11:00:00.000Z'), reason: null, note: null },
+    seedBalance: 1_000,
+    riskAmount: 10,
+    riskPercent: 1,
+    returnPercent: 2,
+    initialPlanId: 'plan-1',
+    initialPlanMetricContractVersion: 1,
+    initialPlan: { id: 'plan-1', metricContractVersion: 1, takeProfitPrice: 120, stopLossPrice: 90 },
+    ...overrides,
+  });
+
+  it.each([
+    ['legacy risk-only values', { returnPercent: null }],
+    ['legacy return-only values', { riskAmount: null, riskPercent: null }],
+    ['a missing initial-plan snapshot', { initialPlan: null }],
+    ['a mismatched initial-plan version', { initialPlanMetricContractVersion: 2 }],
+  ])('hides initial-plan metrics for %s', async (_, overrides) => {
+    const db = prisma();
+    db.trade.findFirst.mockResolvedValue(plannedMetricTrade(overrides));
+    const result = await new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'trade-1');
+
+    expect(result).not.toEqual(expect.objectContaining({
+      initialTakeProfitPrice: expect.anything(),
+      initialStopLossPrice: expect.anything(),
+      riskAmount: expect.anything(),
+      riskPercent: expect.anything(),
+      returnPercent: expect.anything(),
+    }));
+  });
+
+  it('exposes both initial TP/SL and metrics only for a matching complete provenance pair', async () => {
+    const db = prisma();
+    db.trade.findFirst.mockResolvedValue(plannedMetricTrade());
+
+    await expect(new TradeLogService(db as never).getTrade('owner-1', 'account-1', 'trade-1')).resolves.toMatchObject({
+      initialTakeProfitPrice: 120,
+      initialStopLossPrice: 90,
+      riskAmount: 10,
+      riskPercent: 1,
+      returnPercent: 2,
+    });
+  });
+
+  it('does not let an unproven risk value enter campaign or statistics aggregates', async () => {
+    const unproven = plannedMetricTrade({ returnPercent: null });
+    const service = new TradeLogService(prisma() as never);
+    const campaign = (service as any).serializeCampaign({
+      id: 'campaign-1', rootTradeId: unproven.id, mt5AccountId: 'account-1', tradingDate: new Date('2026-08-10T00:00:00.000Z'),
+      rootTrade: unproven, memberships: [{ trade: unproven }], images: [], conflicts: [],
+    });
+    expect(campaign.seedBalance).toBeUndefined();
+    expect(campaign.members[0].riskPercent).toBeUndefined();
+
+    const db = prisma();
+    db.mt5Account.findFirst.mockResolvedValue({ id: 'account-1' });
+    db.trade.findMany.mockResolvedValue([unproven]);
+    const stats = await new TradeLogService(db as never).getStats('owner-1', 'account-1');
+    expect(stats.overview).toMatchObject({ totalRiskAmount: 0, riskAmountCount: 0, averageRiskPercent: 0, riskPercentCount: 0 });
   });
 });

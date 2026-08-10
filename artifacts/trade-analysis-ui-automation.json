@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "kind": "browser-automation-transcript",
+  "tool": "Chromium browser automation",
+  "sourceHash": "sha256:77d349ac4ba96b551e0e2cb8b03c3a1ce4e1675357ac2ac247aedb9fdf32783f",
+  "baseUrl": "http://127.0.0.1:4175",
+  "trustedProxyUrl": "http://127.0.0.1:3200",
+  "apiUrl": "http://127.0.0.1:3100",
+  "mt5BridgeUrl": "http://127.0.0.1:3300",
+  "actions": [
+    {
+      "type": "navigate",
+      "surface": "rendered UI",
+      "result": "Trade Log loaded API ONLINE with two retained trades and no 401",
+      "timestamp": "2026-08-08T09:20:00.000Z"
+    },
+    {
+      "type": "create-scale-in",
+      "surface": "rendered TradeCreationForm",
+      "input": "UI-SCALEIN with root trade 858d0458-2262-42a7-bcd9-790027348200",
+      "result": "success message rendered and system status changed from 2 TRADES to 3 TRADES; new card displayed 스케일인 and the selected immutable root id",
+      "timestamp": "2026-08-08T09:21:00.000Z"
+    },
+    {
+      "type": "metadata-edit-save-reload",
+      "surface": "rendered TradeMetadataEditor",
+      "input": "매매 가설 = Rendered editor metadata proof",
+      "result": "clicked 편집 and 저장; full reload retained the exact textarea value",
+      "timestamp": "2026-08-08T09:22:00.000Z"
+    },
+    {
+      "type": "analysis-edit-save-reload",
+      "surface": "rendered TradeAnalysisEditor",
+      "input": "기준봉 = H1",
+      "result": "clicked 분석 편집 and 분석 저장; full reload retained H1",
+      "timestamp": "2026-08-08T09:23:00.000Z"
+    },
+    {
+      "type": "stale-analysis-reconciliation",
+      "surface": "rendered TradeAnalysisEditor",
+      "result": "opened editor with old token, performed one external concurrent PATCH through trusted proxy, then clicked rendered 분석 저장; UI displayed the authoritative 최신 분석을 다시 불러왔습니다 conflict message",
+      "timestamp": "2026-08-08T09:24:00.000Z"
+    },
+    {
+      "type": "entry-create-correct-exit",
+      "surface": "rendered TradeExecutionEditor",
+      "result": "created entry 2300, corrected it to 2301, created exit 2311, and reload retained execution fields and realized PnL 10",
+      "timestamp": "2026-08-08T09:25:00.000Z"
+    },
+    {
+      "type": "chart-lifecycle",
+      "surface": "browser-context API plus rendered card",
+      "result": "PUT 200, GET 200 image/webp, DELETE 200, subsequent GET 404",
+      "timestamp": "2026-08-08T09:26:00.000Z"
+    },
+    {
+      "type": "retired-routes",
+      "surface": "browser-context API and SPA navigation",
+      "result": "/wiki, /tags, /journals returned 404; SPA /wiki canonicalized to /stats",
+      "timestamp": "2026-08-08T09:27:00.000Z"
+    },
+    {
+      "type": "mt5-sync",
+      "surface": "rendered MT5 리로드 button through trusted token-injection proxy",
+      "result": "button completed through proxy with X-MT5-Sync-Token injection, returned to MT5 리로드 state, API remained ONLINE, and no 401 appeared",
+      "timestamp": "2026-08-08T09:28:00.000Z"
+    },
+    {
+      "type": "screenshot",
+      "selector": "body",
+      "surface": "rendered UI",
+      "path": "artifacts/trade-analysis-ui.png",
+      "result": "full-page non-uniform screenshot captured after the current-source rendered workflows; system status shows API ONLINE and 3 TRADES",
+      "timestamp": "2026-08-08T09:29:00.000Z"
+    }
+  ],
+  "finalUrl": "http://127.0.0.1:4175/trade-log",
+  "screenshot": "artifacts/trade-analysis-ui.png"
+}

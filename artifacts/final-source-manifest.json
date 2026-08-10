@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "kind": "source-manifest",
+  "algorithm": "sha256(path_utf8 + NUL + uint64be(byte_length) + bytes), ordered lexicographically",
+  "sourceHash": "sha256:fa7fb6c0d28a4ecbada6db74b7cc87420839df3c6677c043e7a592725074af38",
+  "generatedAt": "2026-08-09T13:30:03.217263+00:00",
+  "paths": [
+    {
+      "path": "apps/api/package.json",
+      "bytes": 1825,
+      "sha256": "9c068791583ad00350db6d837fbbfdbe16f27a7b6999bf9513c2a683b13e1d79"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260809000000_journal_redesign/migration.sql",
+      "bytes": 6675,
+      "sha256": "9036bf9028054da7ddc53e280767995755a6e36b04ef7d025e797ba944da522f"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260809100000_canonical_trade_identity/migration.sql",
+      "bytes": 745,
+      "sha256": "0228d4fb5beeb0786c3bf27e70f12e07d3c016ab09b4c4839ba058acbc046900"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20260809110000_reconcile_journal_redesign_drift/migration.sql",
+      "bytes": 1385,
+      "sha256": "b58b2f0e4dc5109844b63de4a8074ddb18276230a325a0499c6cf1047e5f799a"
+    },
+    {
+      "path": "apps/api/prisma/schema.prisma",
+      "bytes": 21320,
+      "sha256": "293b3f1b149a2c39cf509ff0c57e4f226fb1598a0ed1d5408ccff1f91b8b4f8b"
+    },
+    {
+      "path": "apps/api/scripts/fixtures/journal-redesign-migration.sql",
+      "bytes": 994,
+      "sha256": "a41749a95b838a4100bc1df05e8ae70e8ac7e6b08a5a3178db5d9b6804f50b5d"
+    },
+    {
+      "path": "apps/api/scripts/verify-journal-redesign-migration.ts",
+      "bytes": 10752,
+      "sha256": "f607a79d994c0b6642c8459337c92be02fda8619df003c7d945d1291501c3bd4"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/credential-cipher.service.spec.ts",
+      "bytes": 1361,
+      "sha256": "864e077e08959358bd27c3262ee17c93b019bbb88fa9efadf3dfd27a7f8c353b"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/credential-cipher.service.ts",
+      "bytes": 2127,
+      "sha256": "9d00a996c7cbf3aa6ea20099019d94fb5fa10d47e63383758bb0c31914b20fd4"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.service.ts",
+      "bytes": 6600,
+      "sha256": "902b5c835e189dc0300aae28a648ddb918c000c6ed46cdaaf327ba25fd465aeb"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.validation.ts",
+      "bytes": 2902,
+      "sha256": "d3e7643f53918553ddd4ba0f6f10db4dada677f5b3dd763d4f9966e942de0437"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-bridge.client.spec.ts",
+      "bytes": 5368,
+      "sha256": "e6fb4d8f5b458e3bbc7b536f421181b8be22cfec40ed9f235cd03d632328081b"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-bridge.client.ts",
+      "bytes": 6066,
+      "sha256": "9c5d59d2d4f3d577e4621b38258fd2b842820d26f2371c431f26184216f23b6c"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-sync.service.ts",
+      "bytes": 16574,
+      "sha256": "9ed7657a08ac942007a6055b83b6c8ffec86e78d94f996f49e93cf1612784535"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts",
+      "bytes": 11981,
+      "sha256": "8dfe08532136a1eae3627eb50d58e0f322ec55cc0153b45aa877e832882bdc6c"
+    },
+    {
+      "path": "apps/api/src/trade-log/campaign-image.service.spec.ts",
+      "bytes": 12933,
+      "sha256": "5d0b5e7ed50fc4e63d496742bae4c1752704a42a01df7e44a75cb298e166af03"
+    },
+    {
+      "path": "apps/api/src/trade-log/campaign-image.service.ts",
+      "bytes": 13071,
+      "sha256": "e17d8ca2a1ab3c137f605e7a0eab16e292722c7d1cf71441bc5371625f996ae6"
+    },
+    {
+      "path": "apps/api/src/trade-log/journal-redesign-migration.spec.ts",
+      "bytes": 5438,
+      "sha256": "0f883fd309c18790916d1fba8bffb999c4531199b8a47b4a35f0a93036e72a65"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.controller.spec.ts",
+      "bytes": 4382,
+      "sha256": "b7d9faa409d4a27ff0ba1a4e6e2ff313894e82e8b5f1b84d67efc44cdcedc2ad"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.controller.ts",
+      "bytes": 4894,
+      "sha256": "8263b0cf8dba40fffbd1294eb445ea6f6d411b81021a28856babdf6f3203540e"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.service.spec.ts",
+      "bytes": 4980,
+      "sha256": "d62765cbd66859b22137a128cdf7a53ba9f118e2f21d787051461a3be86d44a8"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.service.ts",
+      "bytes": 33737,
+      "sha256": "70505652b2f1cb9d38d01335a181d65bc4c3be7ee0af74b94d3fa8fbeb830745"
+    },
+    {
+      "path": "apps/api/src/trade-log/trade-log.validation.ts",
+      "bytes": 4888,
+      "sha256": "97f6b0fac7ce91efb5d35721f9a55ae3814372018987f5d8887893d9414cbbd7"
+    },
+    {
+      "path": "apps/web/package.json",
+      "bytes": 743,
+      "sha256": "b80448d87ff59ea45306b6253dce39308c2952b829557e1a75480c6a11c07cf8"
+    },
+    {
+      "path": "apps/web/src/App.test.ts",
+      "bytes": 1842,
+      "sha256": "fe57c01cc1b5e9a9707399d15a447959126f1a2d48e36fb71eacb4256995c109"
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "bytes": 8413,
+      "sha256": "c15ea15ae76cb114e4061b94a12f95752eed4226d623ff6dcc54361197c17f3b"
+    },
+    {
+      "path": "apps/web/src/components/AccountSwitcher.tsx",
+      "bytes": 851,
+      "sha256": "0a824f826983f72d30d3fc1a0a5cb520daa95185a90e3d7a35ca2b480a9ae54c"
+    },
+    {
+      "path": "apps/web/src/components/ExecutionTradeRow.tsx",
+      "bytes": 1066,
+      "sha256": "30051deecad4584a5b4d8bf20988900bc5a5a195b2ab072a0293d4e03178160a"
+    },
+    {
+      "path": "apps/web/src/components/Sidebar.tsx",
+      "bytes": 1976,
+      "sha256": "c46e634fd33336d95d784c9f780e9a1127fef4492b8c17ff8bc583f8a0275448"
+    },
+    {
+      "path": "apps/web/src/components/StatsPage.tsx",
+      "bytes": 2167,
+      "sha256": "2bbf5e3f36a8e1a2a4312e835a6fa1ed193b5beb402b237b024fefdafdd76868"
+    },
+    {
+      "path": "apps/web/src/components/SyncControl.test.tsx",
+      "bytes": 2747,
+      "sha256": "63b9bd49cb3f922520bfe72e056bb3bf066a474637b6f60faf3d93238f39ff3d"
+    },
+    {
+      "path": "apps/web/src/components/SyncControl.tsx",
+      "bytes": 2675,
+      "sha256": "94f515553d10509e64a4eef56ce4e82385d05b2ad6664271b6691c40e97c71d7"
+    },
+    {
+      "path": "apps/web/src/components/TradeAnalysisEditor.tsx",
+      "bytes": 9732,
+      "sha256": "1710c3ce412dd9443e5d5723f95c6fee45849a923cfdba38a3f604bc3d966aa8"
+    },
+    {
+      "path": "apps/web/src/components/TradeDetail.tsx",
+      "bytes": 1587,
+      "sha256": "03d452895f7b544fadd38e9a296293d307f01ba7d54ceb17f9c1e6beb9ba7949"
+    },
+    {
+      "path": "apps/web/src/components/TradeImageGallery.test.tsx",
+      "bytes": 5601,
+      "sha256": "d09c7834fff3a25183e3346ac5c3475a19d730652cdab1a34c1bcba2d8b3877d"
+    },
+    {
+      "path": "apps/web/src/components/TradeImageGallery.tsx",
+      "bytes": 5664,
+      "sha256": "52f675503ca12448c29c0b91ab316d3702320236c5441722299c25cc39cc15bd"
+    },
+    {
+      "path": "apps/web/src/components/TradeJournalPage.tsx",
+      "bytes": 2837,
+      "sha256": "2118f89f02a898ef525fff14a70e33055c187610c6c5b14ed9e2c014a18e4388"
+    },
+    {
+      "path": "apps/web/src/components/TradeRecordCard.tsx",
+      "bytes": 4588,
+      "sha256": "f3c03e10abf2bae6267203f49c134c011fc4fef08484414c0ea7451acf747d66"
+    },
+    {
+      "path": "apps/web/src/styles.css",
+      "bytes": 31528,
+      "sha256": "4c82773c6b59076229b376ff5d82d15801ef8e147463c285f52ce16218440c44"
+    },
+    {
+      "path": "apps/web/tsconfig.json",
+      "bytes": 583,
+      "sha256": "f57d4341a4843f3432976dbe62193479e27d4af16583a1f550727a12fa25270c"
+    },
+    {
+      "path": "docs/operations/evidence/wiki-trade-analysis-cutover/20260808T100139Z.md",
+      "bytes": 4781,
+      "sha256": "b2e815c0328242834db01a867af9eca1d3001d9c795c91f9e6d51441602bed9a"
+    },
+    {
+      "path": "docs/operations/mt5-account-sync-contract.md",
+      "bytes": 3239,
+      "sha256": "b60e9421ff8394c79334b3c2ad6c1cf9186a4023a0a920e5258e8731eccab0da"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "bytes": 7656,
+      "sha256": "65d6f9ac650c17b11879b87eb835271f68218d014f34099df2403b2b9e67e5c9"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "bytes": 240670,
+      "sha256": "feaf5cb5c1e29579ecea56dd61e4ade1d0256eb15b07a81b397fda1db56a6823"
+    }
+  ]
+}

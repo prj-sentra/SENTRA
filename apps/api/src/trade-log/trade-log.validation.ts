@@ -1,10 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import type {
-  PatchTradeAnalysisRequest,
-  TradeAnalysisEconomicIndicatorInput,
-  UpdateTradeRequest,
-} from '@trading-journal/shared';
-
+import type { PatchTradeAnalysisRequest, TradeAnalysisEconomicIndicatorInput } from '@trading-journal/shared';
 const enumValues = {
   primaryTrend: ['up', 'sideways', 'down'],
   bollingerBandCount: ['one_band', 'two_band'],
@@ -38,13 +33,9 @@ function enumValue(value: unknown, values: readonly string[], message: string, n
   if (typeof value !== 'string' || !values.includes(value)) fail(message);
 }
 
-const updateTradeFields = new Set<keyof UpdateTradeRequest>([
-  'strategy', 'thesis', 'entryRationale', 'exitRationale',
-  'takeProfitCriteria', 'stopLossCriteria', 'note',
-]);
 
 const analysisPatchFields = new Set<keyof PatchTradeAnalysisRequest>([
-  'expectedUpdatedAt', 'baseTimeframe', 'primaryTrend', 'bollingerBandCount',
+  'expectedUpdatedAt', 'note', 'baseTimeframe', 'primaryTrend', 'bollingerBandCount',
   'bollingerDirection', 'maArrangement', 'cross', 'stopLossLine',
   'marketZoneEnabled', 'marketZoneHigh', 'marketZoneLow',
   'chartPatternObserved', 'chartPatternTimeframe', 'chartPatternType',
@@ -53,17 +44,6 @@ const analysisPatchFields = new Set<keyof PatchTradeAnalysisRequest>([
   'fibonacciEndPrice', 'regret', 'economicIndicators',
 ]);
 
-export function validateUpdateTradeRequest(request: UpdateTradeRequest): void {
-  object(request, 'Invalid trade update');
-  const keys = Object.keys(request);
-  if (!keys.length) fail('updateTrade requires at least one field');
-  for (const key of keys) {
-    if (!updateTradeFields.has(key as keyof UpdateTradeRequest)) fail(`${key} is server managed`);
-  }
-  for (const field of updateTradeFields) {
-    string(request[field], `${field} must be a string or null`, true);
-  }
-}
 export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisRequest): void {
   object(request, 'Invalid analysis patch');
   for (const key of Object.keys(request)) {
@@ -72,7 +52,7 @@ export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisReq
   date(request.expectedUpdatedAt, 'expectedUpdatedAt must be a valid ISO date');
   const fields: Array<[keyof PatchTradeAnalysisRequest, readonly string[]]> = [['primaryTrend', enumValues.primaryTrend], ['bollingerBandCount', enumValues.bollingerBandCount], ['bollingerDirection', enumValues.bollingerDirection], ['maArrangement', enumValues.maArrangement], ['cross', enumValues.cross], ['chartPatternType', enumValues.chartPatternType]];
   for (const [field, values] of fields) enumValue(request[field], values, `${field} is invalid`);
-  for (const field of ['baseTimeframe', 'chartPatternTimeframe', 'regret'] as const) string(request[field], `${field} must be a string or null`, true);
+  for (const field of ['note', 'baseTimeframe', 'chartPatternTimeframe', 'regret'] as const) string(request[field], `${field} must be a string or null`, true);
   for (const field of ['marketZoneEnabled', 'chartPatternObserved', 'retailPositionEnabled', 'fibonacciEnabled'] as const) if (request[field] !== undefined && typeof request[field] !== 'boolean') fail(`${field} must be boolean`);
   for (const field of ['stopLossLine', 'marketZoneHigh', 'marketZoneLow', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'fibonacciStartPrice', 'fibonacciEndPrice'] as const) positive(request[field], `${field} must be positive`, true);
   if (request.retailBuyRatio !== undefined && request.retailBuyRatio !== null && (typeof request.retailBuyRatio !== 'number' || !Number.isFinite(request.retailBuyRatio) || request.retailBuyRatio < 0 || request.retailBuyRatio > 100)) fail('retailBuyRatio must be 0 through 100');

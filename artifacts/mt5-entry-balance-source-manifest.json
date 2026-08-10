@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 5,
+  "kind": "cross-repository-source-manifest",
+  "reviewGeneration": 5,
+  "sourceHash": "sha256:65db6ab25795c9f155d87afb33a69c30d59093f64d9e4565baaaf7cbda97a629",
+  "files": [
+    {
+      "path": "/home/hoya/trading-journal/apps/api/prisma/schema.prisma",
+      "sha256": "1f81d5132396cf22f50a016ebb54a2aab157fab2c804ac7cc672f353ac65a50d"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/prisma/migrations/20260810000000_provenance_mt5_position_entry_balances/migration.sql",
+      "sha256": "07266c07636fb5652d053c781e7bd1203a5d2fc2201c1f864adbbefae1982720"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/scripts/verify-provenance-mt5-position-entry-balances-migration.ts",
+      "sha256": "74ae0d2955935c3b934332a7bf77938a84262046ab613c2a261112cf2bfff726"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/package.json",
+      "sha256": "227133a052d4e825517f487d776f3c864f182fcf7dcdfbf377ba54a62355513f"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/mt5-accounts/mt5-bridge.client.ts",
+      "sha256": "cf1faa213a6d02f7bf2c072d9981a023d4614da6142128a3f1348abddbdb69a6"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/mt5-accounts/mt5-bridge.client.spec.ts",
+      "sha256": "92d3d7b071f73b47170374caed2ec2e5cb74e195f670789519807f8ddfbea5d0"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/mt5-accounts/mt5-sync.service.ts",
+      "sha256": "f02fd6cf4d1f4c2d7c981120b62e93dd1eddea70eab7c6f0346f9a49fa211730"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts",
+      "sha256": "eccc7a2d96c7880a65c50af462f280b95b8b22763fb520f43ec4de545aabd4a9"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/mt5-accounts/mt5-campaign-serialization.int.spec.ts",
+      "sha256": "391f161dd4e705b1c138f248aaf835a0aa0c05195136aebd1873c4f8ff26445c"
+    },
+    {
+      "path": "/home/hoya/trading-journal/apps/api/src/trade-log/trade-log.service.ts",
+      "sha256": "6383ca1d9e7b63f4b3ab3b02206d7490244d04fa8543ec0b3547ddc2893cedcb"
+    },
+    {
+      "path": "/home/hoya/trading-journal/packages/shared/src/index.ts",
+      "sha256": "685068eefa06d9dd9406820eb08409c0b9709f1bfd183d7ec4c4de4d22e80c50"
+    },
+    {
+      "path": "/home/hoya/trading-journal/artifacts/mt5-entry-balance-evidence-validation.json",
+      "sha256": "0c0540daa9e45b190001f739651e1b203298e767bf8efbac6836f4314e255d29"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/server.py",
+      "sha256": "ff230e2938eac8b546c45d736a8ab90c880f4d576099c13b3d5e197a6495772c"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/test_server.py",
+      "sha256": "4bdfcf9aeb4778ae7989ad555a918bf660d4912096c8a7a2fcabbee848d6dc92"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/validate_bridge_response.ps1",
+      "sha256": "2ac893dbf77b56224cc31eddbbfb16ee70844083348e735919c9e6bf7e71d5ef"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/test_validate_bridge_response.ps1",
+      "sha256": "f39e7f5b1a84a45e1b9f9a9e74760c4ba5efaa90c629074f0150642c736a3285"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/check_bridge_task.ps1",
+      "sha256": "03e0896f59bcc1374a02f1cf1de18df8ce475b7b182d9bbf9083bdf02642ca63"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/.env.example",
+      "sha256": "253397832ed5eb646d8cdebb290bd59016d813ca0ceacf8b4b95c90462e2e1d1"
+    },
+    {
+      "path": "/home/hoya/mt5-window-server/entry_balance_proof.example.json",
+      "sha256": "3f54737ebe2be9cc734cb765077984c3b281ee05f339d722326d7fcaeccf8d75"
+    }
+  ]
+}

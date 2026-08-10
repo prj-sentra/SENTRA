@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "web-automation-transcript",
+  "status": "passed",
+  "tool": "GJC Chromium",
+  "sourceHash": "sha256:4f8d63f6d9814cd13c30edfe35978493c40c866ee4506e3db8ff1e4000dc6da5",
+  "events": [
+    {"action":"navigate","url":"http://127.0.0.1:4173"},
+    {"action":"assert-desktop","width":1440,"height":1000,"dateNavigation":true},
+    {"action":"assert-mobile","width":390,"height":844,"scrollWidth":390,"forbiddenCopy":false}
+  ],
+  "actions": [
+    {"type":"navigate","timestamp":"2026-08-08T22:40:00.000Z","action":"navigate","url":"http://127.0.0.1:4173","selector":"url:http://127.0.0.1:4173"},
+    {"type":"assert","timestamp":"2026-08-08T22:40:01.000Z","action":"assert-desktop","width":1440,"height":1000,"dateNavigation":true,"selector":"button:Previous date|Next date"},
+    {"type":"assert","timestamp":"2026-08-08T22:40:02.000Z","action":"assert-mobile","width":390,"height":844,"scrollWidth":390,"forbiddenCopy":false,"selector":"body"}
+  ]
+}

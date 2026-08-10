@@ -1,0 +1,64 @@
+{
+  "kind": "test-report",
+  "schemaVersion": 11,
+  "generation": 11,
+  "sourceHash": "sha256:fa7fb6c0d28a4ecbada6db74b7cc87420839df3c6677c043e7a592725074af38",
+  "sourceHashStatus": "passed",
+  "sourceHashMethod": "Verified artifacts/final-source-manifest.json ordered path UTF-8 + NUL + uint64be(raw-byte-length) + raw bytes digest; every listed file length and SHA-256 also matched.",
+  "status": "passed-with-external-bridge-limitation",
+  "e2eStatus": "passed-with-external-bridge-limitation",
+  "redTeamStatus": "passed-with-external-bridge-limitation",
+  "observedAt": "2026-08-09T14:10:00Z",
+  "evidence": [
+    {"command":"manifest custom SHA-256 verification","result":"passed","detail":"Calculated sha256:fa7fb6c0d28a4ecbada6db74b7cc87420839df3c6677c043e7a592725074af38 exactly; all 44 manifest entries matched their declared byte lengths and file hashes."},
+    {"command":"npm exec --yes pnpm@10.26.0 -- typecheck","result":"passed","detail":"Root shared, API, and web TypeScript checks passed."},
+    {"command":"npm exec --yes pnpm@10.26.0 -- test","result":"passed","detail":"API: 17 Jest suites / 113 tests. Web: 7 Vitest files / 15 tests."},
+    {"command":"npm exec --yes pnpm@10.26.0 -- build","result":"passed","detail":"Shared, API Prisma generate/Nest build, and web Vite production build passed."},
+    {"command":"git diff --check","result":"passed","detail":"No whitespace errors in the working diff. Existing user work was not modified."},
+    {"command":"isolated finalqa_sourcehash PostgreSQL lifecycle verifier","result":"passed","detail":"Created an empty disposable database, ran test:migration:journal-redesign, received full lifecycle and drift-reconciliation pass, then dropped the database."},
+    {"command":"PostgreSQL backup/restore rehearsal","result":"passed","detail":"Restored a custom-format dump of trading_journal into disposable finalqa_restore; restored database contained 22 Prisma migration records and was dropped."},
+    {"command":"persistent production-overlay migration status","result":"passed","detail":"Prisma found 19 migration directories and no pending migrations against the running PostgreSQL overlay."},
+    {"command":"production overlay configuration and Caddy validation","result":"passed","detail":"docker compose production overlay config was valid; Caddyfile validation passed."},
+    {"command":"continuity observation","result":"passed","detail":"At observation, API and PostgreSQL were healthy with restartCount=0 and start times 2026-08-09T13:09Z, establishing more than 30 minutes of uninterrupted running; Caddy and web also had restartCount=0."},
+    {"command":"Caddy authorization probes","result":"passed","detail":"GET / returned 200; anonymous trade-log campaigns, stats with a foreign-shaped account ID, and MT5 accounts returned 401; sync, analysis write, and image write attempts without a session returned 403."},
+    {"command":"artifacts/final-journal-desktop.png and artifacts/final-journal-mobile.png inspection","result":"passed","detail":"Desktop shows Korean journal, selected account, date controls, record metrics, and detail action. At 390px, the account selector, date controls, record summary, and detail action remain visible without page-width horizontal overflow."}
+  ],
+  "contractCoverage": [
+    {"id":"source-hash-binding","status":"passed","evidence":"Exact manifest hash and every member digest/length passed."},
+    {"id":"root-quality-gates","status":"passed","evidence":"Root typecheck, test, build, and git diff --check passed."},
+    {"id":"migration-lifecycle-drift","status":"passed","evidence":"Empty isolated lifecycle verifier exercised fail-closed timeframe preflight, lossless reconciliation, canonical timeframes, cross NONE, upload-id ordering, and drift reconciliation; persistent overlay has no pending migrations."},
+    {"id":"backup-restore","status":"passed","evidence":"Production-database custom dump restored to and was removed from an isolated rehearsal database."},
+    {"id":"authorization-boundary","status":"passed","evidence":"Anonymous read probes are 401 and state-changing probes are 403 through Caddy."},
+    {"id":"mt5-http-contract","status":"passed-with-external-bridge-limitation","evidence":"Passing bridge-client/stateful MT5 suites cover fail-closed balance, canonical/exact identity, replay, and exact-server behavior. The trusted HTTP contract is implemented and Caddy injects its token only on the anchored sync route."},
+    {"id":"image-concurrency-gallery","status":"passed","evidence":"Passing API and component suites cover replay, campaign isolation, unique durable files, stale claim recovery, transactional reindexing, retry, ordinal controls, paste, and cap."},
+    {"id":"responsive-korean-journal","status":"passed","evidence":"15 web tests passed and current desktop/mobile screenshots were inspected."}
+  ],
+  "surfaceEvidence": [
+    {"surface":"frozen source","status":"passed","evidence":"artifacts/final-source-manifest.json exact custom hash matched."},
+    {"surface":"root workspace","status":"passed","evidence":"typecheck, test, build, and diff check passed."},
+    {"surface":"database lifecycle and restore","status":"passed","evidence":"Disposable migration lifecycle and dump/restore rehearsals passed and were cleaned up."},
+    {"surface":"production overlay health","status":"passed","evidence":"No pending migrations; overlay config/Caddy validation passed; API/PostgreSQL healthy without restarts for more than 30 minutes."},
+    {"surface":"authorization","status":"passed","evidence":"Caddy probes observed 401 read and 403 mutation/session-boundary rejections."},
+    {"surface":"MT5 deployment bridge","status":"blocked-external","evidence":"MT5_BRIDGE_BASE_URL is configured as http://10.0.0.104:18812, the documented PoC endpoint rather than a deployed verified bridge. Both authenticated API sync-trigger attempts were accepted by the API and then failed at the external bridge; no bridge facts were committed."},
+    {"surface":"journal gallery UX","status":"passed","evidence":"Current desktop and 390px mobile screenshots show usable Korean journal controls and record layout."}
+  ],
+  "adversarialCases": [
+    {"case":"manifest tampering or stale source receipt","status":"passed","evidence":"Exact ordered raw-byte hash and all member hashes matched the supplied frozen manifest."},
+    {"case":"unknown timeframe/cross NONE/pre-existing migration drift","status":"passed","evidence":"Isolated verifier passed fail-closed preflight and reconciliation checks."},
+    {"case":"backup recoverability","status":"passed","evidence":"Custom-format production dump restored into isolated database with 22 migration records."},
+    {"case":"anonymous and foreign-shaped account access","status":"passed","evidence":"Read paths returned 401; state-changing paths returned 403."},
+    {"case":"MT5 malformed/replayed identity and missing balances","status":"passed","evidence":"Passing MT5 bridge and stateful suites cover identity, replay, and fail-closed balance contracts."},
+    {"case":"external MT5 bridge availability","status":"blocked-external","evidence":"Configured URL is the documented PoC. Accepted API triggers failed externally, so deployment bridge availability is not proven; this does not invalidate the implemented trusted HTTP contract."},
+    {"case":"same upload ID, cross-campaign image access, stale claim recovery, retry/ordinal/paste/cap UX","status":"passed","evidence":"Passing API/image-gallery suites cover these cases."},
+    {"case":"desktop and 390px mobile layout","status":"passed","evidence":"Current screenshots inspected; primary controls and detail action are visible."}
+  ],
+  "artifactRefs": [
+    {"kind":"source-manifest","ref":"artifacts/final-source-manifest.json","sourceHash":"sha256:fa7fb6c0d28a4ecbada6db74b7cc87420839df3c6677c043e7a592725074af38","status":"passed"},
+    {"kind":"test-report","ref":"artifacts/final-journal-redesign-red-team-report.json","sourceHash":"sha256:fa7fb6c0d28a4ecbada6db74b7cc87420839df3c6677c043e7a592725074af38","status":"passed-with-external-bridge-limitation"},
+    {"kind":"desktop-screenshot","ref":"artifacts/final-journal-desktop.png","status":"passed"},
+    {"kind":"mobile-screenshot","ref":"artifacts/final-journal-mobile.png","status":"passed"}
+  ],
+  "blockers": [
+    {"id":"external-mt5-bridge-unavailable","severity":"external","detail":"The configured URL http://10.0.0.104:18812 is the documented PoC rather than a verified production bridge. Both API sync trigger attempts were accepted and then failed externally. The API/Caddy trusted HTTP contract remains implemented and unit/stateful tested, but a live authenticated bridge sync cannot be certified until an operational bridge is deployed."}
+  ]
+}

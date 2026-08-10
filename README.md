@@ -24,15 +24,13 @@ pnpm dev
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
 ```
 
 서비스:
-
-- Web: http://localhost:5173
-- API: http://localhost:3000
-- API health: http://localhost:3000/health
-- PostgreSQL: localhost:5432
+- Web: http://localhost
+- API health: http://localhost/health
+- API와 PostgreSQL은 호스트 포트를 열지 않고 Compose 내부 네트워크에서만 통신합니다.
 
 주의: 현재 환경에는 docker CLI가 없으면 compose 검증은 불가능합니다.
 

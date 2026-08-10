@@ -1,4 +1,5 @@
-import type { PatchTradeAnalysisRequest, TradeCampaign, UpdateTradeRequest } from '@trading-journal/shared';
+import type { ReactNode } from 'react';
+import type { PatchTradeAnalysisRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { TradeRecordCard } from './TradeRecordCard';
 
 export interface TradeJournalPageProps {
@@ -10,34 +11,34 @@ export interface TradeJournalPageProps {
   loading?: boolean;
   error?: string | null;
   imageUrl: (campaignId: string, imageId: string) => string;
-  onUpdateTrade: (tradeId: string, patch: UpdateTradeRequest) => Promise<void>;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
-  onUpdateExecutionNote: (tradeId: string, kind: 'entry' | 'exit', note: string) => Promise<void>;
-  onUploadImage: (campaignId: string, file: File) => Promise<void>;
+  onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
   onReorderImages: (campaignId: string, imageIds: string[]) => Promise<void>;
   onDeleteImage: (campaignId: string, imageId: string) => Promise<void>;
+  toolbar?: ReactNode;
 }
 
-export function TradeJournalPage({
-  campaigns,
-  date,
-  previousDate,
-  nextDate,
-  onSelectDate,
-  loading = false,
-  error,
-  ...actions
-}: TradeJournalPageProps) {
+function koreanDate(value?: string): string {
+  if (!value) return '최근 거래일';
+  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date(`${value}T00:00:00`));
+}
+function koreanDateShort(value?: string): string {
+  if (!value) return '최근';
+  return new Intl.DateTimeFormat('ko-KR', { month: 'short', day: 'numeric' }).format(new Date(`${value}T00:00:00`));
+}
+
+export function TradeJournalPage({ campaigns, date, previousDate, nextDate, onSelectDate, loading = false, error, toolbar, ...actions }: TradeJournalPageProps) {
   return <section className="trade-journal-page" aria-busy={loading}>
     <header className="journal-page-heading">
-      <div><p className="section-label">Trade Journal</p><h1>Closed trades</h1></div>
-      <nav className="date-navigation" aria-label="Historical trading dates">
-        <button type="button" className="secondary-button compact" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>Previous date</button>
-        <time dateTime={date}>{date ?? 'Latest'}</time>
-        <button type="button" className="secondary-button compact" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>Next date</button>
+      <nav className="date-navigation" aria-label="거래일 탐색">
+        <button type="button" className="secondary-button compact" aria-label="이전 거래일" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>이전</button>
+        <label className="calendar-picker"><span className="sr-only">거래일 선택</span><input type="date" value={date ?? ''} onChange={(event) => event.target.value && onSelectDate(event.target.value)} disabled={loading} /></label>
+        <time dateTime={date}><span className="date-long">{koreanDate(date)}</span><span className="date-short">{koreanDateShort(date)}</span></time>
+        <button type="button" className="secondary-button compact" aria-label="다음 거래일" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>다음</button>
       </nav>
+      {toolbar ? <div className="journal-page-toolbar">{toolbar}</div> : null}
     </header>
     {error ? <p className="error" role="alert">{error}</p> : null}
-    {loading ? <p className="journal-state">Loading trades…</p> : campaigns.length === 0 ? <p className="journal-state">No trade records yet.</p> : <div className="trade-card-list">{campaigns.map((campaign) => <TradeRecordCard key={campaign.id} campaign={campaign} {...actions} />)}</div>}
+    {loading ? <p className="journal-state" role="status">거래 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 거래 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => <TradeRecordCard key={campaign.id} campaign={campaign} {...actions} />)}</div>}
   </section>;
 }

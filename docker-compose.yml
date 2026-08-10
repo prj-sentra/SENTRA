@@ -1,4 +1,24 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: trading-journal-caddy
+    restart: unless-stopped
+    environment:
+      MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     container_name: trading-journal-postgres
@@ -7,8 +27,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-trading_journal}
       POSTGRES_USER: ${POSTGRES_USER:-trading}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trading_dev_password}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -39,8 +57,6 @@ services:
       WIKI_PATH: ${WIKI_PATH:-/data/wiki}
       WIKI_WRITE_TOKEN: ${WIKI_WRITE_TOKEN:-}
       MT5_SYNC_TOKEN: ${MT5_SYNC_TOKEN:-}
-    ports:
-      - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,11 +74,9 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_API_URL: /api
     container_name: trading-journal-web
     restart: unless-stopped
-    ports:
-      - "5173:80"
     depends_on:
       api:
         condition: service_healthy
@@ -71,3 +85,5 @@ volumes:
   postgres-data:
   wiki-data:
   trade-image-data:
+  caddy-data:
+  caddy-config:

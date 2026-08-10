@@ -12,6 +12,7 @@ export interface PatchMt5AccountInput {
   server?: string;
   accountLogin?: number;
   password?: string;
+  timeCorrectionHours?: number;
   active?: boolean;
 }
 
@@ -48,7 +49,7 @@ export const validateCreateAccount = (value: unknown): CreateMt5AccountInput => 
   const input = value as Record<string, unknown>;
   return {
     nickname: requireString(input.nickname, 'nickname', 100),
-    server: canonicalizeServer(input.server),
+    server: requireString(input.server, 'server', 255),
     accountLogin: validateAccountLogin(input.accountLogin),
     password: requireString(input.password, 'password', 1024),
   };
@@ -59,7 +60,7 @@ export const validatePatchAccount = (value: unknown): PatchMt5AccountInput => {
     throw new BadRequestException('request is invalid');
   }
   const input = value as Record<string, unknown>;
-  const allowed = ['nickname', 'server', 'accountLogin', 'password', 'active'];
+  const allowed = ['nickname', 'server', 'accountLogin', 'password', 'active', 'timeCorrectionHours'];
   if (!Object.keys(input).length || Object.keys(input).some((key) => !allowed.includes(key))) {
     throw new BadRequestException('request is invalid');
   }
@@ -68,9 +69,14 @@ export const validatePatchAccount = (value: unknown): PatchMt5AccountInput => {
   }
   return {
     ...(input.nickname !== undefined && { nickname: requireString(input.nickname, 'nickname', 100) }),
-    ...(input.server !== undefined && { server: canonicalizeServer(input.server) }),
+    ...(input.server !== undefined && { server: requireString(input.server, 'server', 255) }),
     ...(input.accountLogin !== undefined && { accountLogin: validateAccountLogin(input.accountLogin) }),
     ...(input.password !== undefined && { password: requireString(input.password, 'password', 1024) }),
     ...(input.active !== undefined && { active: input.active }),
+    ...(input.timeCorrectionHours !== undefined && {
+      timeCorrectionHours: Number.isInteger(input.timeCorrectionHours) && Math.abs(input.timeCorrectionHours as number) <= 23
+        ? input.timeCorrectionHours as number
+        : (() => { throw new BadRequestException('timeCorrectionHours is invalid'); })(),
+    }),
   };
 };

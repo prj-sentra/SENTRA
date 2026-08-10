@@ -1,11 +1,43 @@
-node_modules
-dist
-build
-.vite
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output and compiler caches
+dist/
+build/
+.vite/
+*.tsbuildinfo
+*.tsbuildinfo.*
+.turbo/
+.cache/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+.nyc_output/
+
+# Local environment and secrets
 .env
 .env.*
 !.env.example
-.DS_Store
-coverage
+*.pem
+*.key
+
+# Logs and runtime data
 *.log
-postgres-data
+*.pid
+*.pid.lock
+postgres-data/
+trade-images/
+
+# GJC local sessions and worktrees
+.gjc/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

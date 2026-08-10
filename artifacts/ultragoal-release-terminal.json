@@ -1,0 +1,248 @@
+{
+  "kind": "ultragoal-release-terminal",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:4f8d63f6d9814cd13c30edfe35978493c40c866ee4506e3db8ff1e4000dc6da5",
+  "priorSourceHash": "sha256:7910ce060a47628a6a984274bbe37ee2ded4518dcadbd2376a1174f783e42c0d",
+  "status": "passed",
+  "e2eStatus": "passed",
+  "redTeamStatus": "passed",
+  "snapshot": {
+    "method": "git archive --format=tar HEAD",
+    "path": "/tmp/g005-gen4",
+    "archiveSha256": "4f8d63f6d9814cd13c30edfe35978493c40c866ee4506e3db8ff1e4000dc6da5",
+    "workingTreeExcluded": true
+  },
+  "e2eCommands": [
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- install --frozen-lockfile",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:generate",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- build",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm exec --yes pnpm@10.26.0 -- test",
+      "status": "passed",
+      "result": "API 17 suites/100 tests; web 5 files/9 tests"
+    },
+    {
+      "command": "DATABASE_URL=postgresql://gen4:gen4@127.0.0.1:55437/gen4_verify npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api prisma:migrate",
+      "status": "passed",
+      "result": "16 migrations on fresh PostgreSQL 16"
+    },
+    {
+      "command": "MIGRATION_VERIFY_DATABASE_URL=postgresql://gen4:gen4@127.0.0.1:55437/gen4_harness npm exec --yes pnpm@10.26.0 -- --filter @trading-journal/api test:migration:secure-accounts-gallery",
+      "status": "passed"
+    },
+    {
+      "command": "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet",
+      "status": "passed"
+    },
+    {
+      "command": "caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile",
+      "status": "passed"
+    }
+  ],
+  "redTeamCommands": [
+    {
+      "command": "root API/web test suite",
+      "status": "passed"
+    },
+    {
+      "command": "source/test inspection: projection counts, SyncControl timer lifecycle, scopedLoadGeneration stale-load fence, public route guard, scripts",
+      "status": "passed"
+    }
+  ],
+  "artifactRefs": [
+    {
+      "kind": "api-package-test-report",
+      "ref": "artifacts/ultragoal-release-terminal.json",
+      "sourceHash": "sha256:4f8d63f6d9814cd13c30edfe35978493c40c866ee4506e3db8ff1e4000dc6da5"
+    }
+  ],
+  "contractCoverage": [
+    {
+      "id": "C01-auth-session-origin-throttle",
+      "refs": [
+        "apps/api/src/auth/auth.http.spec.ts",
+        "apps/api/src/auth/guards.spec.ts",
+        "apps/api/src/auth/throttle.service.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "C02-idor-accounts-replacement",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts",
+        "apps/api/src/mt5-accounts/credential-cipher.service.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "C03-sync-lease-cursor-projection",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.service.ts",
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Projection returns imported-count; empty replay returns zero, account lease and exact cursor fence updates."
+    },
+    {
+      "id": "C04-gallery-scope",
+      "refs": [
+        "apps/api/src/trade-log/trade-log.owner-scope.spec.ts",
+        "apps/api/src/trade-log/campaign-image.service.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "C05-analysis-canonicalization",
+      "refs": [
+        "apps/web/src/components/TradeAnalysisEditor.test.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "C06-sync-timers",
+      "refs": [
+        "apps/web/src/components/SyncControl.tsx",
+        "apps/web/src/components/SyncControl.test.tsx"
+      ],
+      "status": "passed",
+      "summary": "Result clearing is 3000ms, prior timer is cleared, unmount/account change cleans timer."
+    },
+    {
+      "id": "C07-stale-load-fence",
+      "refs": [
+        "apps/web/src/App.tsx"
+      ],
+      "status": "passed",
+      "summary": "Monotonic scopedLoadGeneration prevents stale load response/error/finally state mutations; logout invalidates generation."
+    },
+    {
+      "id": "C08-routing-cleanup",
+      "refs": [
+        "apps/api/src/auth/guards.ts",
+        "infra/caddy/Caddyfile",
+        "apps/api/scripts"
+      ],
+      "status": "passed",
+      "summary": "Public decorator endpoint whitelist and exact trusted sync route reviewed; archive contains only prepare/verify secure-gallery scripts."
+    },
+    {
+      "id": "C09-migrations",
+      "refs": [
+        "apps/api/prisma/migrations",
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts"
+      ],
+      "status": "passed"
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "id": "S01-clean-executable",
+      "refs": [
+        "/tmp/g005-gen4"
+      ],
+      "status": "passed",
+      "summary": "Hash-bound frozen archive passed install/generate/build/typecheck/test."
+    },
+    {
+      "id": "S02-prod-compose-caddy",
+      "refs": [
+        "docker-compose.prod.yml",
+        "infra/caddy/Caddyfile"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "S03-web-responsive-copy",
+      "refs": [
+        "apps/web/src/product-contract.test.ts"
+      ],
+      "status": "passed",
+      "summary": "Container boundary and no rendered Campaign/Member copy test passes."
+    },
+    {
+      "id": "S04-timers-and-load-fence",
+      "refs": [
+        "apps/web/src/components/SyncControl.tsx",
+        "apps/web/src/App.tsx"
+      ],
+      "status": "passed"
+    }
+  ],
+  "adversarialCases": [
+    {
+      "id": "R01-origin-session",
+      "refs": [
+        "apps/api/src/auth/guards.spec.ts",
+        "apps/api/src/auth/auth.http.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R02-throttle",
+      "refs": [
+        "apps/api/src/auth/throttle.service.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R03-idor-replacement",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R04-projection-count-replay",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts"
+      ],
+      "status": "passed",
+      "summary": "Initial import one, idempotent/empty replay zero."
+    },
+    {
+      "id": "R05-order-only-tpsl",
+      "refs": [
+        "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R06-sync-timer-failed-message",
+      "refs": [
+        "apps/web/src/components/SyncControl.test.tsx"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R07-stale-load",
+      "refs": [
+        "apps/web/src/App.tsx"
+      ],
+      "status": "passed"
+    },
+    {
+      "id": "R08-migration-reconciliation",
+      "refs": [
+        "apps/api/scripts/verify-secure-accounts-gallery-migration.ts"
+      ],
+      "status": "passed"
+    }
+  ],
+  "blockers": [],
+  "advisories": [
+    "No current-source-hash-bound browser automation transcript was supplied; visual release claims remain limited to source/test contract evidence."
+  ]
+}

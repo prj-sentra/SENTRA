@@ -1,0 +1,58 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:9accb677517bc10bbb59bb72e227fbae7a52986fa3c70842e8810ec1e33e172a",
+  "priorSourceHash": "sha256:ef4774b220bf61d08745949593147232b00589845f604ebc0b4df591f460204b",
+  "status": "blocked",
+  "e2eStatus": "partial",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/shared build","result":"passed","detail":"Shared TypeScript build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api build","result":"passed","detail":"Prisma Client generation and Nest production build passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck","result":"passed","detail":"API tsc --noEmit passed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api test","result":"passed","detail":"17 Jest suites, 96 tests, 0 snapshots passed."},
+    {"command":"Explicitly reset only sentra-ultragoal-pg and its mounted volume; MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public pnpm test:migration:secure-accounts-gallery","result":"passed","detail":"Fresh PostgreSQL 16 at port 55434 became healthy; complete populated secure accounts/gallery migration matrix passed."},
+    {"command":"docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet","result":"passed","detail":"Production interpolation passed with required configuration values."},
+    {"command":"Caddy validate and caddy adapt exact route assertion","result":"passed","detail":"Caddy returned Valid configuration. Adapted output includes anchored ^/api/mt5-accounts/[^/]+/sync$, X-Mt5-Sync-Token request injection, and API strip_path_prefix."}
+  ],
+  "contractCoverage": [
+    {"contract":"Shared/API build, Prisma generation, and typecheck","status":"covered","evidence":"All completed successfully.","blocker":null},
+    {"contract":"Full registered API suite","status":"covered","evidence":"17 suites and 96 tests passed.","blocker":null},
+    {"contract":"Fresh full PostgreSQL migration matrix including populated success","status":"covered","evidence":"Fresh isolated verifier passed populated success and its missing/mismatched manifest fail-closed branches.","blocker":null},
+    {"contract":"Production Compose and trusted Caddy sync routing","status":"covered","evidence":"Compose config, Caddy validation, and adapted exact-route assertion passed.","blocker":null},
+    {"contract":"HTTP authentication acceptance","status":"partial-live-covered","evidence":"auth.http.spec.ts runs a loopback Nest adapter and validates enumeration-safe signup, HttpOnly cookie issue, logout revocation/clear, and rejected PENDING/DISABLED login without cookie.","blocker":"It does not mount the production module and guard graph."},
+    {"contract":"Stateful sync persistence boundary","status":"stateful-covered","evidence":"mt5-sync.stateful.spec.ts covers idempotent replay, empty cursor update, duplicate lease claim, stale fenced rollback, projection relations, and analysis preservation.","blocker":"Stateful fake does not prove PostgreSQL constraints or transaction races."}
+  ],
+  "surfaceEvidence": [
+    {"surface":"HTTP auth/cookie lifecycle","status":"live-adapter-covered","evidence":"auth.http.spec.ts starts Nest on loopback and uses fetch."},
+    {"surface":"Origin/session/pending/HTTP IDOR","status":"partial","evidence":"Guard and owner-scope tests cover exact Origin, no-session denial, and scope rejection.","blocker":"No full production-module HTTP authorization or IDOR acceptance test."},
+    {"surface":"Bootstrap/canonical/manifest","status":"covered","evidence":"Sentinel bootstrap tests, canonical API/SQL enforcement, and fresh populated migration matrix passed."},
+    {"surface":"Stateful sync","status":"stateful-covered","evidence":"Stateful test covers replay idempotency, empty batch cursor, duplicate claim, stale rollback, projection, and analysis preservation."},
+    {"surface":"Sync PostgreSQL concurrency","status":"not-covered","evidence":"No real PostgreSQL sync race suite exists.","blocker":"In-memory fake cannot verify database transaction/constraint behavior."},
+    {"surface":"Account lease/redaction","status":"unit-covered","evidence":"Service tests cover ownership hiding, live lease rejection, replacement fencing, and secret redaction."},
+    {"surface":"Gallery","status":"partial","evidence":"Ownership, reorder, owned filesystem reads, and filename redaction are covered.","blocker":"No upload endpoint or concurrent ten-image-cap integration test."},
+    {"surface":"Caddy sync route","status":"covered","evidence":"Exact anchored route/token injection/prefix stripping assertion passed."}
+  ],
+  "adversarialCases": [
+    {"case":"HTTP signup enumeration","expected":"Equivalent 202 responses","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"HTTP login/logout cookie lifecycle","expected":"HttpOnly cookie issued, session revoked and cleared","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"PENDING/DISABLED HTTP login","expected":"401 with no session cookie","status":"passed","evidence":"auth.http.spec.ts"},
+    {"case":"Wrong Origin/missing session","expected":"Forbidden/Unauthorized","status":"passed-unit-only","evidence":"auth/guards.spec.ts"},
+    {"case":"Foreign/malformed selected scope","expected":"No cross-owner access / BadRequest","status":"passed","evidence":"trade-log.owner-scope.spec.ts"},
+    {"case":"Missing bootstrap sentinel","expected":"Fail closed","status":"passed","evidence":"admin-users.service.spec.ts"},
+    {"case":"Canonical identity and populated manifest mismatch","expected":"Fail closed","status":"passed","evidence":"Fresh migration matrix."},
+    {"case":"Foreign account/live lease/replacement/redaction","expected":"Hidden/rejected/no secret","status":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Sync replay and empty cursor batch","expected":"Idempotent facts/exact cursor advance","status":"passed","evidence":"mt5-sync.stateful.spec.ts"},
+    {"case":"Duplicate live sync claim","expected":"No upstream invocation","status":"passed","evidence":"mt5-sync.stateful.spec.ts"},
+    {"case":"Stale lease before fenced commit","expected":"Rollback facts/cursor/projection","status":"passed","evidence":"mt5-sync.stateful.spec.ts"},
+    {"case":"Bridge identity mismatch","expected":"Reject mismatch","status":"passed","evidence":"mt5-bridge.client.spec.ts"},
+    {"case":"Gallery foreign access/reorder/filesystem redaction","expected":"No disclosure/BadRequest/redacted record","status":"passed","evidence":"campaign-image.service.spec.ts"},
+    {"case":"Concurrent gallery upload cap","expected":"At most ten durable images","status":"blocked","evidence":"No endpoint/concurrency integration test."}
+  ],
+  "blockers": [
+    {"id":"B1","severity":"blocking","finding":"No full production-module HTTP authorization/IDOR acceptance suite.","impact":"Origin and session guard ordering, pending-admin authorization, and owner isolation cannot be established over real routed requests."},
+    {"id":"B2","severity":"blocking","finding":"Sync stateful coverage is in-memory rather than PostgreSQL.","impact":"Database transaction, unique-constraint, and concurrency proof for duplicate/stale synchronization is absent."},
+    {"id":"B3","severity":"blocking","finding":"No gallery upload/concurrent-cap integration suite.","impact":"Live upload durability and ten-image cap behavior under contention remain unproved."}
+  ],
+  "artifactRefs": [{"kind":"api-package-test-report","path":"artifacts/ultragoal-api-boundary-final.json","sourceHash":"sha256:9accb677517bc10bbb59bb72e227fbae7a52986fa3c70842e8810ec1e33e172a"}]
+}

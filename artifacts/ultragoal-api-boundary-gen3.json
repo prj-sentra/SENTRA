@@ -1,0 +1,57 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "sourceHash": "sha256:a4400ac655b8e4e739f949e5f1600ebd4ad37e65bd127fa09d903c780c039ea3",
+  "priorSourceHash": "sha256:538338440cb49065326358c5302c4d85a508f94c56feeb22c66770a7817ebd6e",
+  "status": "blocked",
+  "e2eStatus": "blocked",
+  "redTeamStatus": "blocked",
+  "evidence": [
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/shared build","result":"passed","detail":"Shared TypeScript build completed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api prisma:generate","result":"passed","detail":"Prisma Client v6.19.0 generated."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api typecheck","result":"passed","detail":"tsc --noEmit completed."},
+    {"command":"npx --yes pnpm@10.26.0 --filter @trading-journal/api test","result":"passed","detail":"12 Jest suites, 78 tests, 0 snapshots passed."},
+    {"command":"MIGRATION_VERIFY_DATABASE_URL=postgresql://postgres:test@127.0.0.1:55434/journal?schema=public npx --yes pnpm@10.26.0 --filter @trading-journal/api test:migration:secure-accounts-gallery","result":"passed","detail":"Passed against freshly recreated dedicated sentra-ultragoal-pg PostgreSQL 16 container on port 55434."},
+    {"command":"docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet","result":"passed","detail":"Passed with CADDY_SITE_ADDRESS, HTTPS WEB_ORIGIN, 32+ character throttle key, and base64 32-byte encryption key."},
+    {"command":"CADDY_SITE_ADDRESS=https://qa.example.test MT5_SYNC_TOKEN=qa-sync-token docker run --rm ... caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile","result":"passed","detail":"Caddy returned Valid configuration."}
+  ],
+  "contractCoverage": [
+    {"contract":"Current package/API compilation contract","status":"covered","evidence":"Shared build, Prisma generate, and API typecheck passed.","blocker":null},
+    {"contract":"Current API test contract","status":"partially-covered","evidence":"All registered API Jest tests passed (12 suites/78 tests).","blocker":"No HTTP/Supertest test registration; direct unit/controller tests do not prove live routing or cookie behavior."},
+    {"contract":"Fail-closed migration contract","status":"covered","evidence":"Fresh PostgreSQL verifier passed; verifier rejects non-empty databases and checks required fail-closed migration proof markers before applying ordered migration SQL.","blocker":null},
+    {"contract":"Production proxy/topology contract","status":"covered","evidence":"Production Compose interpolation and Caddy validation passed; Caddy routes only the sync trigger through trusted X-MT5-Sync-Token injection.","blocker":null},
+    {"contract":"Frozen QA-only operation contract","status":"violated","evidence":"No product, formatter, commit, or .gjc files were edited.","blocker":"A mistaken docker volume prune deleted seven unused Docker volumes beyond the dedicated QA database volume."}
+  ],
+  "surfaceEvidence": [
+    {"surface":"Module and route registration","result":"covered-static","evidence":"AppModule imports AuthModule, Mt5AccountsModule, and TradeLogModule; API typecheck passed."},
+    {"surface":"HTTP/IDOR/selected scopes","result":"covered-service-only","evidence":"trade-log.owner-scope.spec.ts covers owner-default reads, manual scope, foreign account denial, and malformed combinations.","blocker":"No live HTTP IDOR probe on the frozen target."},
+    {"surface":"Origin/session/cookie/pending/admin","result":"partial","evidence":"guards.spec.ts covers exact mutation Origin and unauthenticated private denial; static inspection confirms httpOnly sameSite=lax session cookie and pending state service behavior.","blocker":"No Nest HTTP run establishes cookie issuance/revocation, guard order, pending route authorization, or CORS behavior."},
+    {"surface":"Throttle","result":"covered-unit-only","evidence":"auth/throttle.service.spec.ts is registered in the passing full suite; source uses HMAC-dimensioned database throttle keys and atomic SQL.","blocker":"No concurrent PostgreSQL throttle proof."},
+    {"surface":"MT5 account redaction/replacement lease","result":"covered-service-only","evidence":"mt5-accounts.service.spec.ts covers no credential serialization, foreign account hiding, exact live-lease rejection, and replacement updateMany fence conflict."},
+    {"surface":"Sync duplicate/stale/mismatch","result":"partial","evidence":"mt5-bridge.client.spec.ts covers response identity mismatch; static sync service inspection shows credential-tag and live-lease fence before fact persistence.","blocker":"No Mt5SyncService test suite or PostgreSQL race/full-history proof is registered."},
+    {"surface":"Gallery reorder/cap/path","result":"partial","evidence":"campaign-image.service.spec.ts covers invalid duplicate/empty reorder lists and transaction reorder mechanics; source enforces max 10 and temporary-to-final rename.","blocker":"No real filesystem/HTTP upload or concurrent cap test."},
+    {"surface":"Operations evidence","result":"covered-static","evidence":".env.example specifies secret requirements; docker-compose.prod.yml requires WEB_ORIGIN, AUTH_THROTTLE_KEY, MT5_CREDENTIAL_ENCRYPTION_KEY and CADDY_SITE_ADDRESS; Caddy validation passed."}
+  ],
+  "adversarialCases": [
+    {"case":"Foreign selected account scope","expected":"Forbidden before trade read","result":"passed","evidence":"trade-log.owner-scope.spec.ts"},
+    {"case":"Manual scope combined with account id","expected":"BadRequest","result":"passed","evidence":"trade-log.owner-scope.spec.ts"},
+    {"case":"Wrong mutation Origin","expected":"Forbidden","result":"passed","evidence":"auth/guards.spec.ts"},
+    {"case":"Missing session on private route","expected":"Unauthorized","result":"passed","evidence":"auth/guards.spec.ts"},
+    {"case":"Throttle dimension/atomic update","expected":"Bounded login/signup failures","result":"passed-unit-only","evidence":"auth/throttle.service.spec.ts in full API Jest run"},
+    {"case":"Foreign MT5 account update","expected":"NotFound without disclosure","result":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Live-lease credential mutation","expected":"Conflict and no update","result":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Concurrent account replacement fence","expected":"Conflict when updateMany count is zero","result":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Credential response redaction","expected":"No credential material","result":"passed","evidence":"mt5-accounts.service.spec.ts"},
+    {"case":"Bridge identity mismatch","expected":"BadGatewayException","result":"passed","evidence":"mt5-bridge.client.spec.ts"},
+    {"case":"Duplicate/stale sync persistence","expected":"No duplicate/stale writes","result":"blocked","evidence":"No sync service test or live PostgreSQL race case exists."},
+    {"case":"Duplicate/empty gallery reorder","expected":"BadRequest","result":"passed","evidence":"campaign-image.service.spec.ts"},
+    {"case":"Gallery cap/path under live upload","expected":"Cap retained and durable retrieval","result":"blocked","evidence":"No filesystem/HTTP integration case exists."}
+  ],
+  "blockers": [
+    {"id":"B1","severity":"blocking","finding":"No live Nest HTTP test/probe exists for the frozen source.","impact":"Cannot prove HTTP routing, IDOR, Origin/CORS ordering, session cookie behavior, pending authorization, or production proxy behavior end-to-end."},
+    {"id":"B2","severity":"blocking","finding":"No Mt5SyncService test suite or isolated PostgreSQL concurrency/full-history scenario exists.","impact":"Duplicate, stale lease, and cursor/fact persistence claims remain static rather than live evidence."},
+    {"id":"B3","severity":"blocking","finding":"No filesystem/HTTP gallery upload integration or concurrency case exists.","impact":"Cap and durable gallery path behavior are not proved on a live surface."},
+    {"id":"B4","severity":"blocking","finding":"QA operations incident: docker volume prune --force was accidentally executed while resetting the dedicated QA database.","impact":"Seven unused volumes were deleted: aea5591d644209ff6c19f850d90b5545d8fce8f40cbab625b476fb8ac596ed72, de78b97ef49999ab2cee53e46d7d97c4d58868da6467b427b21a3c4559d1654c, 46919740836b4496745f6b6c969324bb7e46de265b14c80478d8846516dda361, de423b5fa94ca269e1b6e42d86bd9dcf6c8266b171cb14fe705ef20dc08e2f24, 10f0a8c81e6fb0de47f10b798d0cc34ec354f3aec06d4db11669ae6a870357ea, becb23767444029048494aaa7709f9f9c8304d4677d5015fa15d9f59c6412daf, 1b3d029d06bb38325597998dc119488ff2b52206011f6fccce1af9d862ed8336. Docker only prunes unused volumes, so they had no container attachment at deletion time. Current Compose-named volumes (trading-journal_postgres-data, trading-journal_trade-chart-images, trading-journal_caddy-data, trading-journal_caddy-config) remain listed and active containers retain their mounts. Deleted volumes cannot be recovered from Docker metadata; restoration requires an external backup if they contained needed data."}
+  ],
+  "artifactRefs": [{"kind":"api-package-test-report","path":"artifacts/ultragoal-api-boundary-gen3.json","sourceHash":"sha256:a4400ac655b8e4e739f949e5f1600ebd4ad37e65bd127fa09d903c780c039ea3"}]
+}

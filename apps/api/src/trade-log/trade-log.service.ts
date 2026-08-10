@@ -10,8 +10,6 @@ import type {
   TradeLogAssistantActionsResponse,
   TradeRecord,
   TradeStatsResponse,
-  UpdateTradeExecutionNoteRequest,
-  UpdateTradeRequest,
 } from '@trading-journal/shared';
 import {
   Prisma,
@@ -26,75 +24,38 @@ import {
   TradeStatus as PrismaTradeStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { validateTradeAnalysisPatchRequest, validateUpdateTradeRequest } from './trade-log.validation';
+import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
+import { validateTradeAnalysisPatchRequest } from './trade-log.validation';
 
-export interface TradeScopeInput {
-  scope?: 'all' | 'manual' | 'account';
-  accountId?: string;
-}
+export interface TradeScopeInput { accountId?: string; }
 
-const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, analysis: { include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } } } });
+const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, initialPlan: true, analysis: { include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } } } });
 type TradeWithRelations = Prisma.TradeGetPayload<typeof tradeWithRelations>;
 const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>()({
   include: {
     rootTrade: { include: tradeWithRelations.include },
     memberships: { include: { trade: { include: tradeWithRelations.include } }, orderBy: { createdAt: 'asc' } },
     conflicts: { orderBy: { createdAt: 'asc' } },
-    images: { orderBy: [{ position: 'asc' }, { id: 'asc' }] },
+    images: { where: { publishedAt: { not: null } }, orderBy: [{ position: 'asc' }, { id: 'asc' }] },
   },
 });
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
 type Tx = Prisma.TransactionClient;
-const analysisFields = ['baseTimeframe','primaryTrend','bollingerBandCount','bollingerDirection','maArrangement','cross','stopLossLine','marketZoneEnabled','marketZoneHigh','marketZoneLow','chartPatternObserved','chartPatternTimeframe','chartPatternType','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice','regret'] as const;
+const analysisFields = ['note','baseTimeframe','primaryTrend','bollingerBandCount','bollingerDirection','maArrangement','cross','stopLossLine','marketZoneEnabled','marketZoneHigh','marketZoneLow','chartPatternObserved','chartPatternTimeframe','chartPatternType','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice','regret'] as const;
 
 @Injectable()
 export class TradeLogService {
   constructor(private readonly prisma: PrismaService) {}
   health(): HealthResponse { return { status: 'ok', service: 'sentra-trade-log', timestamp: new Date().toISOString() }; }
 
-  async getTrade(ownerId: string, id: string): Promise<TradeRecord> { return this.serialize(await this.findTrade(this.prisma, ownerId, id)); }
-  async updateTrade(ownerId: string, id: string, request: UpdateTradeRequest): Promise<TradeRecord> {
-    validateUpdateTradeRequest(request);
-    const allowed = new Set(['strategy', 'thesis', 'entryRationale', 'exitRationale', 'takeProfitCriteria', 'stopLossCriteria', 'note']);
-    if (!request || typeof request !== 'object' || Array.isArray(request) || Object.keys(request).some((key) => !allowed.has(key))) throw new BadRequestException('Only qualitative trade fields may be updated');
-    await this.findTrade(this.prisma, ownerId, id);
-    const trade = await this.prisma.trade.update({
-      where: { id },
-      data: {
-        strategy: request.strategy,
-        thesis: request.thesis,
-        entryRationale: request.entryRationale,
-        exitRationale: request.exitRationale,
-        takeProfitCriteria: request.takeProfitCriteria,
-        stopLossCriteria: request.stopLossCriteria,
-        note: request.note,
-      },
-      include: tradeWithRelations.include,
-    });
-    return this.serialize(trade);
+  async getTrade(ownerId: string, accountId: string | undefined, id: string): Promise<TradeRecord> {
+    const trade = await this.findTrade(this.prisma, ownerId, accountId, id);
+    return this.serialize(trade, await this.loadProvenEntryBalanceMap([trade]));
   }
 
-  async updateTradeEntryNote(ownerId: string, id: string, request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
-    if (!request || typeof request !== 'object' || Array.isArray(request) || !Object.hasOwn(request, 'note') || Object.keys(request).some((key) => key !== 'note')) throw new BadRequestException('note is required');
-    await this.findTrade(this.prisma, ownerId, id);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.tradeEntry.update({ where: { tradeId: id }, data: { note: request.note ?? null } });
-      return this.serialize(await this.findTrade(tx, ownerId, id));
-    });
-  }
-
-  async updateTradeExitNote(ownerId: string, id: string, request: UpdateTradeExecutionNoteRequest): Promise<TradeRecord> {
-    if (!request || typeof request !== 'object' || Array.isArray(request) || !Object.hasOwn(request, 'note') || Object.keys(request).some((key) => key !== 'note')) throw new BadRequestException('note is required');
-    await this.findTrade(this.prisma, ownerId, id);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.tradeExit.update({ where: { tradeId: id }, data: { note: request.note ?? null } });
-      return this.serialize(await this.findTrade(tx, ownerId, id));
-    });
-  }
-
-  async patchTradeAnalysis(ownerId: string, id: string, request: PatchTradeAnalysisRequest): Promise<TradeRecord> {
+  async patchTradeAnalysis(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeAnalysisRequest): Promise<TradeRecord> {
     validateTradeAnalysisPatchRequest(request);
-    await this.findTrade(this.prisma, ownerId, id);
+    await this.findTrade(this.prisma, ownerId, accountId, id);
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`SELECT id, updated_at FROM "trade_analyses" WHERE trade_id = ${id} FOR UPDATE`);
       if (!rows.length) throw new NotFoundException(`Trade ${id} not found`);
@@ -138,13 +99,14 @@ export class TradeLogService {
         where: { id: current.id },
         data,
       });
-      return this.serialize(await this.findTrade(tx, ownerId, id));
+      const trade = await this.findTrade(tx, ownerId, accountId, id);
+      return this.serialize(trade, await this.loadProvenEntryBalanceMap([trade], tx));
     });
   }
 
-  async listCampaigns(ownerId: string, date?: string, scope: TradeScopeInput = {}): Promise<TradeCampaignDateResponse> {
+  async listCampaigns(ownerId: string, date?: string, accountId?: string): Promise<TradeCampaignDateResponse> {
     if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException('date must be YYYY-MM-DD');
-    const ownerScope = await this.ownerScope(ownerId, scope);
+    const ownerScope = await this.ownerScope(ownerId, { accountId });
     const dates = await this.prisma.tradeCampaign.findMany({ where: ownerScope, select: { tradingDate: true }, distinct: ['tradingDate'], orderBy: { tradingDate: 'asc' } });
     const actualDates = dates.map(({ tradingDate }) => this.seoulDate(tradingDate));
     const selectedDate = date ?? actualDates.at(-1);
@@ -154,6 +116,7 @@ export class TradeLogService {
       include: campaignWithRelations.include,
       orderBy: { rootTrade: { openedAt: 'asc' } },
     }) : [];
+    const provenBalances = await this.loadProvenEntryBalanceMap(campaigns.flatMap((campaign) => [campaign.rootTrade, ...campaign.memberships.map((membership) => membership.trade)]));
     const unresolvedConflicts = campaigns.length
       ? await this.prisma.campaignConflict.findMany({ where: { status: 'UNRESOLVED', trade: ownerScope }, orderBy: { createdAt: 'asc' } })
       : [];
@@ -168,17 +131,18 @@ export class TradeLogService {
           ...campaign.conflicts,
           ...unresolvedConflicts.filter((conflict) => Array.isArray(conflict.candidateCampaignIds) && conflict.candidateCampaignIds.includes(campaign.id)),
         ],
-      })),
+      }, provenBalances)),
       diagnostics: { missingOpenedAtTradeIds },
     };
   }
 
   async relinkCampaign(ownerId: string, request: RelinkTradeCampaignRequest): Promise<void> {
     if (!request || typeof request.tradeId !== 'string' || !request.tradeId) throw new BadRequestException('tradeId is required');
-    const initial = await this.findTrade(this.prisma, ownerId, request.tradeId);
+    const initial = await this.findTrade(this.prisma, ownerId, request.accountId, request.tradeId);
     await this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, initial.mt5Server, initial.mt5AccountLogin);
-      const trade = await this.findTrade(tx, ownerId, request.tradeId);
+      if (!initial.mt5AccountId) throw new BadRequestException('Campaign membership requires an MT5 account');
+      await lockOwnedMt5Account(tx, ownerId, initial.mt5AccountId);
+      const trade = await this.findTrade(tx, ownerId, request.accountId, request.tradeId);
       if (!trade.openedAt) throw new BadRequestException('Trade without openedAt cannot be linked');
       const previous = await tx.campaignMembership.findUnique({ where: { tradeId: trade.id } });
       if (previous && previous.campaignId !== request.campaignId) await this.prepareCampaignForMemberMove(tx, previous.campaignId, trade.id);
@@ -193,23 +157,25 @@ export class TradeLogService {
   }
 
   async resolveCampaignConflict(ownerId: string, id: string, request: ResolveCampaignConflictRequest): Promise<void> {
-    if (!request || typeof request.campaignId !== 'string' || !request.campaignId) throw new BadRequestException('campaignId is required');
-    const initial = await this.prisma.campaignConflict.findFirst({ where: { id, trade: { ownerId } }, include: { trade: true } });
+    if (!request || typeof request.accountId !== 'string' || !request.accountId || typeof request.campaignId !== 'string' || !request.campaignId) throw new BadRequestException('accountId and campaignId are required');
+    const initial = await this.prisma.campaignConflict.findFirst({ where: { id, trade: { ownerId, mt5AccountId: request.accountId } }, include: { trade: true } });
     if (!initial) throw new NotFoundException(`Unresolved campaign conflict ${id} not found`);
     await this.prisma.$transaction(async (tx) => {
-      await this.lockAccount(tx, initial.trade.mt5Server, initial.trade.mt5AccountLogin);
+      if (!initial.trade.mt5AccountId) throw new BadRequestException('Campaign membership requires an MT5 account');
+      await lockOwnedMt5Account(tx, ownerId, initial.trade.mt5AccountId);
       const conflict = await tx.campaignConflict.findUnique({ where: { id } });
       if (!conflict || conflict.status !== 'UNRESOLVED') throw new NotFoundException(`Unresolved campaign conflict ${id} not found`);
       const candidates = conflict.candidateCampaignIds as string[];
       if (!Array.isArray(candidates) || !candidates.includes(request.campaignId)) throw new BadRequestException('Campaign is not a conflict candidate');
+      const trade = await this.findTrade(tx, ownerId, request.accountId, conflict.tradeId);
       const campaign = await tx.tradeCampaign.findFirst({ where: { id: request.campaignId, ownerId } });
-      if (!campaign || campaign.mt5AccountId !== initial.trade.mt5AccountId) throw new BadRequestException('Campaign and trade account scope must match');
-      await this.relinkCampaignInTransaction(tx, conflict.tradeId, request.campaignId);
+      if (!campaign || campaign.mt5AccountId !== trade.mt5AccountId) throw new BadRequestException('Campaign and trade account scope must match');
+      await this.relinkCampaignInTransaction(tx, trade.id, request.campaignId);
       await tx.campaignConflict.update({ where: { id }, data: { status: 'RESOLVED', resolvedCampaignId: request.campaignId, resolvedAt: new Date() } });
     });
   }
-  async getStats(ownerId: string, scope: TradeScopeInput = {}): Promise<TradeStatsResponse> {
-    const ownerScope = await this.ownerScope(ownerId, scope);
+  async getStats(ownerId: string, accountId?: string): Promise<TradeStatsResponse> {
+    const ownerScope = await this.ownerScope(ownerId, { accountId });
     const trades = (await this.prisma.trade.findMany({
       where: { ...ownerScope, status: PrismaTradeStatus.CLOSED, entry: { isNot: null }, exit: { isNot: null } },
       ...tradeWithRelations,
@@ -221,7 +187,7 @@ export class TradeLogService {
       key,
       label,
       count: items.length,
-      realizedPoints: items.reduce((sum, item) => sum + (item.realizedPnl ?? 0), 0),
+      realizedPnl: items.reduce((sum, item) => sum + (item.realizedPnl ?? 0), 0),
       winRate: items.length ? items.filter((item) => (item.realizedPnl ?? 0) > 0).length / items.length * 100 : 0,
     });
     const timeframeGroups = new Map<string, TradeRecord[]>();
@@ -235,8 +201,8 @@ export class TradeLogService {
     return {
       overview: {
         totalTrades: trades.length,
-        totalRealizedPoints: points,
-        averageRealizedPoints: trades.length ? points / trades.length : 0,
+        totalRealizedPnl: points,
+        averageRealizedPnl: trades.length ? points / trades.length : 0,
         winRate: trades.length ? trades.filter((trade) => (trade.realizedPnl ?? 0) > 0).length / trades.length * 100 : 0,
         totalRiskAmount: riskAmountTrades.reduce((sum, trade) => sum + trade.riskAmount!, 0),
         riskAmountCount: riskAmountTrades.length,
@@ -248,13 +214,13 @@ export class TradeLogService {
     };
   }
   async applyAssistantActions(ownerId: string, request: TradeLogAssistantActionsRequest): Promise<TradeLogAssistantActionsResponse> {
-    if (!request || typeof request !== 'object' || Array.isArray(request) || typeof request.rawText !== 'string' || !['telegram', 'manual', 'api'].includes(request.source) || !Array.isArray(request.actions)) {
+    if (!request || typeof request !== 'object' || Array.isArray(request) || typeof request.accountId !== 'string' || !request.accountId || typeof request.rawText !== 'string' || !['telegram', 'manual', 'api'].includes(request.source) || !Array.isArray(request.actions)) {
       throw new BadRequestException('Assistant request is invalid');
     }
     const trades: TradeRecord[] = [];
     for (const action of request.actions) {
       if (!action || action.type !== 'patch_trade_analysis' || !action.tradeId) throw new BadRequestException('Unsupported assistant action type');
-      trades.push(await this.patchTradeAnalysis(ownerId, action.tradeId, action.payload));
+      trades.push(await this.patchTradeAnalysis(ownerId, request.accountId, action.tradeId, action.payload));
     }
     return { rawText: request.rawText, source: request.source, trades };
   }
@@ -274,10 +240,6 @@ export class TradeLogService {
     const tokyoHour = localHour('Asia/Tokyo');
     if (tokyoHour >= 9 && tokyoHour < 16) return 'asia';
     return 'off-session';
-  }
-  private async lockAccount(tx: Tx, server: string | null, accountLogin: bigint | null): Promise<void> {
-    if (!server || accountLogin === null) throw new BadRequestException('Campaign membership requires an MT5 account');
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`${server}:${accountLogin}`}, 0))) AS account_lock`;
   }
 
   private async prepareCampaignForMemberMove(tx: Tx, campaignId: string, tradeId: string): Promise<void> {
@@ -301,7 +263,7 @@ export class TradeLogService {
   private async relinkCampaignInTransaction(tx: Tx, tradeId: string, campaignId: string, prepareSource = true): Promise<void> {
     const campaign = await tx.tradeCampaign.findUnique({ where: { id: campaignId }, include: { rootTrade: true } });
     if (!campaign) throw new NotFoundException(`Campaign ${campaignId} not found`);
-    const trade = await this.findTrade(tx, campaign.ownerId, tradeId);
+    const trade = await this.findTrade(tx, campaign.ownerId, campaign.mt5AccountId ?? undefined, tradeId);
     if (campaign.ownerId !== trade.ownerId || campaign.mt5AccountId !== trade.mt5AccountId || campaign.rootTrade.symbol !== trade.symbol || campaign.rootTrade.side !== trade.side) throw new BadRequestException('Campaign is incompatible with trade owner, account, symbol, or side');
     const previous = await tx.campaignMembership.findUnique({ where: { tradeId } });
     if (prepareSource && previous && previous.campaignId !== campaignId) await this.prepareCampaignForMemberMove(tx, previous.campaignId, tradeId);
@@ -326,7 +288,9 @@ export class TradeLogService {
   }
 
   private async pruneCampaignConflictCandidates(tx: Tx, campaignId: string): Promise<void> {
-    const conflicts = await tx.campaignConflict.findMany({ where: { status: 'UNRESOLVED' } });
+    const conflicts = await tx.campaignConflict.findMany({
+      where: { status: 'UNRESOLVED', candidateCampaignIds: { array_contains: [campaignId] } },
+    });
     for (const conflict of conflicts) {
       const candidates = Array.isArray(conflict.candidateCampaignIds)
         ? conflict.candidateCampaignIds.filter((candidate): candidate is string => typeof candidate === 'string' && candidate !== campaignId)
@@ -345,21 +309,16 @@ export class TradeLogService {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
   }
   private seoulMidnight(value: Date): Date { return new Date(`${this.seoulDate(value)}T00:00:00.000Z`); }
-  private async ownerScope(ownerId: string, input: TradeScopeInput): Promise<{ ownerId: string; mt5AccountId?: string | null }> {
-    const scope = input.scope ?? 'all';
-    if (!['all', 'manual', 'account'].includes(scope)) throw new BadRequestException('scope must be all, manual, or account');
-    if (scope !== 'account' && input.accountId !== undefined) throw new BadRequestException('accountId is only valid for account scope');
-    if (scope === 'account') {
-      if (!input.accountId) throw new BadRequestException('accountId is required for account scope');
-      const account = await this.prisma.mt5Account.findFirst({ where: { id: input.accountId, ownerId }, select: { id: true } });
-      if (!account) throw new ForbiddenException('Account scope is unavailable');
-      return { ownerId, mt5AccountId: account.id };
-    }
-    return scope === 'manual' ? { ownerId, mt5AccountId: null } : { ownerId };
+  private async ownerScope(ownerId: string, input: TradeScopeInput): Promise<{ ownerId: string; mt5AccountId: string }> {
+    if (!input.accountId) throw new BadRequestException('accountId is required');
+    const account = await this.prisma.mt5Account.findFirst({ where: { id: input.accountId, ownerId }, select: { id: true } });
+    if (!account) throw new ForbiddenException('Account is unavailable');
+    return { ownerId, mt5AccountId: account.id };
   }
 
-  private async findTrade(client: PrismaService | Tx, ownerId: string, id: string): Promise<TradeWithRelations> {
-    const trade = await client.trade.findFirst({ where: { id, ownerId }, ...tradeWithRelations });
+  private async findTrade(client: PrismaService | Tx, ownerId: string, accountId: string | undefined, id: string): Promise<TradeWithRelations> {
+    if (!accountId) throw new BadRequestException('accountId is required');
+    const trade = await client.trade.findFirst({ where: { id, ownerId, mt5AccountId: accountId }, ...tradeWithRelations });
     if (!trade) throw new NotFoundException(`Trade ${id} not found`);
     return trade;
   }
@@ -394,9 +353,9 @@ export class TradeLogService {
     if (analysis.marketZoneEnabled && Number(analysis.marketZoneHigh) <= Number(analysis.marketZoneLow)) throw new BadRequestException('marketZoneHigh must exceed marketZoneLow');
     if (analysis.fibonacciEnabled && Number(analysis.fibonacciStartPrice) === Number(analysis.fibonacciEndPrice)) throw new BadRequestException('fibonacci endpoints must differ');
   }
-  private serializeCampaign(campaign: CampaignWithRelations): TradeCampaign {
-    const root = this.serialize(campaign.rootTrade);
-    const members = campaign.memberships.map((membership) => this.serialize(membership.trade));
+  private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeCampaign {
+    const root = this.serialize(campaign.rootTrade, provenBalances);
+    const members = campaign.memberships.map((membership) => this.serialize(membership.trade, provenBalances));
     const quantity = members.reduce((sum: number, trade: TradeRecord) => sum + (trade.quantityLots ?? 0), 0);
     const exited = members.reduce((sum: number, trade: TradeRecord) => sum + (trade.exit?.quantity ?? 0), 0);
     const weighted = (items: TradeRecord[], value: 'entryPrice' | 'exitPrice', quantityOf: (trade: TradeRecord) => number) => {
@@ -411,24 +370,7 @@ export class TradeLogService {
         if (value && (!closedAt || value > closedAt)) closedAt = value;
       }
     }
-    const completeRiskAmounts = members.every((trade) =>
-      trade.riskAmount != null && Boolean(trade.accountCurrency),
-    );
-    const sameRiskCurrency = completeRiskAmounts && members.every((trade) =>
-      trade.accountCurrency === members[0].accountCurrency,
-    );
-    const riskAmount = sameRiskCurrency
-      ? members.reduce((sum, trade) => sum + trade.riskAmount!, 0)
-      : undefined;
-    const completeRiskPercents = members.every((trade) =>
-      trade.riskPercent != null && Boolean(trade.accountCurrency) && trade.seedBalance != null,
-    );
-    const sameAccountAndSeed = completeRiskPercents && members.every((trade) =>
-      trade.accountCurrency === members[0].accountCurrency && trade.seedBalance === members[0].seedBalance,
-    );
-    const riskPercent = sameAccountAndSeed
-      ? members.reduce((sum, trade) => sum + trade.riskPercent!, 0)
-      : undefined;
+
     const latestClosedWithReason = members
       .filter((trade) => trade.closedAt !== undefined && trade.exitReason !== undefined)
       .sort((left, right) => new Date(right.closedAt!).getTime() - new Date(left.closedAt!).getTime())[0];
@@ -436,6 +378,7 @@ export class TradeLogService {
       id: campaign.id,
       rootTradeId: campaign.rootTradeId,
       tradingDate: this.seoulDate(campaign.tradingDate),
+      accountId: campaign.mt5AccountId!,
       symbol: root.symbol,
       side: root.side,
       status: open ? 'open' : 'closed',
@@ -447,11 +390,8 @@ export class TradeLogService {
       realizedPnl: members.reduce((sum: number, trade: TradeRecord) => sum + (trade.realizedPnl ?? 0), 0),
       openedAt: root.openedAt!,
       closedAt: closedAt?.toISOString(),
-      takeProfitPrice: root.takeProfitPrice,
-      stopLossPrice: root.stopLossPrice,
       seedBalance: root.seedBalance,
-      riskAmount,
-      riskPercent,
+
       images: campaign.images.map((image) => ({
         id: image.id,
         campaignId: image.campaignId,
@@ -465,6 +405,7 @@ export class TradeLogService {
         updatedAt: image.updatedAt.toISOString(),
       })),
       regret: root.analysis.regret,
+      analysisComplete: members.every((member) => member.analysisComplete),
       members,
       conflicts: campaign.conflicts.map((conflict) => ({
         id: conflict.id,
@@ -477,14 +418,52 @@ export class TradeLogService {
       })),
     };
   }
-  private serialize(trade: TradeWithRelations): TradeRecord {
+  private analysisComplete(analysis: TradeWithRelations['analysis']): boolean {
+    if (!analysis) return false;
+    const required = [analysis.baseTimeframe, analysis.primaryTrend, analysis.maArrangement, analysis.cross, analysis.stopLossLine, analysis.regret];
+    if (required.some((field) => field === null || field === undefined || field === '')) return false;
+    const note = analysis.note ?? '';
+    const headings = ['진입 근거:', '청산 근거:', 'TP 설정 근거:', 'SL 설정 근거:'];
+    if (!headings.every((heading, index) => {
+      const start = note.indexOf(heading);
+      if (start < 0) return false;
+      const bodyStart = start + heading.length;
+      const nextStarts = headings.map((candidate, candidateIndex) => candidateIndex === index ? -1 : note.indexOf(candidate, bodyStart)).filter((candidate) => candidate >= 0);
+      const bodyEnd = nextStarts.length ? Math.min(...nextStarts) : note.length;
+      return Boolean(note.slice(bodyStart, bodyEnd).trim());
+    })) return false;
+    if (analysis.cross === 'NONE') return false;
+    if (!analysis.bollingerBandCount && analysis.bollingerDirection) return false;
+    if (analysis.bollingerBandCount && !analysis.bollingerDirection) return false;
+    if (analysis.marketZoneEnabled && (analysis.marketZoneHigh === null || analysis.marketZoneLow === null)) return false;
+    if (analysis.chartPatternObserved && (!analysis.chartPatternTimeframe || !analysis.chartPatternType)) return false;
+    if (analysis.retailPositionEnabled && (analysis.retailBuyAveragePrice === null || analysis.retailSellAveragePrice === null || analysis.retailBuyRatio === null)) return false;
+    if (analysis.fibonacciEnabled && (analysis.fibonacciStartPrice === null || analysis.fibonacciEndPrice === null)) return false;
+    return analysis.economicIndicators.every((indicator) => Boolean(indicator.type.trim()) && Boolean(indicator.impact));
+  }
+  private entryBalanceKey(trade: Pick<TradeWithRelations, 'mt5AccountId' | 'mt5ServerCanonical' | 'mt5AccountLogin' | 'mt5PositionId'>): string {
+    return `${trade.mt5AccountId ?? ''}:${trade.mt5ServerCanonical ?? ''}:${trade.mt5AccountLogin?.toString() ?? ''}:${trade.mt5PositionId?.toString() ?? ''}`;
+  }
+
+  private async loadProvenEntryBalanceMap(trades: TradeWithRelations[], client: Pick<PrismaService, 'mt5PositionEntryBalance'> = this.prisma): Promise<Map<string, Prisma.Decimal>> {
+    const candidates = trades.filter((trade) => trade.seedBalance !== null && trade.mt5AccountId && trade.mt5ServerCanonical && trade.mt5AccountLogin !== null && trade.mt5PositionId !== null);
+    if (!candidates.length) return new Map();
+    const rows = await client.mt5PositionEntryBalance.findMany({
+      where: { state: 'PROVEN', OR: candidates.map((trade) => ({ accountId: trade.mt5AccountId!, server: trade.mt5ServerCanonical!, accountLogin: trade.mt5AccountLogin!, positionId: trade.mt5PositionId! })) },
+      select: { accountId: true, server: true, accountLogin: true, positionId: true, preEntryBalance: true },
+    });
+    return new Map(rows.filter((row) => row.preEntryBalance !== null).map((row) => [`${row.accountId}:${row.server}:${row.accountLogin.toString()}:${row.positionId.toString()}`, row.preEntryBalance!]));
+  }
+
+  private serialize(trade: TradeWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeRecord {
     const analysis = trade.analysis;
     if (!analysis) throw new Error(`Trade ${trade.id} lacks analysis`);
     const optional = <T>(value: T | null): T | undefined => value ?? undefined;
     const decimal = (value: Prisma.Decimal | null): number | undefined => value === null ? undefined : Number(value);
     return {
-      id: trade.id, symbol: trade.symbol, side: trade.side.toLowerCase() as 'long' | 'short',
+      id: trade.id, accountId: trade.mt5AccountId!, mt5Server: optional(trade.mt5Server), symbol: trade.symbol, side: trade.side.toLowerCase() as 'long' | 'short',
       status: trade.status.toLowerCase() as TradeRecord['status'],
+      analysisComplete: this.analysisComplete(analysis),
       strategy: optional(trade.strategy), thesis: optional(trade.thesis),
       entryRationale: optional(trade.entryRationale), exitRationale: optional(trade.exitRationale),
       takeProfitCriteria: optional(trade.takeProfitCriteria), stopLossCriteria: optional(trade.stopLossCriteria),
@@ -492,13 +471,29 @@ export class TradeLogService {
       accountCurrency: optional(trade.accountCurrency), quantityLots: decimal(trade.quantityLots),
       entryPrice: decimal(trade.entryPrice), exitPrice: decimal(trade.exitPrice),
       exitReason: optional(trade.exitReason) as TradeRecord['exitReason'], realizedPnl: decimal(trade.realizedPnl),
-      takeProfitPrice: decimal(trade.takeProfitPrice), stopLossPrice: decimal(trade.stopLossPrice),
-      seedBalance: decimal(trade.seedBalance), riskAmount: decimal(trade.riskAmount), riskPercent: decimal(trade.riskPercent),
+      ...(trade.seedBalance !== null && provenBalances.get(this.entryBalanceKey(trade))?.equals(trade.seedBalance)
+        ? { seedBalance: decimal(trade.seedBalance) }
+        : {}),
+      ...(trade.initialPlan
+        && trade.initialPlanId === trade.initialPlan.id
+        && trade.initialPlanMetricContractVersion === trade.initialPlan.metricContractVersion
+        && trade.riskPercent !== null
+        && trade.riskAmount !== null
+        && trade.returnPercent !== null
+        ? {
+          initialTakeProfitPrice: Number(trade.initialPlan.takeProfitPrice),
+          riskAmount: decimal(trade.riskAmount),
+          riskPercent: decimal(trade.riskPercent),
+          initialStopLossPrice: Number(trade.initialPlan.stopLossPrice),
+          returnPercent: decimal(trade.returnPercent),
+        }
+        : {}),
       openedAt: trade.openedAt?.toISOString(), closedAt: trade.closedAt?.toISOString(),
       entry: trade.entry ? { price: Number(trade.entry.price), quantity: decimal(trade.entry.quantity), occurredAt: trade.entry.occurredAt.toISOString(), note: optional(trade.entry.note) } : undefined,
       exit: trade.exit ? { price: Number(trade.exit.price), quantity: decimal(trade.exit.quantity), occurredAt: trade.exit.occurredAt.toISOString(), reason: optional(trade.exit.reason) as TradeRecord['exitReason'], note: optional(trade.exit.note) } : undefined,
       analysis: {
         schemaVersion: 1,
+        note: optional(analysis.note),
         baseTimeframe: optional(analysis.baseTimeframe),
         primaryTrend: optional(analysis.primaryTrend)?.toLowerCase() as TradeRecord['analysis']['primaryTrend'],
         bollingerBandCount: optional(analysis.bollingerBandCount)?.toLowerCase() as TradeRecord['analysis']['bollingerBandCount'],

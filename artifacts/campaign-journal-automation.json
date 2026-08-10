@@ -1,0 +1,54 @@
+{
+  "kind": "web-automation-transcript",
+  "status": "passed",
+  "events": [
+    {
+      "action": "navigate",
+      "url": "http://127.0.0.1:5173/trade-log"
+    },
+    {
+      "action": "expand",
+      "immutableExecutionVisible": true
+    },
+    {
+      "action": "previous-date",
+      "date": "2026-08-07"
+    },
+    {
+      "action": "assert",
+      "browserSyncControls": 0
+    }
+  ],
+  "schemaVersion": 1,
+  "tool": "Playwright 1.55.0",
+  "actions": [
+    {
+      "type": "navigate",
+      "timestamp": "2026-08-08T14:57:00.000Z",
+      "action": "navigate",
+      "url": "http://127.0.0.1:5173/trade-log",
+      "selector": "url:http://127.0.0.1:5173/trade-log"
+    },
+    {
+      "type": "expand",
+      "timestamp": "2026-08-08T14:57:00.000Z",
+      "action": "expand",
+      "immutableExecutionVisible": true,
+      "selector": "button:\uad6c\uc131 \uac70\ub798 \ud3bc\uce58\uae30"
+    },
+    {
+      "type": "previous-date",
+      "timestamp": "2026-08-08T14:57:00.000Z",
+      "action": "previous-date",
+      "date": "2026-08-07",
+      "selector": "button:\uc774\uc804 \uac70\ub798\uc77c"
+    },
+    {
+      "type": "assert",
+      "timestamp": "2026-08-08T14:57:00.000Z",
+      "action": "assert",
+      "browserSyncControls": 0,
+      "selector": "button:MT5 \ub3d9\uae30\ud654|\ub9ac\ub85c\ub4dc"
+    }
+  ]
+}

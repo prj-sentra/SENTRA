@@ -1,0 +1,108 @@
+{
+  "kind": "api-package-test-report",
+  "schemaVersion": 1,
+  "generation": 4,
+  "sourceHash": "sha256:99f35af8aad99b3f1bfd77256f1e0c9322ea133e0b1ea99ad8600c6fe60aa89c",
+  "previousSourceHash": "sha256:982304b433d0c776a8396bb22a860840840290ff12c261aaf145c1b0b8827f7a",
+  "sourceHashStatus": "passed",
+  "status": "passed",
+  "environment": {
+    "testDatabase": "trading_journal_recovery_test",
+    "testDatabaseHost": "172.18.0.2:5432",
+    "ownerId": "00000000-0000-0000-0000-000000000001",
+    "mt5AccountId": "f68c487b1af315456fef2eeb4b4dc5bf"
+  },
+  "commands": [
+    {
+      "command": "TEST_DATABASE_URL='postgresql://trading:<redacted>@172.18.0.2:5432/trading_journal_recovery_test' TEST_MT5_OWNER_ID='00000000-0000-0000-0000-000000000001' TEST_MT5_ACCOUNT_ID='f68c487b1af315456fef2eeb4b4dc5bf' npx pnpm@10.26.0 --filter @trading-journal/api test -- --runInBand src/mt5-accounts/mt5-account-lock.spec.ts src/mt5-accounts/mt5-sync.stateful.spec.ts src/mt5-accounts/mt5-empty-campaign-recovery.int.spec.ts src/trade-log/trade-log.service.spec.ts src/mt5-accounts/mt5-campaign-serialization.int.spec.ts",
+      "exit": 0,
+      "status": "passed",
+      "result": "5 Jest suites passed; 34 tests passed; 0 snapshots; 5.349 s."
+    }
+  ],
+  "contractCoverage": [
+    {
+      "id": "generation-4-frozen-source-binding",
+      "status": "passed",
+      "refs": ["approved pending plan", "artifacts/mt5-sync-api-test-report.json#sourceHash"],
+      "evidence": "Exact generation-4 hash is recorded, with the prior generation hash retained for traceability. Only the requested artifact was updated."
+    },
+    {
+      "id": "public-sync-vs-manual-campaign-races",
+      "status": "passed",
+      "refs": ["apps/api/src/mt5-accounts/mt5-campaign-serialization.int.spec.ts", "commands[0]"],
+      "evidence": "Real disposable-PostgreSQL public-service races passed for sync versus manual relink and conflict resolution in both winner orders."
+    },
+    {
+      "id": "recovery-exact-delete-and-rollback",
+      "status": "passed",
+      "refs": ["apps/api/src/mt5-accounts/mt5-empty-campaign-recovery.int.spec.ts", "commands[0]"],
+      "evidence": "Disposable PostgreSQL recovery passed JSON conflict-reference rejection, exact 39-candidate apply, authored-analysis preservation, and rollback after post-delete protected-row drift."
+    },
+    {
+      "id": "account-lock-stateful-sync-and-trade-log-service",
+      "status": "passed",
+      "refs": ["apps/api/src/mt5-accounts/mt5-account-lock.spec.ts", "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts", "apps/api/src/trade-log/trade-log.service.spec.ts", "commands[0]"],
+      "evidence": "Focused API suites passed under the requested test environment."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "surface": "API/package focused Jest boundary",
+      "status": "passed",
+      "evidence": "Pinned npx pnpm@10.26.0 focused API command exited 0: 5 suites and 34 tests passed."
+    },
+    {
+      "surface": "public PostgreSQL race boundary",
+      "status": "passed",
+      "evidence": "The public-service integration suite ran against trading_journal_recovery_test and verified sync/manual serialization with persisted API services."
+    },
+    {
+      "surface": "PostgreSQL recovery boundary",
+      "status": "passed",
+      "evidence": "Environment-gated disposable PostgreSQL recovery integration ran against trading_journal_recovery_test."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "case": "sync/manual relink race in either winner order",
+      "status": "passed",
+      "evidence": "Public PostgreSQL race suite passed and leaves one manual destination without empty campaigns."
+    },
+    {
+      "case": "sync/manual conflict-resolution race in either winner order",
+      "status": "passed",
+      "evidence": "Public PostgreSQL race suite passed and resolves to the unique manual destination."
+    },
+    {
+      "case": "replay idempotency, existing membership preservation, inactive policy, and scoped conflict pruning",
+      "status": "passed",
+      "evidence": "Stateful sync and trade-log service suites passed."
+    },
+    {
+      "case": "resolved/JSON conflict references, snapshot/hash/drift/rollback",
+      "status": "passed",
+      "evidence": "Recovery suite rejects conflict references and covers invalid manifest hash, locked drift, and post-delete protected-snapshot rollback."
+    },
+    {
+      "case": "exact reviewed deletion and protected authored analysis preservation",
+      "status": "passed",
+      "evidence": "PostgreSQL recovery integration applies exactly 39 candidates and preserves protected authored analysis."
+    },
+    {
+      "case": "account lock serialization",
+      "status": "passed",
+      "evidence": "Account-lock suite passed in the focused command."
+    }
+  ],
+  "artifactRefs": [
+    {
+      "kind": "api-package-test-report",
+      "ref": "artifacts/mt5-sync-api-test-report.json",
+      "sourceHash": "sha256:99f35af8aad99b3f1bfd77256f1e0c9322ea133e0b1ea99ad8600c6fe60aa89c",
+      "status": "passed"
+    }
+  ],
+  "verdict": "passed",
+  "blockers": []
+}
