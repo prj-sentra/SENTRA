@@ -895,7 +895,8 @@ h3 {
 .trade-card-list { display: grid; gap: 18px; }
 .trade-record-card { container-type: inline-size; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 12px 30px rgb(0 0 0 / 12%); }
 .trade-card-summary { display: grid; grid-template-columns: minmax(206px, calc(26.6% + 24px)) 1fr; min-height: 260px; }
-.trade-cover { aspect-ratio: 17 / 10; min-height: 0; display: grid; place-items: center; align-self: start; margin: 24px 0 0 24px; overflow: hidden; background: var(--surface); color: var(--text-muted); }
+.trade-cover { min-height: 0; display: grid; place-items: center; align-self: stretch; margin: 0; overflow: hidden; border: 0; padding: 0; background: var(--surface); color: var(--text-muted); font: inherit; }
+button.trade-cover { cursor: pointer; }
 .trade-cover img { width: 100%; height: 100%; object-fit: cover; }
 .trade-summary-body { position: relative; padding: 24px 24px 58px; }
 .trade-summary-body header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }

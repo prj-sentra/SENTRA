@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TradeRecordCard } from './TradeRecordCard';
 
@@ -48,5 +48,23 @@ describe('TradeRecordCard regret preview', () => {
     const regret = screen.getByLabelText('아쉬운 점') as HTMLTextAreaElement;
     expect(regret.readOnly).toBe(true);
     expect(regret.value).toBe('첫 번째 줄\n두 번째 줄');
+  });
+
+  it('opens the complete image viewer from the summary cover', () => {
+    render(<TradeRecordCard
+      campaign={{ ...campaign, images: [{ id: 'second', position: 1 }, { id: 'first', position: 0 }] }}
+      imageUrl={(_, imageId) => `/${imageId}.webp`}
+      onPatchAnalysis={vi.fn()}
+      onUploadImage={vi.fn()}
+      onReorderImages={vi.fn()}
+      onDeleteImage={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'XAUUSD 거래 이미지 전체 보기' }));
+    expect(screen.getByRole('dialog', { name: 'Trade image preview' })).toBeInTheDocument();
+    expect(screen.getByAltText('XAUUSD 거래 차트 1')).toHaveAttribute('src', '/first.webp');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next image' }));
+    expect(screen.getByAltText('XAUUSD 거래 차트 2')).toHaveAttribute('src', '/second.webp');
   });
 });

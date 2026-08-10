@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PatchTradeAnalysisRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
+import { ImageLightbox } from './ImageLightbox';
 import { TradeDetail } from './TradeDetail';
 import { TradeImageGallery } from './TradeImageGallery';
 
@@ -19,14 +20,20 @@ const sideLabel = (side: string) => side === 'long' ? '매수' : '매도';
 export function TradeRecordCard(props: TradeRecordCardProps) {
   const { campaign } = props;
   const [expanded, setExpanded] = useState(false);
-  const firstImage = [...campaign.images].sort((a, b) => a.position - b.position)[0];
+  const [previewImageId, setPreviewImageId] = useState<string | null>(null);
+  const orderedImages = [...campaign.images].sort((a, b) => a.position - b.position);
+  const firstImage = orderedImages[0];
+  const previewIndex = previewImageId ? orderedImages.findIndex((image) => image.id === previewImageId) : -1;
+  const previewImage = orderedImages[previewIndex];
   const points = campaign.quantityLots === 0 ? undefined : campaign.realizedPnl / campaign.quantityLots;
   const postSeed = campaign.seedBalance === undefined ? undefined : campaign.seedBalance + campaign.realizedPnl;
   const regret = campaign.regret?.trim();
   const regretPreview = regret || '작성 필요';
   return <article className="trade-record-card">
     <div className="trade-card-summary">
-      <div className="trade-cover">{firstImage ? <img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /> : <span>차트 이미지 없음</span>}</div>
+      {firstImage
+        ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 거래 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /></button>
+        : <div className="trade-cover"><span>차트 이미지 없음</span></div>}
       <div className="trade-summary-body">
         <header><div><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span></div><strong>{campaign.members.length}건 분할 매매</strong></header>
         <p className="trade-time">{time(campaign.openedAt)} → {time(campaign.closedAt)}</p>
@@ -51,5 +58,12 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
       </div>
     </div>
     {expanded ? <div className="expanded-content"><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><TradeDetail campaign={campaign} onPatchAnalysis={props.onPatchAnalysis} /></div> : null}
+    {previewImage ? <ImageLightbox
+      src={props.imageUrl(campaign.id, previewImage.id)}
+      alt={`${campaign.symbol} 거래 차트 ${previewIndex + 1}`}
+      onClose={() => setPreviewImageId(null)}
+      onPrevious={previewIndex > 0 ? () => setPreviewImageId(orderedImages[previewIndex - 1].id) : undefined}
+      onNext={previewIndex < orderedImages.length - 1 ? () => setPreviewImageId(orderedImages[previewIndex + 1].id) : undefined}
+    /> : null}
   </article>;
 }
