@@ -38,7 +38,7 @@ export function TradeAnalysisEditor({ trade, onSave }: { trade: TradeRecord; onS
     if ((draft.plannedTakeProfitPrice == null) !== (draft.plannedStopLossPrice == null)) return setError('TP와 SL 가격을 모두 입력해 주세요.');
     setError(null); setSaving(true);
     try { await onSave(trade.id, canonicalAnalysisPatch(draft, trade.analysis.updatedAt)); }
-    catch { setError('분석이 다른 곳에서 변경되었습니다. 최신 값을 불러왔습니다.'); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'TP/SL 저장에 실패했습니다.'); }
     finally { setSaving(false); }
   }
 

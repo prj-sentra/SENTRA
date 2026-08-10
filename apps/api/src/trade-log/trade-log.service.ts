@@ -26,7 +26,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
 import { validateTradeAnalysisPatchRequest } from './trade-log.validation';
-import { calculateTradePlanMetrics } from './trade-plan-metrics';
+import { calculateExecutionBasedMetrics, calculateTradePlanMetrics } from './trade-plan-metrics';
 
 export interface TradeScopeInput { accountId?: string; }
 
@@ -108,16 +108,17 @@ export class TradeLogService {
           } });
         } else {
           const metricTrade = await this.findTrade(tx, ownerId, accountId, id);
-          if (!metricTrade.initialPlan) throw new BadRequestException('TP/SL calculation data is unavailable for this trade');
           const takeProfit = new Prisma.Decimal(request.plannedTakeProfitPrice);
           const stopLoss = new Prisma.Decimal(request.plannedStopLossPrice);
-          const metrics = calculateTradePlanMetrics(metricTrade.initialPlan, takeProfit, stopLoss);
-          if (!metrics) throw new BadRequestException('TP and SL must be on the profitable and losing sides of the entry price');
+          const metrics = metricTrade.initialPlan
+            ? calculateTradePlanMetrics(metricTrade.initialPlan, takeProfit, stopLoss)
+            : calculateExecutionBasedMetrics(metricTrade, takeProfit, stopLoss);
+          if (!metrics) throw new BadRequestException('TP/SL metrics require valid entry, exit, PNL, and seed data');
           await tx.trade.update({ where: { id }, data: {
             plannedTakeProfitPrice: takeProfit, plannedStopLossPrice: stopLoss,
             riskAmount: metrics.riskAmount, riskPercent: metrics.riskPercent, returnPercent: metrics.returnPercent,
-            initialPlanId: metricTrade.initialPlan.id,
-            initialPlanMetricContractVersion: metricTrade.initialPlan.metricContractVersion,
+            initialPlanId: metricTrade.initialPlan?.id ?? null,
+            initialPlanMetricContractVersion: metricTrade.initialPlan?.metricContractVersion ?? null,
           } });
         }
       }
@@ -499,9 +500,13 @@ export class TradeLogService {
       ...(trade.seedBalance !== null && provenBalances.get(this.entryBalanceKey(trade))?.equals(trade.seedBalance)
         ? { seedBalance: decimal(trade.seedBalance) }
         : {}),
-      ...(trade.initialPlan
+      ...((trade.initialPlan
         && trade.initialPlanId === trade.initialPlan.id
         && trade.initialPlanMetricContractVersion === trade.initialPlan.metricContractVersion
+        || trade.initialPlanId === null
+        && trade.initialPlanMetricContractVersion === null
+        && trade.plannedTakeProfitPrice !== null
+        && trade.plannedStopLossPrice !== null)
         && trade.riskPercent !== null
         && trade.riskAmount !== null
         && trade.returnPercent !== null

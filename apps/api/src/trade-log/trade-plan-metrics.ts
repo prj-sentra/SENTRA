@@ -34,3 +34,34 @@ export function calculateTradePlanMetrics(
     rr: round(returnAmount.dividedBy(riskAmount)),
   };
 }
+
+export function calculateExecutionBasedMetrics(
+  trade: {
+    side: TradeSide;
+    entryPrice: Prisma.Decimal | null;
+    exitPrice: Prisma.Decimal | null;
+    realizedPnl: Prisma.Decimal | null;
+    seedBalance: Prisma.Decimal | null;
+  },
+  takeProfitPrice: Prisma.Decimal,
+  stopLossPrice: Prisma.Decimal,
+): { riskAmount: Prisma.Decimal; riskPercent: Prisma.Decimal; returnPercent: Prisma.Decimal; rr: Prisma.Decimal } | null {
+  const { entryPrice, exitPrice, realizedPnl, seedBalance } = trade;
+  if (!entryPrice || !exitPrice || !realizedPnl || !seedBalance || seedBalance.lte(0)) return null;
+  const long = trade.side === TradeSide.LONG;
+  if ((long && (stopLossPrice.gte(entryPrice) || takeProfitPrice.lte(entryPrice)))
+    || (!long && (stopLossPrice.lte(entryPrice) || takeProfitPrice.gte(entryPrice)))) return null;
+  const executionDistance = exitPrice.minus(entryPrice).abs();
+  if (executionDistance.lte(0) || realizedPnl.isZero()) return null;
+  const valuePerPriceUnit = realizedPnl.abs().dividedBy(executionDistance);
+  const riskAmount = entryPrice.minus(stopLossPrice).abs().times(valuePerPriceUnit);
+  const returnAmount = takeProfitPrice.minus(entryPrice).abs().times(valuePerPriceUnit);
+  if (!riskAmount.isFinite() || !returnAmount.isFinite() || riskAmount.lte(0)) return null;
+  const round = (value: Prisma.Decimal) => value.toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
+  return {
+    riskAmount: round(riskAmount),
+    riskPercent: round(riskAmount.dividedBy(seedBalance).times(100)),
+    returnPercent: round(returnAmount.dividedBy(seedBalance).times(100)),
+    rr: round(returnAmount.dividedBy(riskAmount)),
+  };
+}

@@ -400,12 +400,20 @@ export class Mt5SyncService {
           initialPlanMetricContractVersion: true, plannedTakeProfitPrice: true, plannedStopLossPrice: true,
         },
       });
+      const manualMetrics = Boolean(existingTrade?.plannedTakeProfitPrice && existingTrade.plannedStopLossPrice
+        && existingTrade.riskAmount && existingTrade.riskPercent && existingTrade.returnPercent);
       const metrics = initialPlan
         ? existingTrade?.plannedTakeProfitPrice && existingTrade.plannedStopLossPrice
           ? calculateTradePlanMetrics(initialPlan, existingTrade.plannedTakeProfitPrice, existingTrade.plannedStopLossPrice)
           : this.initialPlanMetrics(initialPlan)
         : null;
-      const metricData = initialPlan && metrics
+      const metricData = manualMetrics
+        ? {
+          riskAmount: existingTrade!.riskAmount, riskPercent: existingTrade!.riskPercent,
+          returnPercent: existingTrade!.returnPercent, initialPlanId: existingTrade!.initialPlanId,
+          initialPlanMetricContractVersion: existingTrade!.initialPlanMetricContractVersion,
+        }
+        : initialPlan && metrics
         ? {
           accountCurrency: initialPlan.accountCurrency,
           riskAmount: metrics.riskAmount,
@@ -527,8 +535,12 @@ export class Mt5SyncService {
     returnPercent: Prisma.Decimal | null;
     initialPlanId: string | null;
     initialPlanMetricContractVersion: number | null;
+    plannedTakeProfitPrice?: Prisma.Decimal | null;
+    plannedStopLossPrice?: Prisma.Decimal | null;
   } | null, plan: { id: string; metricContractVersion: number } | null, metrics: { riskAmount: Prisma.Decimal; riskPercent: Prisma.Decimal; returnPercent: Prisma.Decimal } | null): void {
     if (!existing) return;
+    if (existing.plannedTakeProfitPrice && existing.plannedStopLossPrice
+      && existing.riskAmount && existing.riskPercent && existing.returnPercent) return;
     const stored = [existing.riskAmount, existing.riskPercent, existing.returnPercent, existing.initialPlanId, existing.initialPlanMetricContractVersion];
     const populated = stored.filter((value) => value !== null).length;
     if (populated !== 0 && populated !== stored.length) throw new Error('Trade initial-plan metric state is partial');
