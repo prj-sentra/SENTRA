@@ -13,7 +13,11 @@ export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5Acco
   const imported = response.importedCount ?? 0;
   const received = response.receivedCount ?? 0;
   const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString('ko-KR') : '시간 정보 없음';
-  return `동기화 완료 · ${imported}건 반영 / ${received}건 수신 · ${account.nickname} · ${syncedAt}`;
+  const ledger = response.balanceLedger;
+  const ledgerSummary = ledger?.status === 'diverged'
+    ? ` · 잔고 원장 불일치(계산 ${ledger.calculatedBalance} / MT5 ${ledger.currentBalance} ${ledger.currency})`
+    : '';
+  return `동기화 완료 · ${imported}건 반영 / ${received}건 수신 · ${account.nickname} · ${syncedAt}${ledgerSummary}`;
 }
 
 export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {

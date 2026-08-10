@@ -356,6 +356,9 @@ export class TradeLogService {
   private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeCampaign {
     const root = this.serialize(campaign.rootTrade, provenBalances);
     const members = campaign.memberships.map((membership) => this.serialize(membership.trade, provenBalances));
+    const firstOpened = [...members]
+      .filter((trade) => trade.openedAt !== undefined)
+      .sort((left, right) => new Date(left.openedAt!).getTime() - new Date(right.openedAt!).getTime())[0];
     const quantity = members.reduce((sum: number, trade: TradeRecord) => sum + (trade.quantityLots ?? 0), 0);
     const exited = members.reduce((sum: number, trade: TradeRecord) => sum + (trade.exit?.quantity ?? 0), 0);
     const weighted = (items: TradeRecord[], value: 'entryPrice' | 'exitPrice', quantityOf: (trade: TradeRecord) => number) => {
@@ -388,9 +391,9 @@ export class TradeLogService {
       remainingQuantityLots: quantity - exited,
       exitReason: latestClosedWithReason?.exitReason,
       realizedPnl: members.reduce((sum: number, trade: TradeRecord) => sum + (trade.realizedPnl ?? 0), 0),
-      openedAt: root.openedAt!,
+      openedAt: firstOpened?.openedAt ?? root.openedAt!,
       closedAt: closedAt?.toISOString(),
-      seedBalance: root.seedBalance,
+      seedBalance: firstOpened?.seedBalance,
 
       images: campaign.images.map((image) => ({
         id: image.id,

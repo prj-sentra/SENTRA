@@ -105,6 +105,12 @@ export interface Mt5SyncResponse {
   receivedCount?: number;
   cursor?: string;
   syncedAt?: string;
+  balanceLedger?: {
+    status: 'verified' | 'diverged';
+    currency: string;
+    calculatedBalance: number;
+    currentBalance: number;
+  };
   message?: string;
 }
 

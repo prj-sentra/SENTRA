@@ -5,9 +5,10 @@ import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
 import { lockOwnedMt5Account } from './mt5-account-lock';
-import { Mt5BridgeClient, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
 
 const LEASE_MS = 60_000;
+const UNCORRECTED_TIME_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
 class StaleSyncResult extends Error {}
 const DEAL_FACT_FIELDS = ['ticket', 'order', 'positionId', 'time', 'timeMsc', 'type', 'entry', 'magic', 'reason', 'volume', 'price', 'commission', 'swap', 'profit', 'fee', 'symbol', 'comment', 'externalId'] as const;
 const ORDER_FACT_FIELDS = ['ticket', 'positionId', 'timeSetup', 'timeSetupMsc', 'timeDone', 'timeDoneMsc', 'type', 'state', 'reason', 'volumeInitial', 'volumeCurrent', 'priceOpen', 'sl', 'tp', 'priceCurrent', 'priceStopLimit', 'symbol', 'comment', 'externalId'] as const;
@@ -17,6 +18,8 @@ function canonicalFact(value: unknown, fields: readonly string[]): string {
   return JSON.stringify(fields.map((field) => [field, fact[field]]));
 }
 const METRIC_CONTRACT_VERSION = 1;
+const BALANCE_LEDGER_VERSION = 1;
+const FULL_HISTORY_FROM_MSC = 0;
 
 
 export const seoulTradingDate = (value: Date): Date => {
@@ -47,12 +50,21 @@ export class Mt5SyncService {
         tag: Buffer.from(account.credentialTag),
         version: account.credentialVersion,
       });
-      const payload = await this.bridge.sync({
+      const historyToMsc = Date.now() + UNCORRECTED_TIME_LOOKAHEAD_MS;
+      const bridgeRequest = {
         server: account.server,
         accountLogin: Number(account.accountLogin),
         password,
-        ...(cursor !== undefined && { cursor }),
-      });
+        historyFromMsc: FULL_HISTORY_FROM_MSC,
+        historyToMsc,
+      };
+      let payload;
+      try {
+        payload = await this.bridge.sync({ ...bridgeRequest, ...(cursor !== undefined && { cursor }) });
+      } catch (error) {
+        if (!(error instanceof Mt5BridgeCursorRejected) || cursor === undefined) throw error;
+        payload = await this.bridge.sync(bridgeRequest);
+      }
       const renewed = await this.prisma.mt5SyncLease.updateMany({
         where: { accountId, leaseId, expiresAt: { gt: new Date() } },
         data: { expiresAt: new Date(Date.now() + LEASE_MS) },
@@ -80,24 +92,22 @@ export class Mt5SyncService {
         });
         if (!liveAccount) throw new StaleSyncResult();
 
-        const assertions = [
-          ...payload.positionEntryBalances.map((row) => ({ ...row, state: 'PROVEN' as const, reason: null })),
-          ...payload.unsupportedPositionEntryBalances.map((row) => ({
-            ...row,
-            state: row.kind === 'ANCHORED' ? 'UNSUPPORTED_ANCHORED' as const : 'UNSUPPORTED_UNANCHORED' as const,
-          })),
-        ];
-        await this.validateEntryBalanceAssertions(tx, account.canonicalServer, account.accountLogin, payload.deals, assertions);
         const changedPositions = new Set<string>();
         for (const deal of payload.deals) if (await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(deal.positionId);
         for (const order of payload.orders) if (await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(order.positionId);
-        for (const plan of payload.positionEntryPlans) if (BigInt(plan.positionId) > 0n) changedPositions.add(plan.positionId);
-        for (const assertion of assertions) {
-          const changed = await this.persistEntryBalanceAssertion(tx, accountId, account.canonicalServer, account.accountLogin, assertion, syncedAt);
-          if (changed) changedPositions.add(assertion.positionId);
-        }
-        const unsupportedUnanchored = new Set(assertions.filter((row) => row.state === 'UNSUPPORTED_UNANCHORED').map((row) => row.positionId));
-        const importedCount = await this.projectTrades(tx, ownerId, accountId, account.server, account.canonicalServer, account.accountLogin, [...changedPositions].filter((id) => !unsupportedUnanchored.has(id)), assertions, payload.positionEntryPlans);
+        const ledger = await this.rebuildBalanceLedger(
+          tx,
+          accountId,
+          account.canonicalServer,
+          account.accountLogin,
+          payload.account.currency,
+          payload.account.currencyDigits,
+          payload.account.currentBalance,
+          payload.historyRange,
+          syncedAt,
+        );
+        for (const positionId of ledger.positionIds) changedPositions.add(positionId);
+        const importedCount = await this.projectTrades(tx, ownerId, accountId, account.server, account.canonicalServer, account.accountLogin, [...changedPositions], ledger.assertions, []);
         const lastDealTime = payload.deals.length
           ? new Date(Math.max(...payload.deals.map((deal) => deal.timeMsc)))
           : undefined;
@@ -108,9 +118,22 @@ export class Mt5SyncService {
         });
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
-        return importedCount;
+        return { importedCount, ledger };
       });
-      return { state: 'completed', accountId, importedCount: result, receivedCount: payload.deals.length, cursor: payload.cursor, syncedAt: syncedAt.toISOString() } as Mt5SyncResponse;
+      return {
+        state: 'completed',
+        accountId,
+        importedCount: result.importedCount,
+        receivedCount: payload.deals.length,
+        cursor: payload.cursor,
+        syncedAt: syncedAt.toISOString(),
+        balanceLedger: {
+          status: result.ledger.verified ? 'verified' : 'diverged',
+          currency: payload.account.currency,
+          calculatedBalance: Number(result.ledger.calculatedBalance),
+          currentBalance: Number(payload.account.currentBalance),
+        },
+      } as Mt5SyncResponse;
     } catch (error) {
       if (error instanceof StaleSyncResult) {
         await this.prisma.mt5SyncLease.deleteMany({ where: { accountId, leaseId } });
@@ -184,52 +207,112 @@ export class Mt5SyncService {
     return deal.entry === 0 && (deal.type === 0 || deal.type === 1);
   }
 
-  private async validateEntryBalanceAssertions(tx: Prisma.TransactionClient, server: string, accountLogin: bigint, incomingDeals: Mt5DealFact[], assertions: any[]): Promise<void> {
-    const executionPositionIds = new Set(incomingDeals.filter((deal) => BigInt(deal.positionId) > 0n).map((deal) => deal.positionId));
-    const persistedDeals = await tx.mt5Deal.findMany({ where: { server, accountLogin }, select: { ticket: true, order: true, positionId: true, timeMsc: true, entry: true, type: true } });
-    for (const deal of persistedDeals) if (deal.positionId > 0n) executionPositionIds.add(deal.positionId.toString());
-    const seenPositions = new Set<string>();
-    const seenAnchors = new Set<string>();
-    for (const assertion of assertions) {
-      if (!assertion || seenPositions.has(assertion.positionId) || BigInt(assertion.positionId) <= 0n) throw new Error('invalid entry balance assertion position');
-      seenPositions.add(assertion.positionId);
-      if (assertion.ledgerSemanticsVersion !== 1) throw new Error('invalid entry balance assertion semantics');
-      const allDeals = [...incomingDeals, ...persistedDeals.map((deal) => ({ ...deal, ticket: deal.ticket.toString(), order: deal.order.toString(), positionId: deal.positionId.toString(), timeMsc: Number(deal.timeMsc) }))];
-      if (assertion.state === 'UNSUPPORTED_UNANCHORED') {
-        if (assertion.reason !== 'OPENING_DEAL_OUTSIDE_HISTORY' || 'entryDealTicket' in assertion || 'entryOrderTicket' in assertion || 'entryTimeMsc' in assertion || 'preEntryBalance' in assertion) throw new Error('invalid unanchored entry balance assertion');
-        const positionDeals = allDeals.filter((deal) => deal.positionId === assertion.positionId);
-        if (!positionDeals.length || positionDeals.some((deal) => this.isOpeningExecution(deal))) throw new Error('invalid unanchored entry balance assertion');
+  private async rebuildBalanceLedger(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    server: string,
+    accountLogin: bigint,
+    currency: string,
+    currencyDigits: number,
+    currentBalanceValue: string,
+    historyRange: { fromMsc: number; toMsc: number },
+    fetchedAt: Date,
+  ): Promise<{
+    positionIds: string[];
+    assertions: Array<{ positionId: string; state: string; preEntryBalance?: string }>;
+    verified: boolean;
+    calculatedBalance: Prisma.Decimal;
+  }> {
+    const deals = await tx.mt5Deal.findMany({
+      where: { accountId, server, accountLogin },
+      orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: {
+        ticket: true, order: true, positionId: true, timeMsc: true, timeMscUtc: true,
+        type: true, entry: true, profit: true, commission: true, swap: true, fee: true,
+      },
+    });
+    let balance = new Prisma.Decimal(0);
+    const events: Prisma.Mt5AccountBalanceEventCreateManyInput[] = [];
+    const balancesBefore = new Map<string, Prisma.Decimal>();
+    for (const deal of deals) {
+      const before = balance;
+      balancesBefore.set(deal.ticket.toString(), before);
+      const delta = deal.profit.plus(deal.commission).plus(deal.swap).plus(deal.fee)
+        .toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
+      balance = before.plus(delta).toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
+      events.push({
+        accountId, server, accountLogin, dealTicket: deal.ticket,
+        occurredAtMsc: deal.timeMsc, occurredAtUtc: deal.timeMscUtc,
+        balanceDelta: delta, balanceBefore: before, balanceAfter: balance,
+        currency, ledgerVersion: BALANCE_LEDGER_VERSION, fetchedAt,
+      });
+    }
+
+    const currentBalance = new Prisma.Decimal(currentBalanceValue).toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
+    const verified = historyRange.fromMsc === FULL_HISTORY_FROM_MSC && balance.equals(currentBalance);
+    await tx.mt5AccountBalanceEvent.deleteMany({ where: { accountId } });
+    if (events.length) await tx.mt5AccountBalanceEvent.createMany({ data: events });
+    await tx.mt5AccountBalanceLedgerState.upsert({
+      where: { accountId },
+      create: {
+        accountId, server, accountLogin, currency, currencyDigits, calculatedBalance: balance, currentBalance,
+        historyFromMsc: BigInt(historyRange.fromMsc), historyToMsc: BigInt(historyRange.toMsc),
+        ledgerVersion: BALANCE_LEDGER_VERSION, status: verified ? 'VERIFIED' : 'DIVERGED',
+        lastVerifiedAt: verified ? fetchedAt : null,
+        lastError: verified ? null : 'CALCULATED_BALANCE_MISMATCH',
+      },
+      update: {
+        server, accountLogin, currency, currencyDigits, calculatedBalance: balance, currentBalance,
+        historyFromMsc: BigInt(historyRange.fromMsc), historyToMsc: BigInt(historyRange.toMsc),
+        ledgerVersion: BALANCE_LEDGER_VERSION, status: verified ? 'VERIFIED' : 'DIVERGED',
+        ...(verified && { lastVerifiedAt: fetchedAt }),
+        lastError: verified ? null : 'CALCULATED_BALANCE_MISMATCH',
+      },
+    });
+
+    const byPosition = new Map<string, typeof deals>();
+    for (const deal of deals) {
+      if (deal.positionId <= 0n) continue;
+      const positionId = deal.positionId.toString();
+      const rows = byPosition.get(positionId) ?? [];
+      rows.push(deal);
+      byPosition.set(positionId, rows);
+    }
+    await tx.mt5PositionEntryBalance.deleteMany({ where: { accountId } });
+    const assertions: Array<{ positionId: string; state: string; preEntryBalance?: string }> = [];
+    for (const [positionId, positionDeals] of byPosition) {
+      const opening = positionDeals.find((deal) => this.isOpeningExecution(deal));
+      if (!opening) {
+        await tx.mt5PositionEntryBalance.create({
+          data: {
+            accountId, server, accountLogin, positionId: BigInt(positionId),
+            entryDealTicket: null, entryOrderTicket: null, entryTimeMsc: null, entryTimeMscUtc: null,
+            ledgerSemanticsVersion: BALANCE_LEDGER_VERSION, state: 'UNSUPPORTED_UNANCHORED',
+            preEntryBalance: null, reason: 'OPENING_DEAL_OUTSIDE_HISTORY', fetchedAt,
+          },
+        });
+        assertions.push({ positionId, state: 'UNSUPPORTED_UNANCHORED' });
         continue;
       }
-      if (!assertion.entryDealTicket || !assertion.entryOrderTicket || !Number.isSafeInteger(assertion.entryTimeMsc) || seenAnchors.has(assertion.entryDealTicket)) throw new Error('invalid anchored entry balance assertion');
-      seenAnchors.add(assertion.entryDealTicket);
-      const anchor = allDeals.find((deal) => deal.ticket === assertion.entryDealTicket);
-      if (!anchor || anchor.positionId !== assertion.positionId || anchor.order !== assertion.entryOrderTicket || anchor.timeMsc !== assertion.entryTimeMsc || !this.isOpeningExecution(anchor)) throw new Error('entry balance assertion does not match raw opening deal');
+      const preEntryBalance = balancesBefore.get(opening.ticket.toString());
+      const state = verified && preEntryBalance ? 'PROVEN' : 'UNSUPPORTED_ANCHORED';
+      await tx.mt5PositionEntryBalance.create({
+        data: {
+          accountId, server, accountLogin, positionId: BigInt(positionId),
+          entryDealTicket: opening.ticket, entryOrderTicket: opening.order,
+          entryTimeMsc: opening.timeMsc, entryTimeMscUtc: opening.timeMscUtc,
+          ledgerSemanticsVersion: BALANCE_LEDGER_VERSION, state,
+          preEntryBalance: state === 'PROVEN' ? preEntryBalance : null,
+          reason: state === 'PROVEN' ? null : 'UNSUPPORTED_CHECKPOINT', fetchedAt,
+        },
+      });
+      assertions.push({
+        positionId,
+        state,
+        ...(state === 'PROVEN' && { preEntryBalance: preEntryBalance!.toString() }),
+      });
     }
-    if (seenPositions.size !== executionPositionIds.size || [...executionPositionIds].some((positionId) => !seenPositions.has(positionId))) throw new Error('incomplete entry balance assertions');
-  }
-
-  private async persistEntryBalanceAssertion(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, assertion: any, fetchedAt: Date): Promise<boolean> {
-    const key = { server_accountLogin_positionId: { server, accountLogin, positionId: BigInt(assertion.positionId) } };
-    const existing = await tx.mt5PositionEntryBalance.findUnique({ where: key });
-    const data = {
-      accountId, server, accountLogin, positionId: BigInt(assertion.positionId),
-      entryDealTicket: assertion.state === 'UNSUPPORTED_UNANCHORED' ? null : BigInt(assertion.entryDealTicket),
-      entryOrderTicket: assertion.state === 'UNSUPPORTED_UNANCHORED' ? null : BigInt(assertion.entryOrderTicket),
-      entryTimeMsc: assertion.state === 'UNSUPPORTED_UNANCHORED' ? null : BigInt(assertion.entryTimeMsc),
-      entryTimeMscUtc: assertion.state === 'UNSUPPORTED_UNANCHORED' ? null : new Date(assertion.entryTimeMsc),
-      ledgerSemanticsVersion: assertion.ledgerSemanticsVersion, state: assertion.state,
-      preEntryBalance: assertion.state === 'PROVEN' ? assertion.preEntryBalance : null,
-      reason: assertion.state === 'PROVEN' ? null : assertion.reason, fetchedAt,
-    };
-    if (existing) {
-      const immutable = ['entryDealTicket', 'entryOrderTicket', 'entryTimeMsc', 'ledgerSemanticsVersion', 'state', 'preEntryBalance', 'reason'] as const;
-      if (immutable.some((field) => String(existing[field] ?? '') !== String(data[field] ?? ''))) throw new Error('entry balance assertion conflicts with immutable state');
-      await tx.mt5PositionEntryBalance.update({ where: key, data: { fetchedAt } });
-      return false;
-    }
-    await tx.mt5PositionEntryBalance.create({ data: data as never });
-    return true;
+    return { positionIds: [...byPosition.keys()], assertions, verified, calculatedBalance: balance };
   }
   private async projectTrades(tx: Prisma.TransactionClient, ownerId: string, accountId: string, exactServer: string, canonicalServer: string, accountLogin: bigint, positionIds: string[], assertions: Array<{ positionId: string; state: string; preEntryBalance?: string }>, incomingPlans: Mt5PositionEntryPlanFact[]): Promise<number> {
     const uniquePositionIds = [...new Set(positionIds.filter((id) => BigInt(id) > 0n))];

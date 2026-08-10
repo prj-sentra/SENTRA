@@ -100,6 +100,12 @@ enum Mt5PositionEntryBalanceReason {
 }
 
 
+
+enum Mt5BalanceLedgerStatus {
+  VERIFIED
+  DIVERGED
+}
+
 model Trade {
   id                        String                  @id @default(uuid())
   symbol                    String
@@ -341,6 +347,7 @@ model Mt5Deal {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
   entryBalanceAnchors Mt5PositionEntryBalance[]
+  balanceEvent Mt5AccountBalanceEvent?
 
   @@id([server, accountLogin, ticket])
   @@index([accountId])
@@ -409,6 +416,52 @@ model Mt5PositionEntryBalance {
   @@index([accountId])
   @@index([server, accountLogin, entryDealTicket])
   @@map("mt5_position_entry_balances")
+}
+
+
+model Mt5AccountBalanceEvent {
+  accountId       String     @map("account_id")
+  account         Mt5Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  server          String
+  accountLogin    BigInt     @map("account_login")
+  dealTicket      BigInt     @map("deal_ticket")
+  deal            Mt5Deal    @relation(fields: [server, accountLogin, dealTicket], references: [server, accountLogin, ticket], onDelete: Restrict)
+  occurredAtMsc   BigInt     @map("occurred_at_msc")
+  occurredAtUtc   DateTime   @map("occurred_at_utc")
+  balanceDelta    Decimal    @map("balance_delta") @db.Decimal(65, 30)
+  balanceBefore   Decimal    @map("balance_before") @db.Decimal(65, 30)
+  balanceAfter    Decimal    @map("balance_after") @db.Decimal(65, 30)
+  currency        String
+  ledgerVersion   Int        @map("ledger_version")
+  fetchedAt       DateTime   @map("fetched_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  @@id([server, accountLogin, dealTicket])
+  @@index([accountId, occurredAtMsc, dealTicket])
+  @@map("mt5_account_balance_events")
+}
+
+model Mt5AccountBalanceLedgerState {
+  accountId          String                 @id @map("account_id")
+  account            Mt5Account             @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  server             String
+  accountLogin       BigInt                 @map("account_login")
+  currency           String
+  currencyDigits     Int                    @map("currency_digits")
+  calculatedBalance Decimal                @map("calculated_balance") @db.Decimal(65, 30)
+  currentBalance     Decimal                @map("current_balance") @db.Decimal(65, 30)
+  historyFromMsc     BigInt                 @map("history_from_msc")
+  historyToMsc       BigInt                 @map("history_to_msc")
+  ledgerVersion      Int                    @map("ledger_version")
+  status             Mt5BalanceLedgerStatus
+  lastVerifiedAt     DateTime?              @map("last_verified_at")
+  lastError          String?                @map("last_error")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  @@unique([server, accountLogin])
+  @@map("mt5_account_balance_ledger_states")
 }
 model Mt5PositionEntryPlan {
   id                    String     @id @default(uuid())
@@ -577,6 +630,8 @@ model Mt5Account {
   positionEntryBalances Mt5PositionEntryBalance[]
   syncStatus           Mt5SyncStatus?
   positionEntryPlans   Mt5PositionEntryPlan[]
+  balanceEvents         Mt5AccountBalanceEvent[]
+  balanceLedgerState    Mt5AccountBalanceLedgerState?
 
   @@unique([canonicalServer, accountLogin])
   @@index([ownerId, active])

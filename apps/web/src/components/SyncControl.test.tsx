@@ -16,6 +16,17 @@ describe('SyncControl', () => {
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+  it('surfaces a completed sync whose reconstructed account ledger diverged', async () => {
+    render(<SyncControl account={account} onSync={async () => ({
+      state: 'completed',
+      accountId: 'a1',
+      importedCount: 1,
+      receivedCount: 4,
+      balanceLedger: { status: 'diverged', currency: 'USD', calculatedBalance: 926, currentBalance: 925 },
+    })} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });
+    expect(screen.getByRole('status')).toHaveTextContent('잔고 원장 불일치(계산 926 / MT5 925 USD)');
+  });
   it('shows the safe failed response message without invented counts or time', async () => {
     render(<SyncControl account={account} onSync={async () => ({ state: 'failed', accountId: 'a1', message: 'Synchronization result expired' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });
