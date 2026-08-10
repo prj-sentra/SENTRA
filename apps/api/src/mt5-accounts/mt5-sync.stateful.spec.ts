@@ -187,6 +187,28 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.trade.analysis.thesis).toBe('keep me');
   });
 
+  it('projects the latest MT5 closing deal reason onto the trade and exit', async () => {
+    const { db, state } = statefulDb();
+    const closingDeal = {
+      ...deal,
+      ticket: '12',
+      order: '12',
+      entry: 1,
+      type: 1,
+      reason: 1,
+      time: 2,
+      timeMsc: 2000,
+      price: 3,
+      profit: 10,
+    };
+    const service = new Mt5SyncService(db, cipher as never, bridge([{ cursor: 'first', deals: [deposit, deal, closingDeal] }]) as never);
+
+    await service.sync('owner-1', 'account-1');
+
+    expect(state.trade.exitReason).toBe('manual');
+    expect(state.trade.exit.create.reason).toBe('manual');
+  });
+
   it('rebuilds from persisted deals on an unchanged cursor response', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([

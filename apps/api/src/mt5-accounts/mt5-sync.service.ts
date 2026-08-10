@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { Mt5SyncResponse } from '@trading-journal/shared';
+import type { Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
 import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
@@ -20,6 +20,33 @@ function canonicalFact(value: unknown, fields: readonly string[]): string {
 const METRIC_CONTRACT_VERSION = 1;
 const BALANCE_LEDGER_VERSION = 1;
 const FULL_HISTORY_FROM_MSC = 0;
+
+export function mt5DealReason(reason: number): TradeExitReason {
+  switch (reason) {
+    case 0:
+    case 1:
+    case 2:
+      return 'manual';
+    case 3:
+      return 'automated';
+    case 4:
+      return 'stop_loss';
+    case 5:
+      return 'target_hit';
+    case 6:
+      return 'forced_liquidation';
+    case 7:
+      return 'rollover';
+    case 8:
+      return 'variation_margin';
+    case 9:
+      return 'split';
+    case 10:
+      return 'corporate_action';
+    default:
+      return 'other';
+  }
+}
 
 
 export const seoulTradingDate = (value: Date): Date => {
@@ -342,6 +369,8 @@ export class Mt5SyncService {
       const exitVolume = exits.reduce((sum, deal) => sum + Number(deal.volume), 0);
       const weighted = (rows: typeof deals) => rows.reduce((sum, deal) => sum + Number(deal.price) * Number(deal.volume), 0) / rows.reduce((sum, deal) => sum + Number(deal.volume), 0);
       const closed = entryVolume > 0 && exitVolume >= entryVolume;
+      const latestExit = exits[exits.length - 1];
+      const exitReason = latestExit ? mt5DealReason(latestExit.reason) : undefined;
       const incomingPlan = plans.get(positionId);
       let initialPlan = await tx.mt5PositionEntryPlan.findUnique({
         where: { server_accountLogin_positionId: { server: canonicalServer, accountLogin, positionId: BigInt(positionId) } },
@@ -385,7 +414,7 @@ export class Mt5SyncService {
       const data = {
         ownerId, mt5AccountId: accountId, symbol: opened.symbol, side: opened.type === 1 ? TradeSide.SHORT : TradeSide.LONG,
         status: closed ? TradeStatus.CLOSED : TradeStatus.OPEN, quantityLots: entryVolume, entryPrice: entries.length ? weighted(entries) : Number(opened.price),
-        ...(exits.length && { exitPrice: weighted(exits) }), realizedPnl: deals.reduce((sum, deal) => sum + Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee), 0),
+        ...(exits.length && { exitPrice: weighted(exits), exitReason }), realizedPnl: deals.reduce((sum, deal) => sum + Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee), 0),
         openedAt: opened.timeMscUtc, ...(closed && { closedAt: exits[exits.length - 1].timeMscUtc }),
         takeProfitPrice: takeProfitPrice ?? null,
         stopLossPrice: stopLossPrice ?? null,
@@ -398,13 +427,13 @@ export class Mt5SyncService {
           ...data, mt5Server: exactServer, mt5ServerCanonical: canonicalServer, mt5AccountLogin: accountLogin, mt5PositionId: BigInt(positionId),
           analysis: { create: {} },
           entry: { create: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc } },
-          ...(exits.length && { exit: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc } } }),
+          ...(exits.length && { exit: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: latestExit.timeMscUtc, reason: exitReason } } }),
         },
         update: {
           ...data,
           analysis: { upsert: { create: {}, update: {} } },
           entry: { upsert: { create: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc }, update: { price: entries.length ? weighted(entries) : Number(opened.price), quantity: entryVolume || Number(opened.volume), occurredAt: opened.timeMscUtc } } },
-          ...(exits.length && { exit: { upsert: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc }, update: { price: weighted(exits), quantity: exitVolume, occurredAt: exits[exits.length - 1].timeMscUtc } } } }),
+          ...(exits.length && { exit: { upsert: { create: { price: weighted(exits), quantity: exitVolume, occurredAt: latestExit.timeMscUtc, reason: exitReason }, update: { price: weighted(exits), quantity: exitVolume, occurredAt: latestExit.timeMscUtc, reason: exitReason } } } }),
         },
       });
       const membership = await tx.campaignMembership.findUnique({ where: { tradeId: trade.id } });

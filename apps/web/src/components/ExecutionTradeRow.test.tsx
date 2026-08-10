@@ -44,6 +44,7 @@ describe('ExecutionTradeRow summary metrics', () => {
     expect(screen.getByText('진입시간 / 청산시간').nextElementSibling).toHaveTextContent(/26\. 8\. 10\..*\/.*26\. 8\. 10\./);
     expect(screen.getByText('진입가 / 청산가').nextElementSibling).toHaveTextContent('100 / 110');
     expect(screen.getByText('250')).not.toHaveClass('pnl');
+    expect(screen.getByText('목표가 도달 (TP)')).toBeInTheDocument();
   });
 
   it('does not show ticker or execution status labels', () => {
