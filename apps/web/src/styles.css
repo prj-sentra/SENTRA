@@ -915,7 +915,11 @@ button.trade-cover { cursor: pointer; }
 .regret-metric { display: grid; grid-template-rows: auto 1fr; gap: 6px; min-width: 0; height: 100%; }
 .regret-metric textarea { width: 100%; min-height: 100%; box-sizing: border-box; resize: none; border: 1px solid var(--border); padding: 10px 12px; color: var(--text-primary); background: var(--layer-01); font: inherit; font-size: 15px; line-height: 1.5; }
 .regret-preview { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.detail-toggle { position: absolute; right: 24px; bottom: 18px; }
+.detail-toggle { position: absolute; right: 24px; bottom: 18px; display: inline-flex; min-height: 38px; align-items: center; gap: 8px; border: 1px solid rgb(15 98 254 / 32%); border-radius: 999px; padding: 0 15px; color: var(--blue); background: rgb(15 98 254 / 7%); font-size: 13px; font-weight: 700; cursor: pointer; transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease; }
+.detail-toggle::after { content: "⌄"; display: inline-block; font-size: 18px; font-weight: 400; line-height: 1; transition: transform .2s ease; }
+.detail-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
+.detail-toggle:hover { border-color: var(--blue); color: #fff; background: var(--blue); transform: translateY(-1px); }
+.detail-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 .expanded-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px; border-top: 1px solid var(--border); }
 .gallery-heading { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-bottom: 10px; }
 .gallery-grid { display: flex; gap: 12px; overflow-x: auto; margin: 0; padding: 15px 15px 10px 0; list-style: none; scroll-snap-type: x proximity; scrollbar-color: var(--border-strong) transparent; }
@@ -964,23 +968,18 @@ button.trade-cover { cursor: pointer; }
 .trade-detail { padding: 4px 0; }
 .execution-row { display: grid; gap: 18px; padding: 20px; border: 1px solid var(--border); background: var(--surface); }
 .trade-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; margin-top: 20px; }
-.detail-editor { display: grid; gap: 22px; padding: 24px; border: 1px solid var(--border); background: var(--layer-01); }
-.detail-editor h4 { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 20px; }
-.detail-editor h4::after { content: "진입 판단과 시장 맥락을 복기합니다"; color: var(--text-muted); font-size: 12px; font-weight: 400; }
+.detail-editor { display: grid; gap: 20px; width: 100%; }
+.detail-editor h4 { display: none; }
 .detail-editor label { display: grid; gap: 7px; }
 .detail-editor label span { color: var(--text-secondary); font-size: 12px; font-weight: 650; }
-.analysis-editor-columns { display: grid; grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr); gap: 20px; width: 100%; align-items: start; }
+.analysis-editor-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; width: 100%; align-items: start; }
 .analysis-editor-memo, .analysis-editor-groups { min-width: 0; }
-.analysis-editor-memo { display: grid; gap: 14px; }
+.analysis-editor-memo { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(240px, .85fr); gap: 14px; }
 .analysis-editor-memo label { padding: 16px; border: 1px solid var(--border); background: var(--surface); }
 .analysis-editor-memo label span { color: var(--text-primary); font-size: 13px; }
 .analysis-editor-memo textarea { width: 100%; box-sizing: border-box; resize: vertical; line-height: 1.6; }
-.analysis-editor-groups { display: grid; grid-template-areas: "trend market" "technical technical" "economic economic"; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.analysis-editor-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .analysis-editor fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); padding: 16px; background: var(--surface); }
-.analysis-editor fieldset:nth-child(1) { grid-area: trend; }
-.analysis-editor fieldset:nth-child(2) { grid-area: technical; }
-.analysis-editor fieldset:nth-child(3) { grid-area: market; }
-.analysis-editor fieldset:nth-child(4) { grid-area: economic; }
 .analysis-editor legend { padding: 0 8px; color: var(--text-primary); font-size: 13px; font-weight: 750; }
 .analysis-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .analysis-editor input:not([type="checkbox"]), .analysis-editor select, .analysis-editor textarea { min-width: 0; border: 1px solid var(--border); border-radius: 4px; padding: 10px 11px; color: var(--text-primary); background: var(--surface); font: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
@@ -1031,10 +1030,7 @@ button.trade-cover { cursor: pointer; }
 }
 @media (max-width: 800px) {
   .analysis-editor-columns, .analysis-editor-groups { grid-template-columns: minmax(0, 1fr); }
-  .analysis-editor-groups { grid-template-areas: none; }
-  .analysis-editor fieldset { grid-area: auto !important; }
-  .detail-editor { padding: 16px; }
-  .detail-editor h4 { display: grid; gap: 4px; }
+  .analysis-editor-memo { grid-template-columns: minmax(0, 1fr); }
   .analysis-fields { grid-template-columns: minmax(0, 1fr); }
   .indicator-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
 }
