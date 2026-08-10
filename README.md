@@ -97,8 +97,10 @@ pnpm --filter @trading-journal/api prisma:migrate
 운영 오버레이는 필수 환경 변수를 검증하고 Caddy의 80/443 포트만 공개합니다.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+pnpm deploy:production
 ```
+
+배포 스크립트는 ambient shell 변수를 그대로 사용하지 않고 저장된 `.env`를 다시 로드한 뒤, Compose가 동일한 `MT5_BRIDGE_TOKEN`을 해석했는지 검증합니다. 따라서 이전 셸에 남은 오래된 토큰으로 컨테이너가 재생성되는 것을 차단합니다.
 
 `WEB_ORIGIN`과 `CADDY_SITE_ADDRESS`를 실제 도메인에 맞게 설정해야 합니다. Cloudflare Tunnel을 사용하는 경우 공개 호스트의 원본 서비스를 `http://localhost:80`으로 지정합니다.
 

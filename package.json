@@ -9,7 +9,8 @@
     "build": "pnpm --filter @trading-journal/shared build && pnpm --filter @trading-journal/api build && pnpm --filter @trading-journal/web build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm --filter @trading-journal/shared typecheck && pnpm --filter @trading-journal/api typecheck && pnpm --filter @trading-journal/web typecheck",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "deploy:production": "bash scripts/deploy-production.sh"
   },
   "engines": {
     "node": ">=22"
