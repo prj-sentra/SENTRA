@@ -37,8 +37,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
         ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 거래 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /></button>
         : <div className="trade-cover"><span>차트 이미지 없음</span></div>}
       <div className="trade-summary-body">
-        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{signedMetric(campaign.realizedPnl)}</strong></div><strong>{campaign.members.length}건 분할 매매</strong></header>
-        <p className="trade-time">{time(campaign.openedAt)} → {time(campaign.closedAt)}</p>
+        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{signedMetric(campaign.realizedPnl)}</strong></div><div className="trade-header-meta"><strong>{campaign.members.length}건 분할 매매</strong><p className="trade-time">{time(campaign.openedAt)} - {time(campaign.closedAt)}</p></div></header>
         <div className="trade-summary-metrics">
           <dl>
             <div><dt>평균 진입가 / 평균 청산가</dt><dd>{metric(campaign.entryPrice)} / {metric(campaign.exitPrice)}</dd></div>

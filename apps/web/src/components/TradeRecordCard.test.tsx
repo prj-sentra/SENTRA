@@ -42,6 +42,27 @@ describe('TradeRecordCard regret preview', () => {
     expect(screen.queryByText('PnL')).toBeNull();
   });
 
+  it('stacks the hyphenated trade period below the split-trade label', () => {
+    const { container } = render(<TradeRecordCard
+      campaign={{
+        ...campaign,
+        openedAt: '2026-08-10T01:00:00.000Z',
+        closedAt: '2026-08-10T02:00:00.000Z',
+        members: [{}, {}],
+      }}
+      imageUrl={vi.fn()}
+      onPatchAnalysis={vi.fn()}
+      onUploadImage={vi.fn()}
+      onReorderImages={vi.fn()}
+      onDeleteImage={vi.fn()}
+    />);
+
+    const meta = container.querySelector('.trade-header-meta')!;
+    expect(meta.firstElementChild).toHaveTextContent('2건 분할 매매');
+    expect(meta.lastElementChild).toHaveTextContent(/26\. 8\. 10\..* - 26\. 8\. 10\./);
+    expect(meta).not.toHaveTextContent('→');
+  });
+
   it('renders regret line breaks in a read-only textarea', () => {
     render(<TradeRecordCard
       campaign={{ ...campaign, regret: '첫 번째 줄\n두 번째 줄' }}
