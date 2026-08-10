@@ -15,7 +15,7 @@ export interface TradeRecordCardProps {
 
 const metric = (value?: number, suffix = '') => value === undefined ? '—' : `${value.toLocaleString('ko-KR')}${suffix}`;
 const time = (value?: string) => value ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—';
-const sideLabel = (side: string) => side === 'long' ? '매수' : '매도';
+const sideLabel = (side: string) => side === 'long' ? 'Long' : 'Short';
 
 export function TradeRecordCard(props: TradeRecordCardProps) {
   const { campaign } = props;
@@ -27,6 +27,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
   const previewImage = orderedImages[previewIndex];
   const points = campaign.quantityLots === 0 ? undefined : campaign.realizedPnl / campaign.quantityLots;
   const postSeed = campaign.seedBalance === undefined ? undefined : campaign.seedBalance + campaign.realizedPnl;
+  const seedChangeRatio = campaign.seedBalance ? campaign.realizedPnl / campaign.seedBalance * 100 : undefined;
   const regret = campaign.regret?.trim();
   const regretPreview = regret || '작성 필요';
   return <article className="trade-record-card">
@@ -35,18 +36,14 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
         ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 거래 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /></button>
         : <div className="trade-cover"><span>차트 이미지 없음</span></div>}
       <div className="trade-summary-body">
-        <header><div><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span></div><strong>{campaign.members.length}건 분할 매매</strong></header>
+        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{metric(campaign.realizedPnl)}</strong></div><strong>{campaign.members.length}건 분할 매매</strong></header>
         <p className="trade-time">{time(campaign.openedAt)} → {time(campaign.closedAt)}</p>
         <div className="trade-summary-metrics">
           <dl>
-            <div><dt>진입가</dt><dd>{metric(campaign.entryPrice)}</dd></div>
-            <div><dt>청산가</dt><dd>{metric(campaign.exitPrice)}</dd></div>
-            <div><dt>수량</dt><dd>{metric(campaign.quantityLots, ' lot')}</dd></div>
-          </dl>
-          <dl>
-            <div><dt>거래 전후 시드</dt><dd>{metric(campaign.seedBalance)} → {metric(postSeed)}</dd></div>
-            <div><dt>PnL</dt><dd className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{metric(campaign.realizedPnl)}</dd></div>
-            <div><dt>포인트</dt><dd title={points === undefined ? '수량이 없어 포인트를 계산할 수 없습니다.' : undefined}>{metric(points)}</dd></div>
+            <div><dt>평균 진입가 / 평균 청산가</dt><dd>{metric(campaign.entryPrice)} / {metric(campaign.exitPrice)}</dd></div>
+            <div><dt>총 수량</dt><dd>{metric(campaign.quantityLots, ' lot')}</dd></div>
+            <div><dt>거래 전후 시드 변화 / 비율</dt><dd>{metric(campaign.seedBalance)} → {metric(postSeed)} / {seedChangeRatio === undefined ? '—' : `${seedChangeRatio >= 0 ? '+' : ''}${seedChangeRatio.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`}</dd></div>
+            <div><dt>포인트 (PnL / 수량; 1랏 기준 PnL)</dt><dd title={points === undefined ? '수량이 없어 포인트를 계산할 수 없습니다.' : undefined}>{metric(points)}</dd></div>
           </dl>
           <label className="regret-metric">
             <span>아쉬운 점</span>
