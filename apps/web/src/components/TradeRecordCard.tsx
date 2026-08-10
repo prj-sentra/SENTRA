@@ -14,6 +14,7 @@ export interface TradeRecordCardProps {
 }
 
 const metric = (value?: number, suffix = '') => value === undefined ? '—' : `${value.toLocaleString('ko-KR')}${suffix}`;
+const signedMetric = (value?: number) => value === undefined ? '—' : `${value > 0 ? '+' : ''}${value.toLocaleString('ko-KR')}`;
 const time = (value?: string) => value ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—';
 const sideLabel = (side: string) => side === 'long' ? 'Long' : 'Short';
 
@@ -36,7 +37,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
         ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 거래 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /></button>
         : <div className="trade-cover"><span>차트 이미지 없음</span></div>}
       <div className="trade-summary-body">
-        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{metric(campaign.realizedPnl)}</strong></div><strong>{campaign.members.length}건 분할 매매</strong></header>
+        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{signedMetric(campaign.realizedPnl)}</strong></div><strong>{campaign.members.length}건 분할 매매</strong></header>
         <p className="trade-time">{time(campaign.openedAt)} → {time(campaign.closedAt)}</p>
         <div className="trade-summary-metrics">
           <dl>
@@ -50,7 +51,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
             <textarea aria-label="아쉬운 점" value={regret ?? ''} placeholder="작성 필요" readOnly />
           </label>
         </div>
-        <div className="trade-mobile-summary"><div className="mobile-summary-first"><strong>{campaign.symbol}</strong><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{metric(campaign.realizedPnl)}</strong></div><div className="mobile-summary-second"><span><b>성과</b> 포인트 {metric(points)}</span><span className="regret-preview"><b>아쉬운 점</b> {regretPreview}</span><span className={campaign.analysisComplete ? 'complete' : 'incomplete'}><b>작성</b> {campaign.analysisComplete ? '완료' : '필요'}</span></div></div>
+        <div className="trade-mobile-summary"><div className="mobile-summary-first"><strong>{campaign.symbol}</strong><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{signedMetric(campaign.realizedPnl)}</strong></div><div className="mobile-summary-second"><span><b>성과</b> 포인트 {metric(points)}</span><span className="regret-preview"><b>아쉬운 점</b> {regretPreview}</span><span className={campaign.analysisComplete ? 'complete' : 'incomplete'}><b>작성</b> {campaign.analysisComplete ? '완료' : '필요'}</span></div></div>
         <button className="detail-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? '상세 닫기' : '상세 보기'}</button>
       </div>
     </div>

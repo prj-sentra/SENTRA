@@ -34,6 +34,7 @@ describe('TradeRecordCard regret preview', () => {
     expect(screen.queryByText('청산 사유')).toBeNull();
     expect(screen.queryByText('목표가 도달')).toBeNull();
     expect(screen.getAllByText('Long')).toHaveLength(2);
+    expect(screen.getAllByText('+125')).toHaveLength(2);
     expect(screen.getByText('평균 진입가 / 평균 청산가')).toBeInTheDocument();
     expect(screen.getByText('총 수량')).toBeInTheDocument();
     expect(screen.getByText('거래 전후 시드 변화 / 비율')).toBeInTheDocument();
