@@ -40,10 +40,10 @@ export const TradeDetail = forwardRef<TradeDetailHandle, TradeDetailProps>(({ ca
   if (!selectedTrade) return null;
   return <div className="trade-detail">
     <section className="campaign-analysis-section">
-      <h3>거래 공통 분석</h3>
+      <h2>거래 공통 분석</h2>
       <TradeAnalysisEditor ref={campaignForm} trade={rootTrade} campaign={campaign} scope="campaign" onSave={onPatchAnalysis} onSaveCampaign={onPatchCampaignAnalysis} />
     </section>
-    <h3 className="execution-analysis-heading">매매별 분석</h3>
+    <h2 className="execution-analysis-heading">매매별 분석</h2>
     <nav className="split-trade-navigation desktop-trade-navigation" aria-label="분할 매매 선택">
       {campaign.members.map((member, index) => <button key={member.id} type="button" className={`${index === selectedIndex ? 'active ' : ''}${member.analysisComplete ? 'complete' : 'incomplete'}`} aria-current={index === selectedIndex ? 'step' : undefined} onClick={() => setSelectedIndex(index)}>{index + 1}<span className="sr-only">번째 분할 매매 {stateLabel(member.analysisComplete)}</span></button>)}
     </nav>

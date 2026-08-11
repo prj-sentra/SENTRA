@@ -931,7 +931,7 @@ button.trade-cover { cursor: pointer; }
 .campaign-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 24px; align-items: stretch; }
 .campaign-memo-editor { display: flex; min-height: 0; flex-direction: column; gap: 14px; padding: 20px 0 0; background: var(--surface); }
 .campaign-memo-editor h3, .analysis-editor h3 { margin: 0; }
-.campaign-memo-editor h3 { color: var(--text-secondary); font-size: 13px; font-weight: 650; }
+.campaign-memo-editor h3 { margin: 0; border-top: 1px solid var(--border); padding-top: 16px; color: var(--text-primary); font-size: 13px; font-weight: 750; }
 .campaign-memo-editor > textarea,
 .campaign-journal-fields textarea,
 .execution-violation-fields textarea {
@@ -967,7 +967,6 @@ button.trade-cover { cursor: pointer; }
 .campaign-journal-fields textarea:focus,
 .execution-violation-fields textarea:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 2px rgb(15 98 254 / 16%); }
 .campaign-journal-fields { display: grid; gap: 12px; padding-top: 8px; }
-.campaign-journal-fields h3 { border-top: 1px solid var(--border); padding-top: 16px; }
 .campaign-journal-fields label { display: grid; gap: 7px; }
 .campaign-journal-fields label span { color: var(--text-secondary); font-size: 12px; font-weight: 650; }
 .campaign-journal-fields select { border: 1px solid var(--border); border-radius: 4px; padding: 10px 11px; color: var(--text-primary); background: var(--surface); font: inherit; }
@@ -1043,7 +1042,7 @@ button.trade-cover { cursor: pointer; }
 .ma-timeframe-reading { padding: 6px 0; }
 .ma-timeframe-reading > strong { color: var(--text-primary); }
 .campaign-analysis-section { display: grid; grid-column: 1; grid-row: 1 / span 3; align-content: start; gap: 14px; margin: 0; padding: 16px 0 0; border: 0; }
-.campaign-analysis-section h3, .execution-analysis-heading { margin: 0; color: var(--text-secondary); font-size: 13px; font-weight: 650; }
+.campaign-analysis-section h2, .execution-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
 .execution-analysis-heading { grid-column: 2; grid-row: 1; padding: 16px 0 14px; }
 .trade-detail > .split-trade-navigation { grid-column: 2; grid-row: 2; }
 .trade-detail > .desktop-trade-detail { grid-column: 2; grid-row: 3; }
