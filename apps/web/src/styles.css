@@ -854,7 +854,7 @@ h3 {
 .stats-page { display: grid; gap: 24px; }
 .metric-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
 .performance-card { display: grid; align-content: start; min-height: 124px; gap: 18px; padding: 12px 10px; border: 0; border-top: 1px solid var(--border); background: transparent; }
-.performance-formulas { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: minmax(600px, 1.55fr) minmax(420px, 1fr); align-items: center; gap: 32px; min-height: 180px; padding: 28px 10px; border-block: 1px solid var(--border); }
+.performance-formulas { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: minmax(600px, 1.55fr) minmax(420px, 1fr); align-items: center; gap: 32px; padding: 22px 10px; border-block: 1px solid var(--border); }
 .pnl-equation { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto minmax(180px, 1fr); align-items: center; gap: 18px; }
 .trade-count-equation { display: grid; grid-template-columns: minmax(76px, 1fr) auto minmax(48px, .7fr) auto minmax(48px, .7fr) auto minmax(48px, .7fr); align-items: center; gap: 10px; padding-left: 28px; border-left: 1px solid var(--border); }
 .average-performance { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 22px 10px; border-bottom: 1px solid var(--border); }
@@ -886,11 +886,12 @@ h3 {
 .average-term strong { overflow: hidden; max-width: 100%; font: 600 2rem 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: -.04em; text-overflow: ellipsis; white-space: nowrap; }
 .average-term .is-profit { color: #198038; }
 .average-term .is-loss { color: var(--danger); }
-.detail-metric-group { display: grid; align-content: start; gap: 18px; min-width: 0; min-height: 150px; padding: 16px 10px; border-top: 1px solid var(--border); }
+.detail-metric-group { display: grid; align-content: start; gap: 18px; min-width: 0; min-height: 150px; padding: 16px 18px; }
 .detail-metric-group:nth-child(3) { grid-column: 1 / 4; grid-row: 3; }
 .detail-metric-group:nth-child(4) { grid-column: 4 / 7; grid-row: 3; }
 .detail-metric-group:nth-child(5) { grid-column: 7 / 10; grid-row: 3; }
 .detail-metric-group:nth-child(6) { grid-column: 10 / -1; grid-row: 3; }
+.detail-metric-group + .detail-metric-group { border-left: 1px solid var(--border); }
 .detail-metric-group h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; font-weight: 700; }
 .detail-metric-group > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); gap: 14px; }
 .detail-metric-group section { display: grid; align-content: start; justify-items: center; min-width: 0; gap: 7px; text-align: center; }
@@ -921,6 +922,7 @@ h3 {
   .average-performance { grid-column: 1; grid-row: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
   .average-term:nth-child(3) { border-left: 0; }
   .average-term strong { font-size: 1.6rem; }
+  .detail-metric-group + .detail-metric-group { border-left: 0; }
   .detail-metric-group:nth-child(n) { grid-column: 1; grid-row: auto; }
   .detail-metric-group > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
