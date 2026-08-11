@@ -325,6 +325,8 @@ describe('TradeLogService expanded statistics', () => {
     const sample = (id: string, pnl: number, risk: number, closedAt: string, seedBalance = 1000) => ({ id, realizedPnl: pnl, riskAmount: risk, lots: 1, seedBalance, closedAt, openedAt: closedAt, sessions: [id === 'z' ? 'london' : 'asia'], trades: [{ id, symbol: id === 'a' ? 'XAUUSD' : 'EURUSD', side: 'long', analysisComplete: true, analysis: { baseTimeframe: '1h' } }] });
     const samples = [{ ...sample('z', -10, 10, '2026-08-03T00:00:00.000Z'), lots: 2 }, sample('a', 10, 10, '2026-08-01T00:00:00.000Z'), sample('b', 20, 10, '2026-08-01T00:00:00.000Z'), { ...sample('unclassified', 900, 10, '2026-08-02T00:00:00.000Z'), seedBalance: undefined }];
     expect(service.statsOverview(samples, 0.1)).toMatchObject({ wins: 2, losses: 1, maxWinStreak: 2, currentLossStreak: 1, expectancy: 20 / 3, oneLotPnl: 231.25, r: { total: 92, expectancy: 2 / 3 } });
+    expect(service.statsDimension(sample('weekday', 1, 1, '2026-08-03T00:00:00.000Z'), 'entryWeekday', 'Asia/Seoul')).toEqual(['월요일']);
+    expect(service.statsDimension({ ...sample('long-hold', 1, 1, '2026-08-04T09:00:00.000Z'), openedAt: '2026-08-01T00:00:00.000Z' }, 'holdDuration')).toEqual(['72h+']);
     const crosstab = service.statsCrosstab(samples, 0.1, 'symbol', 'session', 'America/New_York');
     expect(crosstab.columns.map((column: any) => column.key)).toEqual(['asia', 'london']);
     expect(crosstab.rows).toHaveLength(2);
