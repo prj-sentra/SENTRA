@@ -8,16 +8,16 @@ export interface SyncControlProps {
 }
 
 export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5AccountRef): string {
-  if (response.state === 'failed') return `동기화 실패 · ${account.nickname} · ${response.message ?? '동기화에 실패했습니다.'}`;
-  if (response.state === 'in_progress') return `동기화 진행 중 · ${account.nickname} · ${response.message ?? '이미 동기화가 진행 중입니다.'}`;
+  if (response.state === 'failed') return `동기화 실패\n계정: ${account.nickname}\n${response.message ?? '동기화에 실패했습니다.'}`;
+  if (response.state === 'in_progress') return `동기화 진행 중\n계정: ${account.nickname}\n${response.message ?? '이미 동기화가 진행 중입니다.'}`;
   const imported = response.importedCount ?? 0;
   const received = response.receivedCount ?? 0;
   const syncedAt = response.syncedAt ? new Date(response.syncedAt).toLocaleString('ko-KR') : '시간 정보 없음';
   const ledger = response.balanceLedger;
   const ledgerSummary = ledger?.status === 'diverged'
-    ? ` · 잔고 원장 불일치(계산 ${ledger.calculatedBalance} / MT5 ${ledger.currentBalance} ${ledger.currency})`
+    ? `\n잔고 원장 불일치\n계산 ${ledger.calculatedBalance} / MT5 ${ledger.currentBalance} ${ledger.currency}`
     : '';
-  return `동기화 완료 · ${imported}건 반영 / ${received}건 수신 · ${account.nickname} · ${syncedAt}${ledgerSummary}`;
+  return `동기화 완료\n계정: ${account.nickname}\n반영 ${imported}건 / 수신 ${received}건\n동기화 시각: ${syncedAt}${ledgerSummary}`;
 }
 
 export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {

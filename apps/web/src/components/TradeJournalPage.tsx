@@ -46,10 +46,10 @@ export function TradeJournalPage({ campaigns, calendarDays, date, previousDate, 
   return <section className="trade-journal-page" aria-busy={loading}>
     <header className="journal-page-heading">
       <nav className="date-navigation" aria-label="거래일 탐색">
-        <button type="button" className="secondary-button compact" aria-label="이전 거래일" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>이전</button>
+        <button type="button" className="secondary-button compact" aria-label="이전 거래일" title="이전 거래일" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>◀</button>
         <TradeCalendarPicker days={calendarDays} selectedDate={date} disabled={loading} onSelectDate={onSelectDate} />
         <time dateTime={date}><span className="date-long">{koreanDate(date)}</span><span className="date-short">{koreanDateShort(date)}</span></time>
-        <button type="button" className="secondary-button compact" aria-label="다음 거래일" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>다음</button>
+        <button type="button" className="secondary-button compact" aria-label="다음 거래일" title="다음 거래일" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>▶</button>
       </nav>
       {toolbar ? <div className="journal-page-toolbar">{toolbar}</div> : null}
     </header>

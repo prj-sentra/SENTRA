@@ -90,9 +90,9 @@ export function App() {
   if (checkingSession) return <main className="shell"><p className="muted" role="status">세션을 불러오는 중입니다…</p></main>;
   if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
   const noAccount = !accountId;
-  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={setView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">{view !== 'trade-log' ? <header className="workspace-header"><SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} /></header> : null}
+  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={setView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
     {view === 'trade-log' && (noAccount
-      ? <p className="journal-state">상단에서 MT5 계정을 선택하세요.</p>
+      ? <p className="journal-state">사이드바에서 MT5 계정을 선택하세요.</p>
       : <TradeJournalPage
           campaigns={campaigns}
           calendarDays={calendarDays}
@@ -104,7 +104,6 @@ export function App() {
           onSelectDate={setSelectedDate}
           loading={loading}
           error={error}
-          toolbar={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} />}
           imageUrl={(campaignId, imageId) => `${apiBaseUrl}/trade-log/campaigns/${encodeURIComponent(campaignId)}/images/${encodeURIComponent(imageId)}?accountId=${encodeURIComponent(accountId!)}`}
           onPatchAnalysis={(tradeId: string, patch: PatchTradeAnalysisRequest) => mutate(`/trade-log/trades/${encodeURIComponent(tradeId)}/analysis?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onPatchCampaignAnalysis={(campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/analysis?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}

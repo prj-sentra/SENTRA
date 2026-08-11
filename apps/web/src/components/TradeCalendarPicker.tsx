@@ -66,10 +66,11 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
     const first = new Date(year, month, 1);
     const leading = (first.getDay() + 6) % 7;
     const count = new Date(year, month + 1, 0).getDate();
-    return [
+    const populated = [
       ...Array.from({ length: leading }, () => null),
       ...Array.from({ length: count }, (_, index) => new Date(year, month, index + 1)),
     ];
+    return [...populated, ...Array.from({ length: 42 - populated.length }, () => null)];
   }, [visibleMonth]);
 
   function moveMonth(offset: number) {
@@ -88,7 +89,6 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
       onClick={() => setOpen((current) => !current)}
     >
       <span aria-hidden="true">▦</span>
-      <span>달력</span>
     </button>
     {open ? <div className="trade-calendar-popover" role="dialog" aria-modal="false" aria-label="거래일 선택 달력" ref={popoverRef}>
       <header className="trade-calendar-header">
@@ -96,7 +96,7 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
         <strong>{visibleMonth.getFullYear()}년 {visibleMonth.getMonth() + 1}월</strong>
         <button type="button" aria-label="다음 달" onClick={() => moveMonth(1)}>›</button>
       </header>
-      <div className="trade-calendar-legend"><span>체결: 분할 포함</span><span>매매: 묶음 단위</span></div>
+      <div className="trade-calendar-legend"><span>진입: 개별 단위</span><span>매매: 묶음 단위</span></div>
       <div className="trade-calendar-grid">
         {WEEKDAYS.map((weekday) => <span className="trade-calendar-weekday" aria-hidden="true" key={weekday}>{weekday}</span>)}
         {cells.map((date, index) => {
@@ -108,13 +108,13 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
           return <button
             type="button"
             className={`trade-calendar-day is-enabled${selectedDate === key ? ' is-selected' : ''}`}
-            aria-label={`${key}, 체결 ${summary.tradeCount}개, 매매 ${summary.campaignCount}개, 손익 ${formatPnl(summary.realizedPnl)}`}
+            aria-label={`${key}, 매매 ${summary.campaignCount}개, 진입 ${summary.tradeCount}개, 손익 ${formatPnl(summary.realizedPnl)}`}
             aria-current={selectedDate === key ? 'date' : undefined}
             key={key}
             onClick={() => { onSelectDate(key); setOpen(false); triggerRef.current?.focus(); }}
           >
             <span className="trade-calendar-date">{date.getDate()}</span>
-            <span className="trade-calendar-counts"><span>체결 {summary.tradeCount}</span><span>매매 {summary.campaignCount}</span></span>
+            <span className="trade-calendar-counts"><span>매매 {summary.campaignCount}</span><span>진입 {summary.tradeCount}</span></span>
             <span className={`trade-calendar-pnl ${pnlClass}`}>{formatPnl(summary.realizedPnl)}</span>
           </button>;
         })}
