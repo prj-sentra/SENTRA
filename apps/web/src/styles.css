@@ -1340,11 +1340,14 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .heat-cell small { color: var(--text-muted); }
 .table-link { color: var(--blue); text-decoration: underline; }
 .stats-preferences { display: grid; gap: 14px; }
-.stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; align-items: stretch; }
+.stats-preferences-groups { display: grid; gap: 18px; }
+.preferences-group { display: grid; gap: 8px; }
+.preferences-group h3 { margin: 0; color: var(--text-secondary); font-size: .76rem; font-weight: 700; }
+.preferences-general-grid, .preferences-session-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
 .stats-preferences-actions { display: flex; align-items: center; gap: 12px; }
 .settings-page { display: grid; width: 100%; max-width: none; gap: 0; margin: 0; }
 .app-content:has(> .settings-page) { padding-inline: 0; }
-.settings-card h2, .settings-mt5-section h2 { margin: 0; font-size: .82rem; font-weight: 700; line-height: 1.4; }
+.settings-card h2, .settings-mt5-section h2 { margin: 0; font-size: 1.05rem; font-weight: 700; line-height: 1.4; }
 .settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .settings-card { min-width: 0; width: 100%; padding: 12px; border: 0; background: transparent; box-shadow: none; }
 .settings-card + .settings-card { border-top: 1px solid var(--border); }
@@ -1358,7 +1361,7 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .settings-mt5-section { display: grid; width: 100%; gap: 12px; padding: 12px; border-top: 1px solid var(--border); }
 .settings-section-heading { display: grid; gap: 2px; }
 .settings-mt5-content { grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); width: 100%; }
-.credential-card .auth-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.credential-card .auth-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
 .credential-card .auth-form > label:first-child, .credential-card .auth-form > label:nth-child(2), .credential-card .auth-form > .settings-password-grid, .credential-card .auth-form > .error, .credential-card .auth-form > .primary-button { grid-column: 1 / -1; }
 .credential-card .auth-form label, .stats-preferences label { min-width: 0; gap: 5px; color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
 .credential-card .auth-form input, .stats-preferences input { width: 100%; min-width: 0; height: 42px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0 11px; color: var(--text-primary); background: var(--surface); font: inherit; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
@@ -1384,6 +1387,8 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
   .settings-card, .settings-mt5-section { padding: 12px; }
   .settings-card + .settings-card { border-left: 0; border-top: 1px solid var(--border); }
   .settings-mt5-content { grid-template-columns: 1fr; }
+  .preferences-general-grid, .preferences-session-grid { grid-template-columns: 1fr; }
+  .settings-card-heading { flex-wrap: wrap; }
   .stats-toolbar { flex-wrap: wrap; }
   .stats-toolbar-actions { width: 100%; }
   .stats-toolbar-actions .secondary-button { flex: 1; }
