@@ -64,8 +64,7 @@ export function CredentialsSettings({ username: initialUsername, mt5AccountSetti
   return <main className="settings-page">
     <div className="settings-layout">
       <section className="settings-card credential-card">
-        <div className="settings-card-heading"><h2>로그인 정보</h2></div>
-        <p className="muted">아이디 또는 비밀번호를 변경하면 모든 기기에서 로그아웃됩니다.</p>
+        <div className="settings-card-heading"><h2>로그인 정보</h2><span aria-hidden="true">·</span><p className="muted">아이디 또는 비밀번호를 변경하면 모든 기기에서 로그아웃됩니다.</p></div>
         <form className="auth-form" onSubmit={submit}>
           <label><span>아이디</span><input autoComplete="username" minLength={3} maxLength={64} required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
           <label><span>현재 비밀번호</span><input autoComplete="current-password" minLength={12} maxLength={256} required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>

@@ -67,8 +67,7 @@ export function StatsPreferences({ preferences, request, onSaved }: StatsPrefere
   };
 
   return <section className="settings-card stats-preferences">
-    <div className="settings-card-heading"><h2>분석 환경설정</h2></div>
-    <p className="muted">통계의 거래일, 세션, 손익분기 분류 기준을 설정합니다.</p>
+    <div className="settings-card-heading"><h2>분석 환경설정</h2><span aria-hidden="true">·</span><p className="muted">통계의 거래일, 세션, 손익분기 분류 기준을 설정합니다.</p></div>
     <div className="stats-preferences-grid">
       <label>손익분기점 (%)<input aria-label="손익분기점" type="number" min="0" max="100" step="0.01" value={draft.breakevenPercent} onChange={(event) => setDraft({ ...draft, breakevenPercent: Number(event.target.value) })} /></label>
       <label>IANA 분석 시간대<input aria-label="분석 시간대" value={draft.timeZone} onChange={(event) => setDraft({ ...draft, timeZone: event.target.value })} placeholder="Asia/Seoul" /></label>
