@@ -23,7 +23,7 @@ export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccount
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = (view: AppView) => { setMobileMenuOpen(false); onNavigate(view); };
   return <aside className="sidebar" aria-label="애플리케이션 탐색">
-    <div className="sidebar-brand">매매 일지</div>
+    <div className="sidebar-brand">SENTRA</div>
     <button className="mobile-menu-toggle secondary-button compact" type="button" aria-expanded={mobileMenuOpen} aria-controls="primary-navigation" onClick={() => setMobileMenuOpen((open) => !open)}>메뉴</button>
     <nav id="primary-navigation" className={mobileMenuOpen ? 'mobile-open' : undefined}>{primaryItems.map((item) => <button key={item.view} className={activeView === item.view ? 'active' : undefined} type="button" aria-current={activeView === item.view ? 'page' : undefined} onClick={() => navigate(item.view)}>{item.label}</button>)}{isAdmin ? <button className={activeView === 'admin' ? 'active' : undefined} type="button" onClick={() => navigate('admin')}>사용자 관리</button> : null}</nav>
     <AccountSwitcher accounts={accounts} value={accountId} onChange={onAccountChange} />

@@ -88,7 +88,7 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
       disabled={disabled || days.length === 0}
       onClick={() => setOpen((current) => !current)}
     >
-      <span aria-hidden="true">▦</span>
+      <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 2v3M17 2v3M3.5 9h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5v14A1.5 1.5 0 0 1 19 21H5a1.5 1.5 0 0 1-1.5-1.5v-14A1.5 1.5 0 0 1 5 4Z"/><path d="M7 12h2M11 12h2M15 12h2M7 16h2M11 16h2M15 16h2"/></svg>
     </button>
     {open ? <div className="trade-calendar-popover" role="dialog" aria-modal="false" aria-label="거래일 선택 달력" ref={popoverRef}>
       <header className="trade-calendar-header">
