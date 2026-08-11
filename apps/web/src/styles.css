@@ -936,9 +936,6 @@ button.trade-cover { cursor: pointer; }
 .campaign-journal-fields textarea,
 .execution-violation-fields textarea {
   width: 100%;
-  height: 120px;
-  min-height: 120px;
-  max-height: 120px;
   flex: none;
   box-sizing: border-box;
   resize: none;
@@ -951,6 +948,17 @@ button.trade-cover { cursor: pointer; }
   background: var(--layer-01);
   font: inherit;
   line-height: 1.6;
+}
+.campaign-memo-editor > textarea {
+  height: calc(6 * 1.6em + 30px);
+  min-height: calc(6 * 1.6em + 30px);
+  max-height: calc(6 * 1.6em + 30px);
+}
+.campaign-journal-fields textarea,
+.execution-violation-fields textarea {
+  height: calc(3 * 1.6em + 30px);
+  min-height: calc(3 * 1.6em + 30px);
+  max-height: calc(3 * 1.6em + 30px);
 }
 .campaign-memo-editor > textarea:hover,
 .campaign-journal-fields textarea:hover,
@@ -1067,7 +1075,6 @@ button.trade-cover { cursor: pointer; }
   .campaign-detail-layout, .trade-detail { grid-template-columns: 1fr; }
   .campaign-analysis-section, .execution-analysis-heading, .trade-detail > .split-trade-navigation, .trade-detail > .desktop-trade-detail { grid-column: 1; grid-row: auto; }
   .campaign-memo-editor { min-height: 0; }
-  .campaign-memo-editor > textarea, .campaign-journal-fields textarea, .execution-violation-fields textarea { height: 120px; min-height: 120px; max-height: 120px; }
   .trade-cover { min-height: 0; }
   .trade-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .trade-summary-body header { flex-direction: column; }
