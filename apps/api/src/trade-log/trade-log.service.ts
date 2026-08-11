@@ -321,6 +321,7 @@ export class TradeLogService {
     const crosstab = this.statsCrosstab(filtered, preferences.breakevenPercent, normalized.rowDimension ?? 'symbol', normalized.columnDimension ?? 'session', preferences.timeZone);
     const dimensions: TradeStatsDimension[] = ['symbol', 'side', 'strategy', 'exitReason', 'entryWeekday', 'session', 'baseTimeframe', 'bollingerBandCount', 'bollingerDirection', 'executionEvaluation', 'violationFlags', 'holdDuration', 'analysisCompleteness'];
     const breakdowns = Object.fromEntries(dimensions.map((dimension) => [dimension, this.statsBreakdown(filtered, dimension, preferences.breakevenPercent, preferences.timeZone)]));
+    const filterOptions = Object.fromEntries(dimensions.map((dimension) => [dimension, this.statsBreakdown(samples, dimension, preferences.breakevenPercent, preferences.timeZone).map(({ key, label }) => ({ key, label }))]));
     const timeSeries = this.statsSeriesByGranularity(filtered, preferences, normalized);
     const riskR = filtered.filter((sample) => sample.riskAmount && sample.riskAmount > 0).map((sample) => sample.realizedPnl / sample.riskAmount!);
     const drawdown = this.statsDrawdown(filtered, riskR);
@@ -343,6 +344,7 @@ export class TradeLogService {
       comparison: { from: normalized.from, to: normalized.to, ...(priorBounds ? { priorFrom: priorBounds.from, priorTo: priorBounds.to } : {}), current: overview, prior: this.statsOverview(prior, preferences.breakevenPercent) },
       timeSeries,
       breakdowns,
+      filterOptions,
       crosstab: { rowDimension: normalized.rowDimension ?? 'symbol', columnDimension: normalized.columnDimension ?? 'session', ...crosstab },
       drawdown,
       distributions: this.statsDistributions(filtered),
