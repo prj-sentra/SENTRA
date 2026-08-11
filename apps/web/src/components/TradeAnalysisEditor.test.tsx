@@ -34,7 +34,7 @@ describe('TradeAnalysisEditor', () => {
       expect.stringContaining('정추세 피보나치'),
       expect.stringContaining('경제지표'),
     ]));
-    expect(screen.getAllByRole('button').some((button) => button.getAttribute('title')?.includes('시간 프레임'))).toBe(true);
+    expect(screen.getAllByRole('button').some((button) => button.getAttribute('data-tooltip')?.includes('시간 프레임'))).toBe(true);
     expect(screen.getByLabelText('15m 이동평균선 배열')).toHaveValue('congested');
     expect(screen.getByLabelText('1MN 20-60 이동평균선 크로스')).toBeInTheDocument();
     expect(screen.getByLabelText('1MN 20-120 이동평균선 크로스')).toBeInTheDocument();

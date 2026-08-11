@@ -117,7 +117,6 @@ model Trade {
   symbol                    String
   side                      TradeSide
   status                    TradeStatus
-  strategy                  String?
   thesis                    String?
   entryRationale            String?                 @map("entry_rationale")
   exitRationale             String?                 @map("exit_rationale")

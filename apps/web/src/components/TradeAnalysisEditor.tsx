@@ -76,7 +76,7 @@ export function canonicalCampaignAnalysisPatch(draft: Draft, expectedUpdatedAt: 
   };
 }
 
-const Info = ({ text }: { text: string }) => <button className="analysis-info" type="button" aria-label={text} title={text}>i</button>;
+const Info = ({ text }: { text: string }) => <button className="analysis-info" type="button" aria-label={text} data-tooltip={text}>?</button>;
 const Row = ({ title, help, className, children }: { title: string; help: string; className?: string; children: ReactNode }) => <fieldset className={`analysis-row${className ? ` ${className}` : ''}`}><legend>{title} <Info text={help} /></legend><div className="analysis-fields">{children}</div></fieldset>;
 
 export const TradeAnalysisEditor = forwardRef<HTMLFormElement, { trade: TradeRecord; campaign?: TradeCampaign; scope?: 'execution' | 'campaign'; onSave: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>; onSaveCampaign?: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void> }>(({ trade, campaign, scope = 'execution', onSave, onSaveCampaign }, ref) => {
