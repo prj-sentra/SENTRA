@@ -56,18 +56,18 @@ export function AccountEditor({ account, busy = false, onCreate, onUpdate, onCan
 
   return (
     <form className="account-editor" onSubmit={submit}>
-      <h2>{account ? 'Edit MT5 account' : 'Add MT5 account'}</h2>
-      <label><span>Nickname</span><input required value={form.nickname} onChange={(event) => patch({ nickname: event.target.value })} /></label>
-      <label><span>Server</span><input required value={form.server} onChange={(event) => patch({ server: event.target.value })} /></label>
-      <label><span>Account login</span><input required inputMode="numeric" value={form.accountLogin} onChange={(event) => patch({ accountLogin: event.target.value })} /></label>
+      <h3>{account ? '계정 수정' : '계정 추가'}</h3>
+      <label><span>닉네임</span><input required value={form.nickname} onChange={(event) => patch({ nickname: event.target.value })} /></label>
+      <label><span>서버</span><input required value={form.server} onChange={(event) => patch({ server: event.target.value })} /></label>
+      <label><span>계좌번호</span><input required inputMode="numeric" value={form.accountLogin} onChange={(event) => patch({ accountLogin: event.target.value })} /></label>
       <label>
-        <span>{account ? 'Replacement password (optional)' : 'Read-only password'}</span>
+        <span>{account ? '변경할 비밀번호 (선택)' : '조회 전용 비밀번호'}</span>
         <input required={!account} type="password" autoComplete="new-password" value={form.password} onChange={(event) => patch({ password: event.target.value })} />
       </label>
       {status ? <p className="muted" role="status">{status}</p> : null}
       <div className="form-actions">
-        {onCancel ? <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button> : null}
-        <button type="submit" className="primary-button" disabled={busy}>{busy ? 'Saving…' : 'Save account'}</button>
+        {onCancel ? <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>취소</button> : null}
+        <button type="submit" className="primary-button" disabled={busy}>{busy ? '저장 중…' : '계정 저장'}</button>
       </div>
     </form>
   );

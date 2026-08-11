@@ -1334,23 +1334,34 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .heat-cell small { color: var(--text-muted); }
 .table-link { color: var(--blue); text-decoration: underline; }
 .stats-preferences { display: grid; gap: 14px; }
-.stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; align-items: stretch; }
 .stats-preferences-actions { display: flex; align-items: center; gap: 12px; }
-.settings-page { display: grid; gap: 22px; max-width: 1380px; margin: 0 auto; }
+.settings-page { display: grid; width: 100%; max-width: none; gap: 0; margin: 0; }
+.app-content:has(> .settings-page) { padding-inline: 0; }
 .settings-card h2, .settings-mt5-section h2 { margin: 4px 0; }
 .settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
-.settings-card { min-width: 0; padding: 22px 24px; border: 0; background: transparent; box-shadow: none; }
+.settings-card { min-width: 0; width: 100%; padding: 22px 10px; border: 0; background: transparent; box-shadow: none; }
 .settings-card + .settings-card { border-top: 1px solid var(--border); }
-.settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.settings-badge { padding: 5px 9px; border: 1px solid #b8d6f5; border-radius: 999px; background: #edf5ff; color: var(--blue); font-size: .72rem; font-weight: 700; }
+.settings-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .credential-card .primary-button { justify-self: start; }
-.settings-password-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.session-setting { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border: 1px solid var(--border); background: var(--layer-01); }
+.settings-password-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.session-setting { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; min-width: 0; height: 100%; padding: 12px; border: 0; border-radius: 4px; background: var(--layer-01); }
 .session-setting strong { grid-column: 1 / -1; font-size: .84rem; }
 .settings-preview { margin: 0; padding: 12px 14px; border-left: 3px solid var(--blue); background: var(--layer-01); color: var(--text-secondary); font-size: .82rem; line-height: 1.6; }
-.settings-mt5-section { display: grid; gap: 18px; padding: 22px 24px; border-top: 1px solid var(--border); }
+.settings-mt5-section { display: grid; width: 100%; gap: 18px; padding: 22px 10px; border-top: 1px solid var(--border); }
 .settings-section-heading { display: grid; gap: 2px; }
 .settings-mt5-content { grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); width: 100%; }
+.credential-card .auth-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.credential-card .auth-form > label:first-child, .credential-card .auth-form > label:nth-child(2), .credential-card .auth-form > .settings-password-grid, .credential-card .auth-form > .error, .credential-card .auth-form > .primary-button { grid-column: 1 / -1; }
+.credential-card .auth-form label, .stats-preferences label { min-width: 0; gap: 5px; color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
+.credential-card .auth-form input, .stats-preferences input { width: 100%; min-width: 0; height: 42px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0 11px; color: var(--text-primary); background: var(--surface); font: inherit; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+.credential-card .auth-form input:hover, .stats-preferences input:hover { border-color: var(--border-strong); background: #fbfdff; }
+.credential-card .auth-form input:focus, .stats-preferences input:focus { border-color: var(--blue); outline: 0; box-shadow: 0 0 0 3px rgb(15 98 254 / 10%); }
+.settings-mt5-content .account-editor { padding: 0; border: 0; background: transparent; }
+.settings-mt5-content .account-editor h3 { margin: 0 0 4px; font-size: .85rem; }
+.settings-mt5-content .account-editor label { min-width: 0; gap: 5px; color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
+.settings-mt5-content .account-editor input { width: 100%; min-width: 0; height: 42px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0 11px; background: var(--surface); transition: border-color .15s ease, box-shadow .15s ease; }
+.settings-mt5-content .account-editor input:focus { border-color: var(--blue); outline: 0; box-shadow: 0 0 0 3px rgb(15 98 254 / 10%); }
 
 @media (max-width: 800px) {
   .trade-calendar-popover { position: fixed; inset: 72px 16px auto; width: auto; aspect-ratio: 4 / 3; max-height: calc(100vh - 88px); overflow: auto; transform: none; }
@@ -1371,8 +1382,8 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
   .stats-toolbar-actions .secondary-button { flex: 1; }
 }
 .stats-header { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
-.stats-preferences input, .stats-filters input, .stats-breakdown select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); padding: 7px 9px; font: inherit; }
-.stats-preferences label { display: grid; gap: 6px; color: var(--text-secondary); font-size: .78rem; }
+.stats-filters input, .stats-breakdown select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); padding: 7px 9px; font: inherit; }
+.stats-preferences label { display: grid; min-width: 0; gap: 5px; color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
 .stats-preferences label > input + input { margin-top: 4px; }
 .stats-breakdown > label { display: inline-grid; gap: 6px; margin-right: 12px; color: var(--text-secondary); font-size: .78rem; }
 .stats-preferences-actions p { margin: 0; }

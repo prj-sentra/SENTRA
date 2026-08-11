@@ -64,7 +64,7 @@ export function CredentialsSettings({ username: initialUsername, mt5AccountSetti
   return <main className="settings-page">
     <div className="settings-layout">
       <section className="settings-card credential-card">
-        <div className="settings-card-heading"><div><p className="section-label">SECURITY</p><h2>로그인 정보</h2></div><span className="settings-badge">보안</span></div>
+        <div className="settings-card-heading"><h2>로그인 정보</h2></div>
         <p className="muted">아이디 또는 비밀번호를 변경하면 모든 기기에서 로그아웃됩니다.</p>
         <form className="auth-form" onSubmit={submit}>
           <label><span>아이디</span><input autoComplete="username" minLength={3} maxLength={64} required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
