@@ -1295,10 +1295,10 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-date-range input[type='date']:disabled { color: var(--text-muted); background: var(--layer-01); }
 .stats-through-latest { display: flex; align-items: center; gap: 5px; height: 40px; color: var(--text-secondary); font-size: .8rem; }
 .stats-through-latest input { width: 16px; height: 16px; accent-color: var(--blue); }
-.stats-reset { height: 40px; min-height: 40px; margin-left: auto; padding-block: 0; }
-.stats-option-panel { display: grid; align-items: start; overflow-x: auto; border-block: 1px solid var(--border); background: var(--surface); scrollbar-width: thin; }
-.stats-option-panel fieldset { min-width: 0; height: 100%; margin: 0; padding: 12px 10px 14px; border: 0; border-right: 1px solid var(--border); background: var(--surface); }
-.stats-option-panel legend { width: 100%; padding: 0 4px 9px; color: var(--text-primary); font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
+.stats-reset { height: 40px; min-height: 40px; padding-block: 0; }
+.stats-option-panel { display: grid; align-items: start; overflow-x: auto; background: transparent; scrollbar-width: thin; }
+.stats-option-panel fieldset { min-width: 0; height: 100%; margin: 0; padding: 10px 10px 12px; border: 0; background: transparent; }
+.stats-option-panel legend { width: 100%; padding: 0 4px 4px; color: var(--text-primary); font-size: .78rem; font-weight: 700; letter-spacing: .02em; }
 .stats-option-panel fieldset > div { display: flex; flex-direction: column; gap: 6px; }
 .stats-option-panel label { display: flex; width: 100%; min-height: 29px; align-items: center; gap: 7px; min-width: 0; padding: 5px 7px; border: 1px solid transparent; border-radius: 4px; background: var(--layer-01); color: var(--text-secondary); cursor: pointer; font-size: .7rem; }
 .stats-option-panel label:has(input:checked) { border-color: #8bbce8; background: #edf5ff; color: var(--blue); font-weight: 650; }
@@ -1307,6 +1307,11 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-unit button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border); background: var(--surface); }
 .stats-unit button + button { border-left: 0; }
 .stats-unit button.active { background: var(--blue); color: #fff; }
+.stats-toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
+.stats-toolbar-actions .secondary-button { height: 40px; min-height: 40px; padding-block: 0; transition: border-color .15s ease, color .15s ease, background .15s ease, transform .15s ease; }
+.stats-toolbar-actions .secondary-button:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: #edf5ff; transform: translateY(-1px); }
+.stats-unit button, .stats-date-range input[type='date'] { transition: border-color .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease; }
+.stats-unit button:hover:not(.active), .stats-date-range input[type='date']:hover:not(:disabled) { position: relative; z-index: 1; border-color: var(--blue); background: #edf5ff; color: var(--blue); box-shadow: 0 0 0 1px rgb(15 98 254 / 8%); }
 .stats-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px; border: 1px solid var(--border); background: var(--layer-01); }
 .stats-filters label, .stats-preferences label { display: grid; gap: 6px; color: var(--text-secondary); font-size: .78rem; }
 .stats-filters fieldset { display: flex; flex-wrap: wrap; gap: 8px 14px; min-width: 0; margin: 0; padding: 8px 10px; border: 1px solid var(--border); }
@@ -1331,11 +1336,17 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-preferences { display: grid; gap: 14px; }
 .stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .stats-preferences-actions { display: flex; align-items: center; gap: 12px; }
-.settings-page { display: grid; gap: 24px; max-width: 1380px; margin: 0 auto; }
-.settings-hero { padding: 28px 30px; border: 1px solid var(--border); background: linear-gradient(125deg, var(--surface) 55%, #edf5ff); }
+.settings-page { display: grid; gap: 22px; max-width: 1380px; margin: 0 auto; }
+.settings-hero { padding: 4px 10px 18px; border-bottom: 1px solid var(--border); background: transparent; }
 .settings-hero h1, .settings-card h2 { margin: 4px 0; }
-.settings-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(520px, 1.4fr); gap: 24px; align-items: start; }
-.settings-card { min-width: 0; padding: 24px; border: 1px solid var(--border); border-top: 3px solid var(--blue); background: var(--surface); box-shadow: 0 12px 32px rgba(15, 23, 42, .06); }
+.settings-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(520px, 1.4fr); gap: 0; align-items: start; }
+.settings-card { min-width: 0; padding: 22px 24px; border: 0; background: transparent; box-shadow: none; }
+.settings-card + .settings-card { border-left: 1px solid var(--border); }
+.settings-account-selector { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 24px; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+.settings-account-selector > div { display: grid; gap: 4px; }
+.settings-section-label { color: var(--text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .06em; }
+.settings-account-selector .account-switcher { width: min(360px, 45vw); }
+.settings-account-selector .account-switcher > span { display: none; }
 .settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .settings-badge { padding: 5px 9px; border: 1px solid #b8d6f5; border-radius: 999px; background: #edf5ff; color: var(--blue); font-size: .72rem; font-weight: 700; }
 .credential-card .primary-button { justify-self: start; }
@@ -1356,6 +1367,12 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
   .settings-layout { grid-template-columns: 1fr; }
   .settings-password-grid { grid-template-columns: 1fr; }
   .settings-hero, .settings-card { padding: 20px; }
+  .settings-card + .settings-card { border-left: 0; border-top: 1px solid var(--border); }
+  .settings-account-selector { display: grid; padding-inline: 20px; }
+  .settings-account-selector .account-switcher { width: 100%; }
+  .stats-toolbar { flex-wrap: wrap; }
+  .stats-toolbar-actions { width: 100%; }
+  .stats-toolbar-actions .secondary-button { flex: 1; }
 }
 .stats-header { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
 .stats-preferences input, .stats-filters input, .stats-breakdown select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); padding: 7px 9px; font: inherit; }

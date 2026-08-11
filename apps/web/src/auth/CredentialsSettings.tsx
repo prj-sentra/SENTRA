@@ -1,11 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { TradeStatsPreferences } from '@trading-journal/shared';
+import type { SafeMt5AccountRef, TradeStatsPreferences } from '@trading-journal/shared';
 import { ApiError, apiRequest } from '../api/client';
 import { StatsPreferences } from '../components/StatsPreferences';
+import { AccountSwitcher } from '../components/AccountSwitcher';
 
 interface CredentialsSettingsProps {
   username: string;
   onCredentialsUpdated: () => void;
+  accounts?: SafeMt5AccountRef[];
+  accountId?: string;
+  onAccountChange?: (accountId: string) => void;
 }
 
 export function credentialErrorMessage(error: unknown): string {
@@ -15,7 +19,7 @@ export function credentialErrorMessage(error: unknown): string {
   return '계정 정보를 변경할 수 없습니다.';
 }
 
-export function CredentialsSettings({ username: initialUsername, onCredentialsUpdated }: CredentialsSettingsProps) {
+export function CredentialsSettings({ username: initialUsername, accounts = [], accountId, onAccountChange = () => undefined, onCredentialsUpdated }: CredentialsSettingsProps) {
   const [username, setUsername] = useState(initialUsername);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -62,6 +66,7 @@ export function CredentialsSettings({ username: initialUsername, onCredentialsUp
 
   return <main className="settings-page">
     <header className="settings-hero"><div><p className="section-label">PERSONAL SETTINGS</p><h1>계정 설정</h1><p className="subhead">로그인 보안과 통계 분석 기준을 한곳에서 관리합니다.</p></div></header>
+    <section className="settings-account-selector"><div><span className="settings-section-label">MT5 ACCOUNT</span><strong>통계 및 매매일지 기준 계정</strong></div><AccountSwitcher accounts={accounts} value={accountId} onChange={onAccountChange} /></section>
     <div className="settings-layout">
       <section className="settings-card credential-card">
         <div className="settings-card-heading"><div><p className="section-label">SECURITY</p><h2>로그인 정보</h2></div><span className="settings-badge">보안</span></div>
