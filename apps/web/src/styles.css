@@ -869,10 +869,9 @@ h3 {
 .performance-card-values strong { overflow: hidden; color: var(--text-primary); font: 600 1.18rem 'IBM Plex Mono', ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .performance-card:nth-child(3) .performance-card-values > div:first-child strong, .performance-card:nth-child(4) .performance-card-values > div:first-child strong { color: #198038; }
 .performance-card:nth-child(3) .performance-card-values > div:nth-child(2) strong, .performance-card:nth-child(4) .performance-card-values > div:nth-child(2) strong, .performance-card:nth-child(8) .performance-card-values strong { color: var(--danger); }
-.pnl-term { display: grid; justify-items: center; gap: 12px; text-align: center; }
-.pnl-term span { padding: 5px 9px; border-radius: 999px; background: var(--layer-01); color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
-.pnl-term strong { font: 600 1.75rem 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: -.04em; }
-.pnl-total strong { font-size: 2.4rem; }
+.pnl-term { display: grid; justify-items: center; gap: 5px; text-align: center; }
+.pnl-term span { color: var(--text-secondary); font-size: .72rem; font-weight: 600; }
+.pnl-term strong { font: 600 2.4rem 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: -.04em; }
 .pnl-term .is-profit { color: #198038; }
 .pnl-term .is-loss { color: var(--danger); }
 .pnl-operator { color: var(--text-muted); font: 500 1.45rem 'IBM Plex Mono', ui-monospace, monospace; }
@@ -888,8 +887,7 @@ h3 {
   .performance-card:nth-child(n) { grid-column: 1; grid-row: auto; min-height: 132px; }
   .pnl-hero { grid-column: 1; grid-row: auto; grid-template-columns: 1fr auto 1fr; gap: 14px 8px; }
   .pnl-hero .pnl-total { grid-column: 1 / -1; }
-  .pnl-term strong { font-size: 1.15rem; }
-  .pnl-total strong { font-size: 2rem; }
+  .pnl-term strong { font-size: 2rem; }
 }
 @media (max-width: 920px) {
   .topbar { grid-template-columns: 1fr; }
