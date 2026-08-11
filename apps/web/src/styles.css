@@ -1018,7 +1018,7 @@ button.trade-cover { cursor: pointer; }
   .lightbox-close, .lightbox-previous, .lightbox-next { width: 40px; height: 40px; }
 }
 .trade-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto 1fr; gap: 0 24px; padding: 4px 0; }
-.execution-row { display: grid; gap: 18px; padding: 20px; border: 0; background: var(--surface); }
+.execution-row { display: grid; gap: 14px; padding: 0; border: 0; background: var(--surface); }
 .trade-editor-grid { width: 100%; margin-top: 20px; }
 .detail-editor { display: grid; gap: 20px; width: 100%; }
 .detail-editor h4 { display: none; }
@@ -1072,10 +1072,18 @@ button.trade-cover { cursor: pointer; }
 .journal-state { padding: 48px; text-align: center; color: var(--text-muted); }
 
 @container (max-width: 719px) {
-  .trade-card-summary, .expanded-content, .trade-editor-grid { grid-template-columns: 1fr; }
+  .trade-card-summary, .trade-editor-grid { grid-template-columns: 1fr; }
+  .expanded-content { grid-template-columns: 1fr; padding: 16px; }
   .campaign-detail-layout, .trade-detail { grid-template-columns: 1fr; }
   .campaign-analysis-section, .execution-analysis-heading, .trade-detail > .split-trade-navigation, .trade-detail > .desktop-trade-detail { grid-column: 1; grid-row: auto; }
   .campaign-analysis-section::before { display: none; }
+  .analysis-row-3-columns .analysis-fields, .analysis-row-4-columns .analysis-fields { grid-template-columns: minmax(0, 1fr); }
+  .analysis-editor .target-price-row > .analysis-fields { grid-template-columns: minmax(0, 1fr); grid-template-areas: "prices" "percentages" "rr"; }
+  .target-price-rr .calculated-value { min-height: 96px; }
+  .ma-timeframe-row .analysis-fields { overflow-x: auto; scrollbar-color: var(--border-strong) transparent; }
+  .ma-timeframe-heading, .ma-timeframe-reading { min-width: 640px; }
+  .indicator-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .indicator-delete-button { justify-self: start; }
   .campaign-memo-editor { min-height: 0; }
   .trade-cover { min-height: 0; }
   .trade-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -1094,7 +1102,7 @@ button.trade-cover { cursor: pointer; }
 .split-trade-navigation button.complete { color: #198038; }
 .split-trade-navigation button.incomplete { color: var(--danger); }
 .split-trade-navigation button.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--layer-01); box-shadow: none; }
-.execution-metrics { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(90px, .55fr) minmax(140px, 1fr) minmax(90px, .6fr); gap: 20px; align-items: start; margin: 0; }
+.execution-metrics { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(90px, .55fr) minmax(140px, 1fr) minmax(90px, .6fr); gap: 12px; align-items: start; margin: 0; }
 .execution-period { margin: 0; color: var(--text-muted); font-size: 13px; font-weight: 600; }
 .execution-metrics > div { min-width: 0; }
 .execution-row dt { color: var(--text-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; }
@@ -1111,7 +1119,7 @@ button.trade-cover { cursor: pointer; }
   .analysis-editor-columns, .analysis-editor-groups { grid-template-columns: minmax(0, 1fr); }
   .analysis-editor-memo { grid-template-columns: minmax(0, 1fr); }
   .analysis-fields { grid-template-columns: minmax(0, 1fr); }
-  .indicator-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .indicator-row { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
 .gallery-help { margin: 0 0 10px; color: var(--text-muted); font-size: 13px; }
 .gallery-upload-error { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; margin-top: 12px; padding: 10px; border: 1px solid var(--danger); }
@@ -1127,7 +1135,7 @@ button.trade-cover { cursor: pointer; }
   .trade-card-summary { display: block; }
   .trade-summary-body { display: block; overflow: visible; padding: 16px; }
   .trade-summary-body header > strong { display: none; }
-  .execution-metrics { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .execution-metrics { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .gallery-upload-error { grid-template-columns: 48px 1fr; }
   .gallery-upload-error button { grid-column: 2; }
 }
