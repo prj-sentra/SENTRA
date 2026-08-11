@@ -851,11 +851,11 @@ h3 {
 .account-list article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; background: var(--surface); }
 .account-list article div { display: grid; gap: 4px; }
 .account-list article span { color: var(--text-secondary); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .78rem; }
-.stats-page { display: grid; gap: 24px; }
-.metric-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.stats-page { display: grid; width: 100%; min-width: 0; gap: 24px; overflow-x: clip; }
+.metric-grid { display: grid; min-width: 0; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
 .performance-card { display: grid; align-content: start; min-height: 124px; gap: 18px; padding: 12px 10px; border: 0; border-top: 1px solid var(--border); background: transparent; }
-.performance-formulas { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: minmax(600px, 1.55fr) minmax(420px, 1fr); align-items: center; gap: 32px; padding: 22px 10px; border-block: 1px solid var(--border); }
-.pnl-equation { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto minmax(180px, 1fr); align-items: center; gap: 18px; }
+.performance-formulas { grid-column: 1 / -1; grid-row: 1; display: grid; min-width: 0; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: center; gap: 32px; padding: 22px 10px; border-block: 1px solid var(--border); }
+.pnl-equation { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; }
 .trade-count-equation { display: grid; grid-template-columns: minmax(76px, 1fr) auto minmax(48px, .7fr) auto minmax(48px, .7fr) auto minmax(48px, .7fr); align-items: center; gap: 10px; padding-left: 28px; border-left: 1px solid var(--border); }
 .average-performance { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 22px 10px; border-bottom: 1px solid var(--border); }
 .performance-card:nth-child(3) { grid-column: 1 / 4; grid-row: 3; }
@@ -905,6 +905,10 @@ h3 {
 .metric-label.has-tooltip:hover::after, .metric-label.has-tooltip:focus::after { opacity: 1; transform: translate(-50%, 0); }
 .stats-breakdown { padding: 20px; border: 1px solid var(--border); background: var(--surface); }
 .stats-breakdown h2 { margin-bottom: 14px; }
+@media (max-width: 1300px) and (min-width: 801px) {
+  .performance-formulas { grid-template-columns: 1fr; gap: 20px; }
+  .trade-count-equation { padding: 20px 0 0; border-top: 1px solid var(--border); border-left: 0; }
+}
 @media (max-width: 800px) {
   .app-layout { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; grid-template-rows: auto; }
@@ -1296,7 +1300,7 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-through-latest { display: flex; align-items: center; gap: 5px; height: 40px; color: var(--text-secondary); font-size: .8rem; }
 .stats-through-latest input { width: 16px; height: 16px; accent-color: var(--blue); }
 .stats-reset { height: 40px; min-height: 40px; padding-block: 0; }
-.stats-option-panel { display: grid; align-items: start; overflow-x: auto; background: transparent; scrollbar-width: thin; }
+.stats-option-panel { display: grid; width: 100%; max-width: 100%; min-width: 0; align-items: start; overflow-x: auto; background: transparent; scrollbar-width: thin; }
 .stats-option-panel fieldset { min-width: 0; height: 100%; margin: 0; padding: 10px 10px 12px; border: 0; background: transparent; }
 .stats-option-panel legend { width: 100%; padding: 0 4px 4px; color: var(--text-primary); font-size: .78rem; font-weight: 700; letter-spacing: .02em; }
 .stats-option-panel fieldset > div { display: flex; flex-direction: column; gap: 6px; }
