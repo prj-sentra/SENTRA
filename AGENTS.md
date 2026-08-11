@@ -115,3 +115,7 @@ Host-local `pnpm dev` needs process environment variables and a host-reachable m
 - There is no configured coverage threshold, coverage command, Playwright suite, or real-browser E2E suite. Root tests are not complete system coverage.
 - Migration verification scripts require an isolated PostgreSQL database. Never point destructive verification or recovery scripts at production.
 - For behavioral changes, run the focused Jest/Vitest suite plus `pnpm typecheck`; run `pnpm build` when package boundaries, Prisma generation, or frontend output are affected.
+
+## Delivery
+
+- After completing and verifying development work, deploy with `docker compose up -d --build`, verify the Compose services and public health/UI endpoints, then commit the completed change and push it to the current remote branch.

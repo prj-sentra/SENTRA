@@ -1,5 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { TradeStatsPreferences } from '@trading-journal/shared';
 import { ApiError, apiRequest } from '../api/client';
+import { StatsPreferences } from '../components/StatsPreferences';
 
 interface CredentialsSettingsProps {
   username: string;
@@ -20,6 +22,15 @@ export function CredentialsSettings({ username: initialUsername, onCredentialsUp
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<TradeStatsPreferences | null>(null);
+  const [preferencesError, setPreferencesError] = useState('');
+  useEffect(() => {
+    void Promise.resolve(apiRequest<TradeStatsPreferences>('/trade-log/stats/preferences'))
+      .then((value) => {
+        if (value?.sessions && value.display) setPreferences(value);
+      })
+      .catch(() => setPreferencesError('분석 환경설정을 불러오지 못했습니다.'));
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,16 +60,21 @@ export function CredentialsSettings({ username: initialUsername, onCredentialsUp
     }
   }
 
-  return <section className="panel accounts-page">
-    <form className="auth-form" onSubmit={submit}>
-      <h2>계정 설정</h2>
-      <p className="muted">아이디 또는 비밀번호를 변경하면 모든 기기에서 로그아웃됩니다.</p>
-      <label><span>아이디</span><input autoComplete="username" minLength={3} maxLength={64} required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-      <label><span>현재 비밀번호</span><input autoComplete="current-password" minLength={12} maxLength={256} required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
-      <label><span>새 비밀번호</span><input autoComplete="new-password" minLength={12} maxLength={256} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
-      <label><span>새 비밀번호 확인</span><input autoComplete="new-password" minLength={12} maxLength={256} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
-      {error ? <p className="error" role="alert">{error}</p> : null}
-      <button className="primary-button" disabled={submitting} type="submit">{submitting ? '변경 중…' : '계정 정보 변경'}</button>
-    </form>
-  </section>;
+  return <main className="settings-page">
+    <header className="settings-hero"><div><p className="section-label">PERSONAL SETTINGS</p><h1>계정 설정</h1><p className="subhead">로그인 보안과 통계 분석 기준을 한곳에서 관리합니다.</p></div></header>
+    <div className="settings-layout">
+      <section className="settings-card credential-card">
+        <div className="settings-card-heading"><div><p className="section-label">SECURITY</p><h2>로그인 정보</h2></div><span className="settings-badge">보안</span></div>
+        <p className="muted">아이디 또는 비밀번호를 변경하면 모든 기기에서 로그아웃됩니다.</p>
+        <form className="auth-form" onSubmit={submit}>
+          <label><span>아이디</span><input autoComplete="username" minLength={3} maxLength={64} required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+          <label><span>현재 비밀번호</span><input autoComplete="current-password" minLength={12} maxLength={256} required type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+          <div className="settings-password-grid"><label><span>새 비밀번호</span><input autoComplete="new-password" minLength={12} maxLength={256} type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><label><span>새 비밀번호 확인</span><input autoComplete="new-password" minLength={12} maxLength={256} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label></div>
+          {error ? <p className="error" role="alert">{error}</p> : null}
+          <button className="primary-button" disabled={submitting} type="submit">{submitting ? '변경 중…' : '계정 정보 변경'}</button>
+        </form>
+      </section>
+      {preferences ? <StatsPreferences preferences={preferences} request={apiRequest} onSaved={setPreferences} /> : <section className="settings-card"><p className="muted" role={preferencesError ? 'alert' : 'status'}>{preferencesError || '분석 환경설정을 불러오는 중입니다…'}</p></section>}
+    </div>
+  </main>;
 }

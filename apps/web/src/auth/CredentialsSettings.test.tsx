@@ -38,7 +38,7 @@ it('blocks mismatched new passwords without sending a request', () => {
   fireEvent.click(screen.getByRole('button', { name: '계정 정보 변경' }));
 
   expect(screen.getByRole('alert')).toHaveTextContent('새 비밀번호가 일치하지 않습니다.');
-  expect(request).not.toHaveBeenCalled();
+  expect(request.mock.calls.some(([path]) => path === '/auth/credentials')).toBe(false);
 });
 
 it('maps an incorrect current password without treating it as an expired session', () => {
