@@ -38,7 +38,7 @@ describe('TradeAnalysisEditor', () => {
     expect(screen.getByLabelText('15m 이동평균선 배열')).toHaveValue('congested');
     expect(screen.getByLabelText('1MN 20-60 이동평균선 크로스')).toBeInTheDocument();
     expect(screen.getByLabelText('1MN 20-120 이동평균선 크로스')).toBeInTheDocument();
-    expect(screen.getByLabelText('추세')).toBeInTheDocument();
+    expect(screen.getByLabelText('추세 선택')).toHaveTextContent('선택상승상승 후 횡보하락하락 후 횡보');
     expect(screen.getByLabelText('15m 차트 패턴')).toHaveTextContent('없음더블탑더블바텀헤드앤숄더역헤드앤숄더');
     expect(screen.getByLabelText('기준 매물대 윗 가격')).toBeDisabled();
 
@@ -92,8 +92,8 @@ describe('TradeAnalysisEditor', () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<TradeAnalysisEditor trade={trade} onSave={onSave} />);
 
-    fireEvent.change(screen.getByLabelText('기준봉'), { target: { value: '1h' } });
-    fireEvent.submit(screen.getByLabelText('기준봉').closest('form')!);
+    fireEvent.change(screen.getByLabelText('기준봉 선택'), { target: { value: '1h' } });
+    fireEvent.submit(screen.getByLabelText('기준봉 선택').closest('form')!);
 
     expect(onSave).toHaveBeenCalledWith('trade-1', {
       baseTimeframe: '1h',

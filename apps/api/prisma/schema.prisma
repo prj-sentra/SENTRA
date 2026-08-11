@@ -30,9 +30,10 @@ enum CampaignConflictStatus {
 }
 
 enum TradeAnalysisPrimaryTrend {
-  UP       @map("up")
-  SIDEWAYS @map("sideways")
-  DOWN     @map("down")
+  UP            @map("up")
+  UP_SIDEWAYS   @map("up_sideways")
+  DOWN          @map("down")
+  DOWN_SIDEWAYS @map("down_sideways")
 }
 
 enum TradeAnalysisBollingerBandCount {

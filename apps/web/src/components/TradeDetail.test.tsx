@@ -21,7 +21,7 @@ describe('TradeDetail split execution ownership', () => {
     const desktop = container.querySelector('.desktop-trade-detail')!;
     expect(within(desktop).getByDisplayValue('1m')).toBeInTheDocument();
     expect(within(desktop).getByText('볼린저밴드')).toBeInTheDocument();
-    expect(screen.getByText('거래 공통 분석')).toBeInTheDocument();
+    expect(screen.queryByText('거래 공통 분석')).toBeNull();
     expect(screen.getByText('매매별 분석')).toBeInTheDocument();
     expect(screen.queryByText(/추세와 기술적 근거/)).toBeNull();
 

@@ -59,6 +59,7 @@ export const CampaignMemoEditor = forwardRef<HTMLFormElement, {
   const field = (label: string, key: keyof typeof review, placeholder: string) => <label><span>{label}</span><textarea value={review[key]} placeholder={placeholder} onChange={(event) => setReview((current) => ({ ...current, [key]: event.target.value }))} /></label>;
 
   return <form ref={ref} className="campaign-memo-editor" onSubmit={(event) => void submit(event)} onReset={() => { setMemo(campaign.memo ?? ''); setError(undefined); }}>
+    <h2 className="campaign-analysis-heading">거래 공통 분석</h2>
     <h3>거래 메모</h3>
     {error ? <p className="error" role="alert">{error}</p> : null}
     <textarea

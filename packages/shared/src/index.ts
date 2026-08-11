@@ -1,6 +1,6 @@
 export type TradeSide = 'long' | 'short';
 export type TradeStatus = 'planned' | 'open' | 'closed' | 'cancelled';
-export type TradeAnalysisPrimaryTrend = 'up' | 'sideways' | 'down';
+export type TradeAnalysisPrimaryTrend = 'up' | 'up_sideways' | 'down' | 'down_sideways';
 export type TradeAnalysisBollingerBandCount = 'one_band' | 'two_band';
 export type TradeAnalysisBollingerDirection = 'normal' | 'reverse' | 'chase';
 export type TradeAnalysisMaArrangement = 'bullish' | 'bearish' | 'congested';

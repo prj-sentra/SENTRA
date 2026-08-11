@@ -37,8 +37,9 @@ describe('trade analysis validation', () => {
   });
   it.each([
     ['primaryTrend', 'up'],
-    ['primaryTrend', 'sideways'],
+    ['primaryTrend', 'up_sideways'],
     ['primaryTrend', 'down'],
+    ['primaryTrend', 'down_sideways'],
     ['bollingerBandCount', 'one_band'],
     ['bollingerBandCount', 'two_band'],
     ['bollingerDirection', 'normal'],
@@ -50,6 +51,7 @@ describe('trade analysis validation', () => {
 
   it.each([
     ['primaryTrend', 'bullish'],
+    ['primaryTrend', 'sideways'],
     ['bollingerBandCount', 'three_band'],
     ['bollingerDirection', 'sideways'],
   ])('rejects unsupported %s enum value %s', (field, value) => {

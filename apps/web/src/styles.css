@@ -932,6 +932,8 @@ button.trade-cover { cursor: pointer; }
 .campaign-memo-editor { display: flex; min-height: 0; flex-direction: column; gap: 14px; padding: 20px 0 0; background: var(--surface); }
 .campaign-memo-editor h3, .analysis-editor h3 { margin: 0; }
 .campaign-memo-editor h3 { margin: 0; border-top: 1px solid var(--border); padding-top: 16px; color: var(--text-primary); font-size: 13px; font-weight: 750; }
+.campaign-memo-editor > h3 { border-top: 0; padding-top: 0; }
+.campaign-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
 .campaign-memo-editor > textarea,
 .campaign-journal-fields textarea,
 .execution-violation-fields textarea {
@@ -1017,7 +1019,7 @@ button.trade-cover { cursor: pointer; }
   .lightbox-close, .lightbox-previous, .lightbox-next { width: 40px; height: 40px; }
 }
 .trade-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto 1fr; gap: 0 24px; padding: 4px 0; }
-.execution-row { display: grid; gap: 18px; padding: 20px; border: 1px solid var(--border); background: var(--surface); }
+.execution-row { display: grid; gap: 18px; padding: 20px; border: 0; background: var(--surface); }
 .trade-editor-grid { width: 100%; margin-top: 20px; }
 .detail-editor { display: grid; gap: 20px; width: 100%; }
 .detail-editor h4 { display: none; }
@@ -1033,6 +1035,7 @@ button.trade-cover { cursor: pointer; }
 .target-price-percentages { grid-area: percentages; }
 .target-price-rr { display: grid; grid-area: rr; min-width: 0; grid-template-rows: auto minmax(0, 1fr); align-content: stretch; gap: 7px; }
 .analysis-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.execution-evaluation-row .analysis-fields { grid-template-columns: minmax(0, 1fr); }
 .analysis-row-3-columns .analysis-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .analysis-row-4-columns .analysis-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ma-timeframe-row .analysis-fields { grid-template-columns: minmax(0, 1fr); }
@@ -1042,11 +1045,10 @@ button.trade-cover { cursor: pointer; }
 .ma-timeframe-reading { padding: 6px 0; }
 .ma-timeframe-reading > strong { color: var(--text-primary); }
 .campaign-analysis-section { display: grid; grid-column: 1; grid-row: 1 / span 3; align-content: start; gap: 14px; margin: 0; padding: 16px 0 0; border: 0; }
-.campaign-analysis-section h2, .execution-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
+.execution-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
 .execution-analysis-heading { grid-column: 2; grid-row: 1; padding: 16px 0 14px; }
 .trade-detail > .split-trade-navigation { grid-column: 2; grid-row: 2; }
 .trade-detail > .desktop-trade-detail { grid-column: 2; grid-row: 3; }
-.campaign-trend-field, .execution-base-timeframe { margin-bottom: 0; }
 .analysis-editor input:not([type="checkbox"]), .analysis-editor select, .analysis-editor textarea { min-width: 0; border: 1px solid var(--border); border-radius: 4px; padding: 10px 11px; color: var(--text-primary); background: var(--surface); font: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
 .analysis-editor output.calculated-value { display: flex; min-width: 0; align-items: center; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 10px 11px; color: var(--text-primary); background: var(--surface); font: inherit; font-weight: 750; }
 .target-price-rr .calculated-value { justify-content: center; font-size: 48px !important; font-weight: 800; line-height: 1; text-align: center; }

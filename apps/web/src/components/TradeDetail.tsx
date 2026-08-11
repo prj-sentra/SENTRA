@@ -40,7 +40,6 @@ export const TradeDetail = forwardRef<TradeDetailHandle, TradeDetailProps>(({ ca
   if (!selectedTrade) return null;
   return <div className="trade-detail">
     <section className="campaign-analysis-section">
-      <h2>거래 공통 분석</h2>
       <TradeAnalysisEditor ref={campaignForm} trade={rootTrade} campaign={campaign} scope="campaign" onSave={onPatchAnalysis} onSaveCampaign={onPatchCampaignAnalysis} />
     </section>
     <h2 className="execution-analysis-heading">매매별 분석</h2>
