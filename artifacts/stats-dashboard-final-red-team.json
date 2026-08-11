@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "sourceHash": "sha256:4ff5c3e8e29a27dc7f4572b79f3d18ef6d28e80f268b67b037d378bcc797406d",
+  "status": "blocked",
+  "e2eStatus": "passed-with-existing-evidence",
+  "redTeamStatus": "failed",
+  "commands": [
+    {"command":"pnpm --filter @trading-journal/api test -- --runInBand trade-log.service.spec.ts","result":"passed: 1 suite, 24 tests"},
+    {"command":"pnpm --filter @trading-journal/web test -- --run src/components/StatsPage.test.tsx","result":"passed: 16 files, 44 tests"},
+    {"command":"node DST fallback reproduction","result":"failed contract: America/New_York 2026-11-01T06:30:00.000Z (local 01:30 EST) produced 2026-11-01 after a 120-minute UTC subtraction; expected prior local trading day 2026-10-31 before the 02:00 boundary"}
+  ],
+  "blockers": [
+    {"id":"DST-LOCAL-DAY-BOUNDARY","severity":"high","source":"apps/api/src/trade-log/trade-log.service.ts:497","contract":"IANA/DST/local day with configurable 02:00 trading-day boundary","finding":"statsPeriodKey subtracts tradingDayStartMinutes as elapsed milliseconds before formatting in the configured time zone. During fall-back, the repeated 01:00 hour after the offset change is before 02:00 local but subtraction lands in the earlier repeated hour on the same calendar day, so date-only filters, period series, and prior-period comparison classify it into the wrong trading date.","reproduction":{"timeZone":"America/New_York","tradingDayStartMinutes":120,"closedAt":"2026-11-01T06:30:00.000Z","localTime":"2026-11-01 01:30 EST","actualTradingDay":"2026-11-01","expectedTradingDay":"2026-10-31"},"attemptedFix":"None; frozen source constraint."}
+  ],
+  "contractCoverage": [
+    {"area":"campaign default/trade toggle, complete-campaign eligibility","evidence":"TradeStatsUnit and query default campaign; statsSamples rejects incomplete campaign groups (service.ts:430-453)","result":"passed by source and focused API test"},
+    {"area":"proven seed, inclusive breakeven, PnL/lots, PF/R/streak/drawdown","evidence":"statsOutcome/overview/drawdown and service spec assertions (service.ts:455,484-503; spec:282-295)","result":"passed by source and focused API test"},
+    {"area":"date-only 02:00 local trading day and DST","evidence":"statsPeriodKey (service.ts:497) plus direct fall-back reproduction","result":"failed"},
+    {"area":"overlapping sessions, prior period, filters/crosstab/distributions, diagnostics, preference validation","evidence":"service.ts:374-503 and StatsPage UI","result":"passed by source review; focused tests passed"},
+    {"area":"drilldown, responsive/accessibility","evidence":"existing browser transcript and screenshot inspected","result":"passed for evidenced desktop interaction; mobile/accessibility adversarial coverage not supplied"}
+  ],
+  "surfaceEvidence": [
+    {"surface":"browser dashboard","artifact":"artifacts/stats-dashboard-browser.png","observed":"Desktop screenshot shows KPI cards, diagnostics alerts, filters, breakdowns, drilldown, and preferences."},
+    {"surface":"browser automation","artifact":"artifacts/stats-dashboard-browser-qa.json","observed":"Transcript reports heading, integrity, KPIs, preferences, and drilldown checks true at 1440x1000."},
+    {"surface":"API and shared contract","artifact":"packages/shared/src/index.ts; apps/api/src/trade-log/trade-log.service.ts","observed":"Stats request/response contracts and server aggregation implementation inspected."}
+  ],
+  "adversarialCases": [
+    {"case":"inclusive breakeven and missing seed","result":"passed: service unit test covers 0.1% inclusive threshold and unclassified missing seed."},
+    {"case":"overlapping market sessions","result":"passed: service unit test expects simultaneous asia/london/new-york memberships."},
+    {"case":"fall-back repeated local hour before 02:00 boundary","result":"failed: wrong date key reproduced."},
+    {"case":"invalid preference fields","result":"passed: service test rejects unknown/invalid fields."},
+    {"case":"GUI drilldown and diagnostics","result":"passed only through existing automation/screenshot evidence."}
+  ],
+  "artifactRefs": [
+    "artifacts/stats-dashboard-final-red-team.json",
+    "artifacts/stats-dashboard-browser.png",
+    "artifacts/stats-dashboard-browser-qa.json",
+    "artifacts/stats-browser-mock.json"
+  ]
+}

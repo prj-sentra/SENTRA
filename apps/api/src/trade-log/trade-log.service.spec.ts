@@ -18,9 +18,17 @@ const rawTrade = {
     fibonacciEndPrice: null, economicIndicators: [], createdAt: new Date(), updatedAt: new Date() },
 };
 
+const statsPreference = {
+  breakevenPercent: { toString: () => '0.1', valueOf: () => 0.1 },
+  timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120,
+  asiaStartMinutes: 540, asiaEndMinutes: 960, londonStartMinutes: 480, londonEndMinutes: 1020,
+  newYorkStartMinutes: 480, newYorkEndMinutes: 1020,
+};
 const prisma = () => ({
   trade: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
   mt5Account: { findFirst: jest.fn() },
+  statisticsPreference: { upsert: jest.fn().mockResolvedValue(statsPreference) },
+  mt5PositionEntryBalance: { findMany: jest.fn().mockResolvedValue([]) },
 });
 
 describe('TradeLogService owner boundary', () => {
@@ -37,10 +45,33 @@ describe('TradeLogService owner boundary', () => {
 
   it('rejects missing and foreign selected accounts', async () => {
     const db = prisma(); const service = new TradeLogService(db as never);
-    await expect(service.getStats('owner-1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getStats('owner-1', {} as any)).rejects.toBeInstanceOf(BadRequestException);
     db.mt5Account.findFirst.mockResolvedValue(null);
-    await expect(service.getStats('owner-1', 'foreign')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.getStats('owner-1', { accountId: 'foreign' })).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.mt5Account.findFirst).toHaveBeenCalledWith({ where: { id: 'foreign', ownerId: 'owner-1' }, select: { id: true } });
+  });
+});
+describe('TradeLogService calendar summaries', () => {
+  it('groups campaign members and realized PnL by owner-scoped trading date', async () => {
+    const db = {
+      mt5Account: { findFirst: jest.fn().mockResolvedValue({ id: 'account-1' }) },
+      $queryRaw: jest.fn().mockResolvedValue([
+        { tradingDate: new Date('2026-08-03T00:00:00.000Z'), tradeCount: 3n, campaignCount: 2n, realizedPnl: 75 },
+        { tradingDate: new Date('2026-08-05T00:00:00.000Z'), tradeCount: 1n, campaignCount: 1n, realizedPnl: 10.5 },
+      ]),
+      tradeCampaign: { findMany: jest.fn().mockResolvedValue([]) },
+      trade: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const response = await new TradeLogService(db as never).listCampaigns('owner-1', undefined, 'account-1');
+
+    expect(response.calendarDays).toEqual([
+      { date: '2026-08-03', tradeCount: 3, campaignCount: 2, realizedPnl: 75 },
+      { date: '2026-08-05', tradeCount: 1, campaignCount: 1, realizedPnl: 10.5 },
+    ]);
+    expect(response.date).toBe('2026-08-05');
+    expect(db.$queryRaw).toHaveBeenCalledWith(expect.objectContaining({
+      values: ['owner-1', 'account-1'],
+    }));
   });
 });
 describe('TradeLogService campaign conflict pruning', () => {
@@ -223,7 +254,136 @@ describe('TradeLogService initial-plan metric serialization', () => {
     const db = prisma();
     db.mt5Account.findFirst.mockResolvedValue({ id: 'account-1' });
     db.trade.findMany.mockResolvedValue([unproven]);
-    const stats = await new TradeLogService(db as never).getStats('owner-1', 'account-1');
-    expect(stats.overview).toMatchObject({ totalRiskAmount: 0, riskAmountCount: 0, averageRiskPercent: 0, riskPercentCount: 0 });
+    const stats = await new TradeLogService(db as never).getStats('owner-1', { accountId: 'account-1' });
+    expect(stats.overview).toMatchObject({ totalRiskAmount: 0, riskAmountCount: 0, riskPercentCount: 0 });
+  });
+});
+describe('TradeLogService statistics helpers', () => {
+  const preferences = {
+    breakevenPercent: 0.1, timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120,
+    sessions: { asia: { startMinutes: 0, endMinutes: 1439 }, london: { startMinutes: 0, endMinutes: 1439 }, 'new-york': { startMinutes: 0, endMinutes: 1439 } },
+  };
+  const record = (id: string, pnl: number, lots: number, openedAt: string, closedAt: string, seedBalance?: number) => ({
+    id, accountId: 'account-1', symbol: 'XAUUSD', side: 'long', status: 'closed', analysisComplete: true,
+    quantityLots: lots, realizedPnl: pnl, openedAt, closedAt, ...(seedBalance ? { seedBalance } : {}),
+    analysis: { schemaVersion: 3, baseTimeframe: '1h', createdAt: openedAt, updatedAt: openedAt },
+    createdAt: openedAt, updatedAt: closedAt,
+  });
+  it('aggregates campaign samples by PnL and lots while retaining trade mode', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const records = [record('one', 20, 2, '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z', 1000), record('two', -10, 1, '2026-08-01T01:00:00.000Z', '2026-08-03T00:00:00.000Z', 1000)];
+    const raw = records.map((trade) => ({ id: trade.id, campaignMembership: { campaignId: 'campaign-1' }, status: 'CLOSED', entry: {}, exit: {}, closedAt: new Date(trade.closedAt), realizedPnl: 1 }));
+    const campaigns = service.statsSamples(raw, records, 'campaign', preferences);
+    expect(campaigns).toMatchObject([{ id: 'campaign-1', type: 'campaign', realizedPnl: 10, lots: 3 }]);
+    expect(service.statsSamples(raw, records, 'trade', preferences)).toHaveLength(2);
+    expect(service.statsOverview(campaigns, 0.1).oneLotPnl).toBeCloseTo(10 / 3);
+    expect(service.statsSamples([...raw, { id: 'open', campaignMembership: { campaignId: 'campaign-1' }, status: 'OPEN', entry: {}, exit: null, closedAt: null, realizedPnl: null }], records, 'campaign', preferences)).toEqual([]);
+  });
+  it('classifies inclusive breakeven, exposes missing seeds, overlapping sessions, prior comparison, user days, and drawdown', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const classified = { id: 'a', realizedPnl: 1, seedBalance: 1000 };
+    expect(service.statsOutcome(classified, 0.1)).toBe('breakeven');
+    expect(service.statsOutcome({ id: 'missing', realizedPnl: 1 }, 0.1)).toBe('unclassified');
+    expect(service.sessionMembership(new Date('2026-08-01T12:00:00.000Z'), preferences)).toEqual(['asia', 'london', 'new-york']);
+    const samples = [
+      { id: 'late', type: 'trade', trades: [record('late', -20, 1, '2026-08-02T00:00:00.000Z', '2026-08-02T01:00:00.000Z', 1010)], openedAt: '2026-08-02T00:00:00.000Z', closedAt: '2026-08-02T01:00:00.000Z', realizedPnl: -20, lots: 1, seedBalance: 1010, sessions: ['asia'] },
+      { id: 'early', type: 'trade', trades: [record('early', 10, 1, '2026-08-01T00:00:00.000Z', '2026-08-01T01:00:00.000Z', 1000)], openedAt: '2026-08-01T00:00:00.000Z', closedAt: '2026-08-01T01:00:00.000Z', realizedPnl: 10, lots: 1, seedBalance: 1000, sessions: ['asia'] },
+    ];
+    expect(service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1' }).day.points.map((point: any) => point.equity)).toEqual([10, -10]);
+    expect(service.priorStatsBounds({ from: '2026-08-02T00:00:00.000Z', to: '2026-08-03T00:00:00.000Z' })).toEqual({ from: '2026-07-31T23:59:59.999Z', to: '2026-08-01T23:59:59.999Z' });
+    expect(service.priorStatsBounds({ from: '2026-08-02', to: '2026-08-03' })).toEqual({ from: '2026-07-31', to: '2026-08-01' });
+    expect(service.statsDrawdown(samples.sort((a: any, b: any) => a.closedAt.localeCompare(b.closedAt)), [])).toMatchObject({ money: -20, percent: expect.closeTo(-20 / 1010 * 100) });
+  });
+  it('rejects unknown and invalid statistics preference fields', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    expect(() => service.validateStatsPreferences({ unknown: true })).toThrow(BadRequestException);
+    expect(() => service.validateStatsPreferences({ sessions: { asia: { startMinutes: 1440 } } })).toThrow(BadRequestException);
+  });
+  it('normalizes scalar query selections and rejects invalid enums or reversed dates', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    expect(service.validateStatsQuery({ accountId: 'account-1', symbols: 'XAUUSD', sides: 'long' })).toMatchObject({ symbols: ['XAUUSD'], sides: ['long'] });
+    expect(() => service.validateStatsQuery({ accountId: 'account-1', sides: 'flat' })).toThrow(BadRequestException);
+    expect(() => service.validateStatsQuery({ accountId: 'account-1', from: '2026-08-02T00:00:00.000Z', to: '2026-08-01T00:00:00.000Z' })).toThrow(BadRequestException);
+  });
+});
+describe('TradeLogService statistics preference display', () => {
+  it('converts current market-local preference minutes to Seoul labels across DST and midnight', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const preference = { ...statsPreference, londonStartMinutes: 8 * 60, londonEndMinutes: 17 * 60, newYorkStartMinutes: 8 * 60, newYorkEndMinutes: 17 * 60 };
+    const winter = service.serializeStatsPreferences(preference, new Date('2026-01-15T12:00:00.000Z'));
+    expect(winter.display.sessions.london.startLabel).toBe('17:00');
+    expect(winter.display.sessions['new-york'].startLabel).toBe('22:00');
+    const summer = service.serializeStatsPreferences(preference, new Date('2026-07-15T12:00:00.000Z'));
+    expect(summer.display.sessions.london.startLabel).toBe('16:00');
+    expect(summer.display.sessions['new-york'].startLabel).toBe('21:00');
+    expect(summer.display.sessions['new-york'].endLabel).toBe('06:00');
+  });
+});
+describe('TradeLogService expanded statistics', () => {
+  it('uses canonical sequence order, classified expectancy, configured crosstab cells, and numeric distributions', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const sample = (id: string, pnl: number, risk: number, closedAt: string, seedBalance = 1000) => ({ id, realizedPnl: pnl, riskAmount: risk, lots: 1, seedBalance, closedAt, openedAt: closedAt, sessions: [id === 'z' ? 'london' : 'asia'], trades: [{ id, symbol: id === 'a' ? 'XAUUSD' : 'EURUSD', side: 'long', strategy: 's', analysisComplete: true, analysis: { baseTimeframe: '1h' } }] });
+    const samples = [sample('z', -10, 10, '2026-08-03T00:00:00.000Z'), sample('a', 10, 10, '2026-08-01T00:00:00.000Z'), sample('b', 20, 10, '2026-08-01T00:00:00.000Z'), { ...sample('unclassified', 900, 10, '2026-08-02T00:00:00.000Z'), seedBalance: undefined }];
+    expect(service.statsOverview(samples, 0.1)).toMatchObject({ wins: 2, losses: 1, maxWinStreak: 2, currentLossStreak: 1, expectancy: 20 / 3, r: { total: 92, expectancy: 2 / 3 } });
+    const crosstab = service.statsCrosstab(samples, 0.1, 'symbol', 'session', 'America/New_York');
+    expect(crosstab.columns.map((column: any) => column.key)).toEqual(['asia', 'london']);
+    expect(crosstab.rows).toHaveLength(2);
+    expect(crosstab.rows.find((row: any) => row.key === 'XAUUSD').cells).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'london', count: 0, predicates: [{ dimension: 'symbol', key: 'XAUUSD' }, { dimension: 'session', key: 'london' }] })]));
+    expect(service.statsDistributions(samples).map((item: any) => item.metric)).toEqual(['realizedPnl', 'oneLotPnl', 'r']);
+  });
+  it('returns all empty granular series with zero averages', () => {
+    const series = (new TradeLogService(prisma() as never) as any).statsSeriesByGranularity([], { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120 }, { accountId: 'account-1' });
+    expect(series).toEqual(expect.objectContaining({ day: expect.objectContaining({ points: [], activeBucketAverage: 0, calendarBucketAverage: 0 }), week: expect.any(Object), month: expect.any(Object), year: expect.any(Object) }));
+  });
+});
+describe('TradeLogService stats range and risk coverage', () => {
+  const preferences = { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 };
+  it('fills zero calendar buckets while retaining active averages and finite histogram bounds', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const samples = [
+      { id: 'a', closedAt: '2026-08-10T03:00:00.000Z', realizedPnl: 30, lots: 1, riskAmount: 10, riskPercent: 1, seedBalance: 1000, trades: [], sessions: [] },
+      { id: 'b', closedAt: '2026-08-12T03:00:00.000Z', realizedPnl: 30, lots: 1, riskAmount: 10, riskPercent: 2, seedBalance: 1000, trades: [], sessions: [] },
+    ];
+    const day = service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1', from: '2026-08-10', to: '2026-08-12' }).day;
+    expect(day).toMatchObject({ activeBucketAverage: 30, calendarBucketAverage: 20 });
+    expect(day.points.map((point: any) => point.count)).toEqual([1, 0, 1]);
+    const bins = service.statsDistributions(samples)[0].bins;
+    expect(bins[1]).toMatchObject({ min: -100, max: -10 });
+    expect(bins[0]).not.toHaveProperty('min');
+  });
+  it('uses configured local trading-day keys for inclusive date-only endpoints and averages proven risk percentages', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const base = { id: 'trade', realizedPnl: 1, seedBalance: 1000, lots: 1, riskAmount: 10, riskPercent: 1, trades: [], sessions: [] };
+    expect(service.matchesStatsFilters({ ...base, closedAt: '2026-08-11T16:59:00.000Z' }, { accountId: 'account-1', to: '2026-08-11' }, preferences)).toBe(true);
+    expect(service.matchesStatsFilters({ ...base, closedAt: '2026-08-11T17:00:00.000Z' }, { accountId: 'account-1', to: '2026-08-11' }, preferences)).toBe(false);
+    expect(service.statsOverview([{ ...base, closedAt: '2026-08-11T00:00:00.000Z' }, { ...base, id: 'two', riskPercent: 3, closedAt: '2026-08-12T00:00:00.000Z' }], 0.1)).toMatchObject({ averageRiskPercent: 2, riskPercentCount: 2 });
+  });
+  it('assigns both repeated fall-back hours before the local start to the prior trading day', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const newYork = { ...preferences, timeZone: 'America/New_York' };
+    expect(service.statsPeriodKey('2026-11-01T05:30:00.000Z', newYork, 'day')).toBe('2026-10-31');
+    expect(service.statsPeriodKey('2026-11-01T06:30:00.000Z', newYork, 'day')).toBe('2026-10-31');
+    expect(service.statsPeriodKey('2026-11-01T07:00:00.000Z', newYork, 'day')).toBe('2026-11-01');
+  });
+  it('fills date-only ranges directly from local labels in extreme zones and computes changing-seed drawdown', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    expect(service.statsRangeKeys(
+      { accountId: 'account-1', from: '2026-01-01', to: '2026-01-03' },
+      { ...preferences, timeZone: 'Pacific/Kiritimati', tradingDayStartMinutes: 1380 },
+      'day',
+      [],
+    )).toEqual(['2026-01-01', '2026-01-02', '2026-01-03']);
+    const drawdown = service.statsDrawdown([
+      { id: 'a', closedAt: '2026-01-01T00:00:00.000Z', realizedPnl: 100, seedBalance: 1000 },
+      { id: 'b', closedAt: '2026-01-02T00:00:00.000Z', realizedPnl: -100, seedBalance: 1100 },
+    ], []);
+    expect(drawdown.percent).toBeCloseTo(-100 / 1100 * 100);
+    expect(service.statsDrawdown([
+      { id: 'deposit', closedAt: '2026-01-01T00:00:00.000Z', realizedPnl: 0, seedBalance: 1000 },
+      { id: 'withdrawal', closedAt: '2026-01-02T00:00:00.000Z', realizedPnl: 0, seedBalance: 500 },
+    ], []).percent).toBe(0);
+    expect(service.statsDrawdown([
+      { id: 'loss', closedAt: '2026-01-01T00:00:00.000Z', realizedPnl: -100, seedBalance: 1000 },
+    ], []).percent).toBeCloseTo(-10);
   });
 });

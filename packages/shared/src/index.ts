@@ -63,12 +63,34 @@ export interface TradeRecord { id: string; symbol: string; side: TradeSide; stat
 export type CampaignMembershipSource = 'auto' | 'manual';
 export interface CampaignConflict { id: string; tradeId: string; candidateCampaignIds: string[]; status: 'unresolved' | 'resolved'; resolvedCampaignId?: string; createdAt: string; resolvedAt?: string; }
 export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; analysis: TradeCampaignAnalysis; members: TradeRecord[]; conflicts: CampaignConflict[]; }
-export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
+export interface TradeCalendarDay { date: string; tradeCount: number; campaignCount: number; realizedPnl: number; }
+export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; calendarDays: TradeCalendarDay[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
 export interface RelinkTradeCampaignRequest { accountId: string; tradeId: string; campaignId?: string; }
 export interface ResolveCampaignConflictRequest { accountId: string; campaignId: string; }
-export interface TradeStatsBucket { key: string; label: string; count: number; winRate: number; realizedPnl: number; }
-export interface TradeOverviewStats { totalTrades: number; totalRealizedPnl: number; averageRealizedPnl: number; winRate: number; totalRiskAmount: number; riskAmountCount: number; averageRiskPercent: number; riskPercentCount: number; }
-export interface TradeStatsResponse { overview: TradeOverviewStats; bySession: TradeStatsBucket[]; byBaseTimeframe: TradeStatsBucket[]; }
+export type TradeStatsUnit = 'campaign' | 'trade';
+export type TradeStatsSession = 'asia' | 'london' | 'new-york' | 'off-session';
+export type TradeStatsOutcome = 'win' | 'loss' | 'breakeven' | 'unclassified';
+export type TradeStatsDimension = 'symbol' | 'side' | 'strategy' | 'exitReason' | 'entryWeekday' | 'session' | 'baseTimeframe' | 'bollingerBandCount' | 'bollingerDirection' | 'executionEvaluation' | 'violationFlags' | 'holdDuration' | 'analysisCompleteness';
+export interface TradeStatsSessionPreference { startMinutes: number; endMinutes: number; }
+export interface TradeStatsPreferences { breakevenPercent: number; timeZone: string; tradingDayStartMinutes: number; sessions: Record<'asia' | 'london' | 'new-york', TradeStatsSessionPreference>; display: { timeZone: 'Asia/Seoul'; utcOffsetMinutes: number; tradingDayStartLabel: string; sessions: Record<'asia' | 'london' | 'new-york', { startLabel: string; endLabel: string }> }; }
+export interface PatchTradeStatsPreferencesRequest { breakevenPercent?: number; timeZone?: string; tradingDayStartMinutes?: number; sessions?: Partial<Record<'asia' | 'london' | 'new-york', Partial<TradeStatsSessionPreference>>>; }
+export interface TradeStatsQuery { accountId: string; unit?: TradeStatsUnit; from?: string; to?: string; symbols?: string[]; sides?: TradeSide[]; sessions?: TradeStatsSession[]; baseTimeframes?: string[]; outcomes?: TradeStatsOutcome[]; evaluations?: TradeExecutionEvaluation[]; violations?: string[]; strategies?: string[]; exitReasons?: string[]; entryWeekdays?: string[]; bollingerBandCounts?: TradeAnalysisBollingerBandCount[]; bollingerDirections?: TradeAnalysisBollingerDirection[]; analysisCompleteness?: Array<'complete' | 'incomplete'>; holdDurationBands?: string[]; rowDimension?: TradeStatsDimension; columnDimension?: TradeStatsDimension; }
+export interface TradeStatsMetric { value?: number; count: number; missingCount: number; }
+export interface TradeStatsBucket { key: string; label: string; count: number; classifiedCount: number; winRate?: number; realizedPnl: number; oneLotPnl?: number; sufficiency: '1-9' | '10-29' | '30+'; }
+export interface TradeStatsOverview { totalTrades: number; totalRealizedPnl: number; averageRealizedPnl: number; oneLotPnl?: number; winRate?: number; breakevenRate?: number; profitFactor?: number; payoff?: number; expectancy?: number; wins: number; losses: number; breakevens: number; classifiedCount: number; averageWin?: number; averageLoss?: number; maxWinStreak: number; currentWinStreak: number; maxLossStreak: number; currentLossStreak: number; totalRiskAmount: number; riskAmountCount: number; averageRiskPercent?: number; riskPercentCount: number; r: TradeStatsMetric & { total?: number; expectancy?: number }; }
+export interface TradeStatsComparison { from?: string; to?: string; priorFrom?: string; priorTo?: string; current: TradeStatsOverview; prior: TradeStatsOverview; }
+export type TradeStatsGranularity = 'day' | 'week' | 'month' | 'year';
+export interface TradeStatsSeriesPoint { key: string; label: string; count: number; realizedPnl: number; equity: number; }
+export interface TradeStatsSeries { granularity: TradeStatsGranularity; points: TradeStatsSeriesPoint[]; activeBucketAverage: number; calendarBucketAverage: number; }
+export interface TradeStatsPredicate { dimension: TradeStatsDimension; key: string; }
+export interface TradeStatsCrosstabCell extends TradeStatsBucket { predicates: TradeStatsPredicate[]; }
+export interface TradeStatsCrosstab { rowDimension: TradeStatsDimension; columnDimension: TradeStatsDimension; columns: Array<{ key: string; label: string; predicate: TradeStatsPredicate }>; rows: Array<{ key: string; label: string; predicate: TradeStatsPredicate; cells: TradeStatsCrosstabCell[] }>; }
+export interface TradeStatsDrawdown { money?: number; percent?: number; r?: number; }
+export interface TradeStatsDistributionBin { key: string; min?: number; max?: number; count: number; }
+export interface TradeStatsDistribution { metric: 'realizedPnl' | 'oneLotPnl' | 'r'; bins: TradeStatsDistributionBin[]; }
+export interface TradeStatsDiagnostics { missingSeedCount: number; missingSeedIds: string[]; unclassifiedCount: number; missingLotsCount: number; missingLotsIds: string[]; missingRiskCount: number; missingRiskIds: string[]; incompleteCampaignCount: number; incompleteCampaignIds: string[]; }
+export interface TradeStatsDrilldownRecord { id: string; targetId: string; type: 'campaign' | 'trade'; tradeIds: string[]; campaignId?: string; journalDate: string; accountId: string; symbol: string; side: TradeSide; openedAt: string; closedAt: string; realizedPnl: number; lots: number; outcome: TradeStatsOutcome; }
+export interface TradeStatsResponse { preferences: TradeStatsPreferences; query: TradeStatsQuery; overview: TradeStatsOverview; comparison: TradeStatsComparison; timeSeries: Record<TradeStatsGranularity, TradeStatsSeries>; breakdowns: Partial<Record<TradeStatsDimension, TradeStatsBucket[]>>; crosstab: TradeStatsCrosstab; drawdown: TradeStatsDrawdown; distributions: TradeStatsDistribution[]; diagnostics: TradeStatsDiagnostics; drilldown: TradeStatsDrilldownRecord[]; }
 export interface TradeLogAssistantActionPatchAnalysis { type: 'patch_trade_analysis'; tradeId: string; payload: PatchTradeAnalysisRequest; }
 export type TradeLogAssistantAction = TradeLogAssistantActionPatchAnalysis;
 export interface TradeLogAssistantActionsRequest { accountId: string; rawText: string; source: 'telegram' | 'manual' | 'api'; actions: TradeLogAssistantAction[]; }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "api-package-test-report",
+  "status": "passed",
+  "sourceHash": "sha256:c948b323d0ae0b136209cd75af24294c0900dbbcb2b440a3e2216c41e169de76",
+  "commands": [
+    { "command": "pnpm test", "status": "passed", "result": "API 21 passed suites plus 2 skipped; 133 passed tests plus 9 skipped. Web 14 files, 37 tests passed." },
+    { "command": "pnpm typecheck", "status": "passed", "result": "shared, API, and web strict TypeScript checks passed" },
+    { "command": "pnpm build", "status": "passed", "result": "shared declarations, Prisma generation, Nest build, and Vite production build passed" }
+  ],
+  "browserArtifact": "artifacts/trade-calendar-browser-qa.json",
+  "blockers": []
+}

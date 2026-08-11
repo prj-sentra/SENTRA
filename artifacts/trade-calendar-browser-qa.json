@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "browser-automation-transcript",
+  "tool": "GJC Chromium",
+  "sourceHash": "sha256:c948b323d0ae0b136209cd75af24294c0900dbbcb2b440a3e2216c41e169de76",
+  "baseUrl": "http://127.0.0.1/",
+  "status": "passed",
+  "actions": [
+    { "type": "navigate", "surface": "rendered trade journal", "result": "Docker Compose production Vite bundle loaded with deterministic account/calendar API fixtures", "timestamp": "2026-08-11T09:56:00.000Z" },
+    { "type": "open-calendar", "surface": "rendered desktop calendar", "result": "Calendar opened at 1440x1000 and rendered daily trade, campaign, and PnL metrics", "timestamp": "2026-08-11T09:56:01.000Z" },
+    { "type": "recorded-only-selection", "surface": "rendered calendar date controls", "result": "Exactly 3 recorded dates were buttons and 28 unrecorded dates were non-actionable disabled cells", "timestamp": "2026-08-11T09:56:02.000Z" },
+    { "type": "mobile-focus-scroll", "surface": "rendered 320x480 calendar", "result": "Selected date received focus, Escape restored trigger focus, document width remained 320, and popover scrolled internally at clientHeight 382 / scrollHeight 508", "timestamp": "2026-08-11T09:56:03.000Z" },
+    { "type": "large-count-adversarial", "surface": "rendered 320px date cell", "input": "체결 1000000 / 매매 1000000", "result": "Both labels remained inside the day cell with overflow-wrap anywhere and no page overflow", "timestamp": "2026-08-11T09:56:04.000Z" },
+    { "type": "screenshot", "selector": "body", "surface": "rendered desktop calendar", "path": "artifacts/trade-calendar-desktop.png", "result": "Non-uniform desktop screenshot captured with calendar open", "timestamp": "2026-08-11T09:56:05.000Z" },
+    { "type": "screenshot", "selector": "body", "surface": "rendered mobile calendar", "path": "artifacts/trade-calendar-mobile.png", "result": "Non-uniform 320x480 screenshot captured with calendar open", "timestamp": "2026-08-11T09:56:06.000Z" }
+  ],
+  "finalUrl": "http://127.0.0.1/",
+  "screenshot": "artifacts/trade-calendar-desktop.png"
+}

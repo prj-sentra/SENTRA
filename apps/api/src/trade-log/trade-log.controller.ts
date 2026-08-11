@@ -6,12 +6,15 @@ import type {
   PatchTradeCampaignAnalysisRequest,
   PatchTradeCampaignMemoRequest,
   PatchTradeCampaignReviewRequest,
+  PatchTradeStatsPreferencesRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
   TradeCampaignDateResponse,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
   TradeRecord,
+  TradeStatsPreferences,
+  TradeStatsQuery,
   TradeStatsResponse,
 } from '@trading-journal/shared';
 import { CurrentUser, type AuthenticatedUser } from '../auth/current-user.decorator';
@@ -43,11 +46,16 @@ export class TradeLogController {
   }
 
   @Get('stats')
-  stats(
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('accountId') accountId?: string,
-  ): Promise<TradeStatsResponse> {
-    return this.tradeLogService.getStats(user.id, accountId);
+  stats(@CurrentUser() user: AuthenticatedUser, @Query() query: TradeStatsQuery): Promise<TradeStatsResponse> {
+    return this.tradeLogService.getStats(user.id, query);
+  }
+  @Get('stats/preferences')
+  statsPreferences(@CurrentUser() user: AuthenticatedUser): Promise<TradeStatsPreferences> {
+    return this.tradeLogService.getStatsPreferences(user.id);
+  }
+  @Patch('stats/preferences')
+  patchStatsPreferences(@CurrentUser() user: AuthenticatedUser, @Body() request: PatchTradeStatsPreferencesRequest): Promise<TradeStatsPreferences> {
+    return this.tradeLogService.patchStatsPreferences(user.id, request);
   }
 
   @Get('trades/:id')

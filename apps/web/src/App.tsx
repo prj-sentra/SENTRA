@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, TradeStatsResponse, UpdateMt5AccountRequest } from '@trading-journal/shared';
+import type { CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, TradeCalendarDay, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, UpdateMt5AccountRequest } from '@trading-journal/shared';
 import { UserManagement } from './admin/UserManagement';
 import { apiBaseUrl, apiRequest, setUnauthorizedHandler } from './api/client';
 import { AuthScreen, type CurrentUser } from './auth/AuthScreen';
+import { CredentialsSettings } from './auth/CredentialsSettings';
 import { AccountEditor } from './components/AccountEditor';
 import { Sidebar, type AppView } from './components/Sidebar';
 import { StatsPage } from './components/StatsPage';
@@ -17,26 +18,28 @@ export function App() {
   const [accountId, setAccountId] = useState<string>();
   const [campaigns, setCampaigns] = useState<TradeCampaign[]>([]);
   const [campaignDate, setCampaignDate] = useState<Pick<TradeCampaignDateResponse, 'date' | 'previousDate' | 'nextDate'>>({});
-  const [stats, setStats] = useState<TradeStatsResponse | null>(null);
+  const [calendarDays, setCalendarDays] = useState<TradeCalendarDay[]>([]);
   const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<SafeMt5AccountRef>(); const [accountBusy, setAccountBusy] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(); const generation = useRef(0);
+  const [journalTargetId, setJournalTargetId] = useState<string>();
 
   const loadCurrentUser = useCallback(async () => { try { setUser(await apiRequest<CurrentUser>('/auth/me')); } catch { setUser(null); } finally { setCheckingSession(false); } }, []);
   useEffect(() => setUnauthorizedHandler(() => setUser(null)), []); useEffect(() => { void loadCurrentUser(); }, [loadCurrentUser]);
   const loadAccounts = useCallback(async () => { if (!user) return; const next = await apiRequest<SafeMt5AccountRef[]>('/mt5-accounts'); setAccounts(next); setAccountId((current) => current && next.some((account) => account.id === current) ? current : next.find((account) => account.active)?.id ?? next[0]?.id); }, [user]);
   const loadAccountData = useCallback(async () => {
-    if (!user || !accountId) { setCampaigns([]); setStats(null); return; }
+    if (!user || !accountId) { setCampaigns([]); setCalendarDays([]); return; }
     const current = ++generation.current; setLoading(true); setError(null);
     const query = new URLSearchParams({ accountId }); if (selectedDate) query.set('date', selectedDate);
-    try { const [campaignResponse, statsResponse] = await Promise.all([apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`), apiRequest<TradeStatsResponse>(`/trade-log/stats?accountId=${encodeURIComponent(accountId)}`)]); if (current !== generation.current) return; setCampaigns(campaignResponse.campaigns); setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate }); setStats(statsResponse); }
+    try { const campaignResponse = await apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`); if (current !== generation.current) return; setCampaigns(campaignResponse.campaigns); setCalendarDays(campaignResponse.calendarDays); setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate }); }
     catch { if (current === generation.current) setError('거래 기록을 불러올 수 없습니다.'); }
     finally { if (current === generation.current) setLoading(false); }
   }, [accountId, selectedDate, user]);
   useEffect(() => { void loadAccounts(); }, [loadAccounts]); useEffect(() => { void loadAccountData(); }, [loadAccountData]);
   const selectedAccount = useMemo(() => accounts.find((account) => account.id === accountId) ?? null, [accounts, accountId]);
   async function mutate(path: string, init: RequestInit): Promise<void> { await apiRequest(path, init); await loadAccountData(); }
-  async function logout() { generation.current += 1; try { await apiRequest('/auth/logout', { method: 'POST' }); } finally { setUser(null); setAccounts([]); setCampaigns([]); setStats(null); setAccountId(undefined); } }
+  function clearAuthenticatedState() { generation.current += 1; setUser(null); setAccounts([]); setCampaigns([]); setCalendarDays([]); setAccountId(undefined); }
+  async function logout() { try { await apiRequest('/auth/logout', { method: 'POST' }); } finally { clearAuthenticatedState(); } }
   async function createAccount(request: CreateMt5AccountRequest) { setAccountBusy(true); try { await apiRequest('/mt5-accounts', { method: 'POST', body: JSON.stringify(request) }); await loadAccounts(); } finally { setAccountBusy(false); } }
   async function updateAccount(id: string, request: UpdateMt5AccountRequest) { setAccountBusy(true); try { await apiRequest(`/mt5-accounts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(request) }); setEditingAccount(undefined); await loadAccounts(); } finally { setAccountBusy(false); } }
   async function syncAccount(id: string): Promise<Mt5SyncResponse> { return apiRequest(`/mt5-accounts/${encodeURIComponent(id)}/sync`, { method: 'POST' }); }
@@ -92,7 +95,10 @@ export function App() {
       ? <p className="journal-state">상단에서 MT5 계정을 선택하세요.</p>
       : <TradeJournalPage
           campaigns={campaigns}
+          calendarDays={calendarDays}
           date={campaignDate.date}
+          targetId={journalTargetId}
+          onTargetFocused={() => setJournalTargetId(undefined)}
           previousDate={campaignDate.previousDate}
           nextDate={campaignDate.nextDate}
           onSelectDate={setSelectedDate}
@@ -109,7 +115,9 @@ export function App() {
           onReorderImages={reorderImages}
           onDeleteImage={deleteImage}
         />)}
-    {view === 'stats' && (noAccount ? <p className="journal-state">통계를 보려면 MT5 계정을 선택하세요.</p> : <StatsPage stats={stats} loading={loading} error={error} />)}
-    {view === 'accounts' ? <section className="accounts-page"><AccountEditor account={editingAccount} busy={accountBusy} onCreate={createAccount} onUpdate={updateAccount} onCancel={editingAccount ? () => setEditingAccount(undefined) : undefined} /><div className="account-list">{accounts.map((account) => <article key={account.id}><div><strong>{account.nickname}</strong><span>{account.server} / {account.accountLogin} · 시간 {account.timeCorrectionHours >= 0 ? '+' : ''}{account.timeCorrectionHours}h{account.active ? '' : ' · 비활성'}</span></div><div className="account-actions"><button type="button" className="secondary-button compact" onClick={() => setEditingAccount(account)}>수정</button><button type="button" className="secondary-button compact" disabled={accountBusy} onClick={() => void toggleAccount(account)}>{account.active ? '비활성화' : '활성화'}</button></div></article>)}</div></section> : null}{view === 'admin' ? <UserManagement currentUser={user} /> : null}</main></div>;
+    {view === 'stats' && (noAccount ? <p className="journal-state">통계를 보려면 MT5 계정을 선택하세요.</p> : <StatsPage accountId={accountId!} request={apiRequest} onOpenRecord={(record) => { setJournalTargetId(record.targetId); setSelectedDate(record.journalDate); setView('trade-log'); }} />)}
+    {view === 'accounts' ? <section className="accounts-page"><AccountEditor account={editingAccount} busy={accountBusy} onCreate={createAccount} onUpdate={updateAccount} onCancel={editingAccount ? () => setEditingAccount(undefined) : undefined} /><div className="account-list">{accounts.map((account) => <article key={account.id}><div><strong>{account.nickname}</strong><span>{account.server} / {account.accountLogin} · 시간 {account.timeCorrectionHours >= 0 ? '+' : ''}{account.timeCorrectionHours}h{account.active ? '' : ' · 비활성'}</span></div><div className="account-actions"><button type="button" className="secondary-button compact" onClick={() => setEditingAccount(account)}>수정</button><button type="button" className="secondary-button compact" disabled={accountBusy} onClick={() => void toggleAccount(account)}>{account.active ? '비활성화' : '활성화'}</button></div></article>)}</div></section> : null}
+    {view === 'credentials' ? <CredentialsSettings username={user.username} onCredentialsUpdated={clearAuthenticatedState} /> : null}
+    {view === 'admin' ? <UserManagement currentUser={user} /> : null}</main></div>;
 }
 export default App;

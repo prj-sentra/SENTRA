@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { SafeMt5AccountRef } from '@trading-journal/shared';
 import { AccountSwitcher } from './AccountSwitcher';
 
-export type AppView = 'stats' | 'trade-log' | 'accounts' | 'admin';
+export type AppView = 'stats' | 'trade-log' | 'accounts' | 'credentials' | 'admin';
 
 export interface SidebarProps {
   activeView: AppView;
@@ -15,7 +15,7 @@ export interface SidebarProps {
 }
 
 const primaryItems: Array<{ view: AppView; label: string }> = [
-  { view: 'stats', label: '통계' }, { view: 'trade-log', label: '매매 일지' }, { view: 'accounts', label: 'MT5 계정' },
+  { view: 'stats', label: '통계' }, { view: 'trade-log', label: '매매 일지' }, { view: 'accounts', label: 'MT5 계정' }, { view: 'credentials', label: '계정 설정' },
 ];
 
 export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccountChange, isAdmin = false, footer }: SidebarProps) {

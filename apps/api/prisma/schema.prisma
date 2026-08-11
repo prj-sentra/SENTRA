@@ -591,9 +591,27 @@ model AppUser {
   campaigns            TradeCampaign[]
   auditAsActor         UserStateAudit[] @relation("AuditActor")
   auditAsSubject       UserStateAudit[] @relation("AuditSubject")
+  statisticsPreference StatisticsPreference?
 
   @@index([status, createdAt])
   @@map("app_users")
+}
+model StatisticsPreference {
+  userId                       String   @id @map("user_id")
+  user                         AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  breakevenPercent             Decimal  @default(0.1) @map("breakeven_percent") @db.Decimal(8, 4)
+  timeZone                     String   @default("Asia/Seoul") @map("time_zone")
+  tradingDayStartMinutes       Int      @default(120) @map("trading_day_start_minutes")
+  asiaStartMinutes             Int      @default(540) @map("asia_start_minutes")
+  asiaEndMinutes               Int      @default(960) @map("asia_end_minutes")
+  londonStartMinutes           Int      @default(480) @map("london_start_minutes")
+  londonEndMinutes             Int      @default(1020) @map("london_end_minutes")
+  newYorkStartMinutes          Int      @default(480) @map("new_york_start_minutes")
+  newYorkEndMinutes            Int      @default(1020) @map("new_york_end_minutes")
+  createdAt                    DateTime @default(now()) @map("created_at")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
+
+  @@map("statistics_preferences")
 }
 
 model AppSession {

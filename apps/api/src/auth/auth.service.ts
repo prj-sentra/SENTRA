@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordService } from './password.service';
@@ -44,5 +44,49 @@ export class AuthService {
     }
     await this.loginThrottle.clearPrincipal(normalizedUsername);
     return this.sessions.create(user);
+  }
+
+  async updateCredentials(userId: string, currentPassword: unknown, username: unknown, newPassword: unknown, ip: string) {
+    if (typeof currentPassword !== 'string' || currentPassword.length < 12 || currentPassword.length > 256) {
+      throw new ForbiddenException('Current password is incorrect');
+    }
+    const changesUsername = username !== undefined;
+    const changesPassword = newPassword !== undefined;
+    if (!changesUsername && !changesPassword) throw new BadRequestException('No credential changes provided');
+    if (changesUsername && (typeof username !== 'string' || username.trim().length < 3 || username.trim().length > 64)) {
+      throw new BadRequestException('Invalid username');
+    }
+    if (changesPassword && (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 256)) {
+      throw new BadRequestException('Invalid password');
+    }
+
+    const user = await this.prisma.appUser.findUnique({ where: { id: userId } });
+    const throttlePrincipal = user?.normalizedUsername ?? userId;
+    await this.loginThrottle.assertAllowed(ip, throttlePrincipal);
+    if (!user || !(await this.passwords.verify(currentPassword, user.passwordHash))) {
+      await this.loginThrottle.fail(ip, throttlePrincipal);
+      throw new ForbiddenException('Current password is incorrect');
+    }
+    await this.loginThrottle.clearPrincipal(throttlePrincipal);
+
+    const data: Prisma.AppUserUpdateInput = { credentialVersion: { increment: 1 } };
+    if (changesUsername) {
+      data.username = (username as string).trim();
+      data.normalizedUsername = normalizeUsername(username as string);
+    }
+    if (changesPassword) data.passwordHash = await this.passwords.hash(newPassword as string);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.appUser.update({ where: { id: userId }, data });
+        await tx.appSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Username already in use');
+      }
+      throw error;
+    }
+    return { status: 'credentials_updated' as const };
   }
 }

@@ -1197,3 +1197,81 @@ button.trade-cover { cursor: pointer; }
   .sidebar .account-switcher { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; width: 100%; }
   .sidebar nav.mobile-open { grid-row: 3; }
 }
+
+.trade-calendar-picker { position: relative; }
+.calendar-trigger { min-width: 136px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); padding: 10px 14px; text-align: left; }
+.trade-calendar-popover { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: min(430px, calc(100vw - 32px)); padding: 16px; border: 1px solid var(--border-strong); background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 14%); }
+.trade-calendar-header { display: grid; grid-template-columns: 36px 1fr 36px; align-items: center; margin-bottom: 10px; text-align: center; }
+.trade-calendar-header button { min-height: 34px; border: 1px solid var(--border); background: var(--layer-01); }
+.trade-calendar-legend { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--text-muted); font-size: .72rem; }
+.trade-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.trade-calendar-weekday { padding: 5px 0; color: var(--text-muted); text-align: center; font-size: .7rem; }
+.trade-calendar-day { display: grid; align-content: start; min-height: 68px; padding: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); text-align: left; }
+button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-color: var(--blue); background: #edf5ff; }
+.trade-calendar-day.is-disabled { color: var(--text-muted); background: var(--layer-01); }
+.trade-calendar-date { font-weight: 600; }
+.trade-calendar-counts { display: grid; margin-top: 5px; color: var(--text-secondary); font-size: .62rem; }
+.trade-calendar-pnl { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; font: 500 .66rem 'IBM Plex Mono', monospace; }
+.trade-calendar-pnl.is-positive { color: #198038; }
+.trade-calendar-pnl.is-negative { color: var(--danger); }
+
+.stats-page { display: grid; gap: 20px; }
+.stats-page h1, .stats-page h2 { margin: 0; }
+.stats-unit { display: flex; }
+.stats-unit button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border); background: var(--surface); }
+.stats-unit button + button { border-left: 0; }
+.stats-unit button.active { background: var(--blue); color: #fff; }
+.stats-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px; border: 1px solid var(--border); background: var(--layer-01); }
+.stats-filters label, .stats-preferences label { display: grid; gap: 6px; color: var(--text-secondary); font-size: .78rem; }
+.stats-filters fieldset { display: flex; flex-wrap: wrap; gap: 8px 14px; min-width: 0; margin: 0; padding: 8px 10px; border: 1px solid var(--border); }
+.stats-filters fieldset label { display: flex; align-items: center; gap: 5px; }
+.stats-note { margin: 0; padding: 12px 14px; border-left: 3px solid var(--blue); background: #edf5ff; color: var(--text-secondary); }
+.stats-series, .stats-breakdown, .stats-preferences { min-width: 0; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
+.stats-series { display: grid; gap: 14px; }
+.stats-series svg { width: 100%; min-height: 160px; color: var(--blue); background: linear-gradient(to bottom, var(--layer-01), transparent); }
+.stats-table-wrap { max-width: 100%; overflow: auto; }
+.stats-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.stats-table th, .stats-table td { padding: 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+.stats-table tbody tr:hover { background: var(--layer-01); }
+.sufficiency-badge { display: inline-block; padding: 2px 6px; border: 1px solid var(--border); color: var(--text-secondary); font-size: .68rem; }
+.heat-cell, .table-link { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.heat-cell { display: grid; width: 100%; gap: 3px; padding: 8px; background: #edf5ff; text-align: right; }
+.stats-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.stats-table .heat-cell { min-width: 92px; min-height: 48px; }
+.stats-table .heat-cell:focus-visible, .stats-table .table-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.heat-cell small { color: var(--text-muted); }
+.table-link { color: var(--blue); text-decoration: underline; }
+.stats-preferences { display: grid; gap: 14px; }
+.stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.stats-preferences-actions { display: flex; align-items: center; gap: 12px; }
+
+@media (max-width: 800px) {
+  .trade-calendar-popover { position: fixed; inset: 72px 16px auto; width: auto; max-height: calc(100vh - 88px); overflow: auto; }
+  .trade-calendar-day { min-height: 58px; padding: 4px; }
+  .trade-calendar-counts { display: none; }
+  .stats-header { gap: 12px; }
+  .stats-unit { width: 100%; }
+  .stats-unit button { flex: 1; }
+  .stats-filters { grid-template-columns: 1fr; }
+  .stats-table th, .stats-table td { padding: 8px; font-size: .76rem; }
+}
+.stats-header { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
+.stats-preferences input, .stats-filters input, .stats-breakdown select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); padding: 7px 9px; font: inherit; }
+.stats-preferences label { display: grid; gap: 6px; color: var(--text-secondary); font-size: .78rem; }
+.stats-preferences label > input + input { margin-top: 4px; }
+.stats-breakdown > label { display: inline-grid; gap: 6px; margin-right: 12px; color: var(--text-secondary); font-size: .78rem; }
+.stats-preferences-actions p { margin: 0; }
+@media (max-width: 800px) {
+  .stats-header { display: grid; align-items: start; }
+}
+.stats-filters input[type='checkbox'] {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+  accent-color: var(--blue);
+}
+.trade-journal-target:focus {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}

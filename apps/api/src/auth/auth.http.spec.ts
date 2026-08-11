@@ -1,4 +1,4 @@
-import { INestApplication, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, INestApplication, UnauthorizedException } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
@@ -11,7 +11,7 @@ const json = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'a
 describe('authentication HTTP acceptance', () => {
   let app: INestApplication;
   let baseUrl: string;
-  const auth = { signup: jest.fn(), login: jest.fn() };
+  const auth = { signup: jest.fn(), login: jest.fn(), updateCredentials: jest.fn() };
   const sessions = { revoke: jest.fn(), authenticate: jest.fn() };
 
   beforeAll(async () => {
@@ -55,6 +55,35 @@ describe('authentication HTTP acceptance', () => {
     expect(logout.status).toBe(204);
     expect(sessions.revoke).toHaveBeenCalledWith('opaque-session-token');
     expect(logout.headers.get('set-cookie')).toContain('tj_session=;');
+  });
+
+  it('clears the session cookie after an authenticated credential update', async () => {
+    sessions.authenticate.mockResolvedValue({ user: { id: 'owner-1' }, sessionId: 'session-1' });
+    auth.updateCredentials.mockResolvedValue({ status: 'credentials_updated' });
+
+    const response = await fetch(`${baseUrl}/auth/credentials`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: 'tj_session=current-token', origin: 'https://journal.test' },
+      body: JSON.stringify({ currentPassword: 'long-enough-password', username: 'new-owner' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(auth.updateCredentials).toHaveBeenCalledWith('owner-1', 'long-enough-password', 'new-owner', undefined, expect.any(String));
+    expect(response.headers.get('set-cookie')).toContain('tj_session=;');
+  });
+
+  it('keeps the cookie and returns 403 when current-password confirmation fails', async () => {
+    sessions.authenticate.mockResolvedValue({ user: { id: 'owner-1' }, sessionId: 'session-1' });
+    auth.updateCredentials.mockRejectedValue(new ForbiddenException('Current password is incorrect'));
+
+    const response = await fetch(`${baseUrl}/auth/credentials`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', cookie: 'tj_session=current-token', origin: 'https://journal.test' },
+      body: JSON.stringify({ currentPassword: 'wrong-password-value', username: 'new-owner' }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it.each(['PENDING', 'DISABLED'])('does not issue a cookie when %s login is rejected', async () => {

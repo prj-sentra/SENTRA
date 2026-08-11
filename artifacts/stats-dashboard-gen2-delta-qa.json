@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "sourceHash": "sha256:aae2dd4f3b74c4ff2be36e85286001760cae1d0d93c00cecf4ef076b89c13b67",
+  "deltaOnly": true,
+  "priorSourceHash": "sha256:4ff5c3e8e29a27dc7f4572b79f3d18ef6d28e80f268b67b037d378bcc797406d",
+  "status": "passed",
+  "e2eStatus": "passed-with-existing-smoke-evidence",
+  "redTeamStatus": "passed",
+  "blockers": [],
+  "commands": [
+    {
+      "command": "pnpm --filter @trading-journal/api test -- --runInBand trade-log.service.spec.ts",
+      "result": "passed: 1 suite, 25 tests"
+    },
+    {
+      "command": "pnpm --filter @trading-journal/web test -- --run src/components/StatsPage.test.tsx",
+      "result": "passed: 16 files, 46 tests"
+    },
+    {
+      "command": "source inspection: apps/api/src/trade-log/trade-log.service.ts:382-557; controller.ts:48-59; service spec:282-367; StatsPage.test.tsx:14-20",
+      "result": "passed: inspected changed API/shared/web contracts and delta tests"
+    }
+  ],
+  "contractCoverage": [
+    {
+      "area": "B1 exact preferences PATCH body and stats refetch",
+      "result": "passed",
+      "evidence": "StatsPage.test.tsx:18 asserts PATCH /trade-log/stats/preferences body equals breakevenPercent, UTC timeZone, tradingDayStartMinutes, and all sessions; then asserts a second stats fetch. Controller.ts:52-59 routes GET/PATCH to preference service."
+    },
+    {
+      "area": "B2 sequence, classified expectancy, R expectancy, and deterministic ordering",
+      "result": "passed",
+      "evidence": "trade-log.service.spec.ts:323-332 asserts chronological/id sequence and expectation values; service.ts:500-503 orders closedAt/id and excludes unclassified samples from expectancy."
+    },
+    {
+      "area": "B3 prior-period bounds",
+      "result": "passed",
+      "evidence": "service spec:293-294 verifies ISO instant and inclusive date-only prior ranges; service.ts:482-497 implements both forms."
+    },
+    {
+      "area": "B4-B5 crosstab global alignment and combined drilldown predicates",
+      "result": "passed",
+      "evidence": "service spec:328-331 verifies global columns and zero aligned cell predicates; StatsPage.test.tsx:16-17 verifies headers/empty cell and refetch with strategies=breakout plus sessions=london."
+    },
+    {
+      "area": "B6 drawdown",
+      "result": "passed",
+      "evidence": "service spec:295 verifies money and proven-seed percentage drawdown; service.ts:544-557 computes chronological money, seeded percent, and R drawdowns."
+    },
+    {
+      "area": "B7 canonical journal navigation",
+      "result": "passed",
+      "evidence": "StatsPage.test.tsx:19 asserts targetId campaign-9 and journalDate 2026-01-03."
+    },
+    {
+      "area": "B8 side and outcome predicates",
+      "result": "passed",
+      "evidence": "StatsPage.test.tsx:15 asserts long and win filters serialize as sides=long and outcomes=win; service.ts:468 and 478 apply them."
+    },
+    {
+      "area": "B9 UTC preference",
+      "result": "passed",
+      "evidence": "StatsPage.test.tsx:18 selects UTC and asserts it in the exact request body; service.ts:402 validates IANA time zones."
+    },
+    {
+      "area": "B10 date-only local trading-day filtering",
+      "result": "passed",
+      "evidence": "service.ts:459-464 filters date-only bounds via statsPeriodKey rather than UTC instant dates."
+    },
+    {
+      "area": "DST fall-back repeated hour before local 02:00 boundary",
+      "result": "passed",
+      "evidence": "service spec:363-366 asserts both 2026-11-01T05:30:00.000Z and 06:30:00.000Z map to 2026-10-31 in America/New_York with a 120-minute boundary, while 07:00Z maps to 2026-11-01; service.ts:513-531 now compares formatted local minute and decrements the local calendar day."
+    }
+  ],
+  "surfaceEvidence": [
+    {
+      "surface": "API/shared",
+      "evidence": "Focused API service suite passed with 25 tests; controller and service routes/contracts inspected."
+    },
+    {
+      "surface": "web component",
+      "evidence": "Focused web test invocation passed with 16 files and 46 tests, including preference PATCH/refetch, filter serialization, crosstab drilldown, and canonical navigation."
+    },
+    {
+      "surface": "browser smoke (unchanged existing evidence)",
+      "evidence": "artifacts/stats-dashboard-browser-qa.json records all heading, integrity, KPI, preference, and drilldown checks true at 1440x1000; artifacts/stats-dashboard-browser.png is retained as unchanged visual evidence."
+    }
+  ],
+  "adversarialCases": [
+    {
+      "case": "inclusive breakeven, missing seed, and overlapping sessions",
+      "result": "passed",
+      "evidence": "service spec:282-295"
+    },
+    {
+      "case": "out-of-order closes and unclassified outlier excluded from expectancy",
+      "result": "passed",
+      "evidence": "service spec:323-327"
+    },
+    {
+      "case": "date-only and instant prior bounds",
+      "result": "passed",
+      "evidence": "service spec:293-294"
+    },
+    {
+      "case": "global crosstab zero cell and dual predicates",
+      "result": "passed",
+      "evidence": "service spec:328-331; StatsPage.test.tsx:16-17"
+    },
+    {
+      "case": "fall-back repeated 01:30 EDT/EST before 02:00 local boundary",
+      "result": "passed",
+      "evidence": "service spec:363-366"
+    },
+    {
+      "case": "invalid/unknown preference fields",
+      "result": "passed",
+      "evidence": "service spec:297-320"
+    }
+  ],
+  "artifactRefs": [
+    "artifacts/stats-dashboard-gen2-delta-qa.json",
+    "artifacts/stats-dashboard-browser.png",
+    "artifacts/stats-dashboard-browser-qa.json",
+    "artifacts/stats-browser-mock.json"
+  ]
+}
