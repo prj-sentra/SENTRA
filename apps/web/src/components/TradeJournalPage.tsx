@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { TradeRecordCard } from './TradeRecordCard';
 
 export interface TradeJournalPageProps {
@@ -13,6 +13,7 @@ export interface TradeJournalPageProps {
   imageUrl: (campaignId: string, imageId: string) => string;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
   onPatchCampaignAnalysis: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
+  onPatchCampaignReview: (campaignId: string, patch: PatchTradeCampaignReviewRequest) => Promise<void>;
   onPatchMemo: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
   onRefresh?: () => Promise<void>;
   onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;

@@ -30,6 +30,7 @@ export interface TradeCampaignAnalysis {
   economicIndicators: TradeAnalysisEconomicIndicator[];
   entryReason?: string; invalidationCondition?: string; takeProfitCondition?: string; additionalEntryPlan?: string;
   tradeScore?: number; strengths?: string; weaknesses?: string;
+  reviewUpdatedAt?: string;
   createdAt: string; updatedAt: string;
 }
 export interface TradeAnalysisEconomicIndicatorInput { id?: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; announcedAt?: string | null; }
@@ -48,6 +49,9 @@ export interface PatchTradeCampaignAnalysisRequest {
   retailPositionEnabled?: boolean; retailBuyAveragePrice?: number | null; retailSellAveragePrice?: number | null; retailBuyRatio?: number | null;
   fibonacciEnabled?: boolean; fibonacciStartPrice?: number | null; fibonacciEndPrice?: number | null;
   economicIndicators?: TradeAnalysisEconomicIndicatorInput[];
+}
+export interface PatchTradeCampaignReviewRequest {
+  expectedReviewUpdatedAt: string;
   entryReason?: string | null; invalidationCondition?: string | null; takeProfitCondition?: string | null; additionalEntryPlan?: string | null;
   tradeScore?: number | null; strengths?: string | null; weaknesses?: string | null;
 }

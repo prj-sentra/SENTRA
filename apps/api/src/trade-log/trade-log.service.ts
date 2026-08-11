@@ -4,6 +4,7 @@ import type {
   PatchTradeAnalysisRequest,
   PatchTradeCampaignAnalysisRequest,
   PatchTradeCampaignMemoRequest,
+  PatchTradeCampaignReviewRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
   TradeCampaign,
@@ -25,7 +26,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
-import { validateTradeAnalysisPatchRequest, validateTradeCampaignAnalysisPatchRequest } from './trade-log.validation';
+import { validateTradeAnalysisPatchRequest, validateTradeCampaignAnalysisPatchRequest, validateTradeCampaignReviewPatchRequest } from './trade-log.validation';
 import { calculateExecutionBasedMetrics, calculateTradePlanMetrics } from './trade-plan-metrics';
 
 export interface TradeScopeInput { accountId?: string; }
@@ -44,7 +45,7 @@ const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>(
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
 type Tx = Prisma.TransactionClient;
 const analysisFields = ['baseTimeframe','bollingerBandCount','bollingerDirection','executionEvaluation','unplannedAdditionalEntry','excessiveSize','stopLossViolation','earlyExit','lateExit','otherViolation'] as const;
-const campaignAnalysisFields = ['primaryTrend','maTimeframes','marketZoneEnabled','marketZoneHigh','marketZoneLow','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice','entryReason','invalidationCondition','takeProfitCondition','additionalEntryPlan','tradeScore','strengths','weaknesses'] as const;
+const campaignAnalysisFields = ['primaryTrend','maTimeframes','marketZoneEnabled','marketZoneHigh','marketZoneLow','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice'] as const;
 
 @Injectable()
 export class TradeLogService {
@@ -140,6 +141,39 @@ export class TradeLogService {
         }
       }
       await tx.tradeCampaignAnalysis.update({ where: { id: current.id }, data });
+    });
+  }
+  async patchCampaignReview(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignReviewRequest): Promise<void> {
+    validateTradeCampaignReviewPatchRequest(request);
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{
+        id: string; review_updated_at: Date; entry_reason: string | null; invalidation_condition: string | null;
+        take_profit_condition: string | null; additional_entry_plan: string | null; trade_score: number | null;
+        strengths: string | null; weaknesses: string | null;
+      }>>(Prisma.sql`
+        SELECT analysis.id, analysis.review_updated_at, analysis.entry_reason, analysis.invalidation_condition,
+          analysis.take_profit_condition, analysis.additional_entry_plan, analysis.trade_score, analysis.strengths, analysis.weaknesses
+        FROM "trade_campaign_analyses" analysis
+        JOIN "trade_campaigns" campaign ON campaign.id = analysis.campaign_id
+        WHERE campaign.id = ${id} AND campaign.owner_id = ${ownerId}
+          AND (${accountId ?? null}::text IS NULL OR campaign.mt5_account_id = ${accountId ?? null})
+        FOR UPDATE
+      `);
+      if (!rows.length) throw new NotFoundException(`Campaign ${id} not found`);
+      const current = rows[0];
+      if (current.review_updated_at.getTime() !== new Date(request.expectedReviewUpdatedAt).getTime()) throw new ConflictException('Campaign review was updated by another request');
+      await tx.$executeRaw`
+        UPDATE "trade_campaign_analyses"
+        SET "entry_reason" = ${request.entryReason !== undefined ? request.entryReason : current.entry_reason},
+            "invalidation_condition" = ${request.invalidationCondition !== undefined ? request.invalidationCondition : current.invalidation_condition},
+            "take_profit_condition" = ${request.takeProfitCondition !== undefined ? request.takeProfitCondition : current.take_profit_condition},
+            "additional_entry_plan" = ${request.additionalEntryPlan !== undefined ? request.additionalEntryPlan : current.additional_entry_plan},
+            "trade_score" = ${request.tradeScore !== undefined ? request.tradeScore : current.trade_score},
+            "strengths" = ${request.strengths !== undefined ? request.strengths : current.strengths},
+            "weaknesses" = ${request.weaknesses !== undefined ? request.weaknesses : current.weaknesses},
+            "review_updated_at" = CURRENT_TIMESTAMP
+        WHERE "id" = ${current.id}
+      `;
     });
   }
   async patchCampaignMemo(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignMemoRequest): Promise<void> {
@@ -492,6 +526,7 @@ export class TradeLogService {
         tradeScore: campaign.analysis.tradeScore ?? undefined,
         strengths: campaign.analysis.strengths ?? undefined,
         weaknesses: campaign.analysis.weaknesses ?? undefined,
+        reviewUpdatedAt: campaign.analysis.reviewUpdatedAt?.toISOString() ?? campaign.analysis.updatedAt.toISOString(),
         createdAt: campaign.analysis.createdAt.toISOString(),
         updatedAt: campaign.analysis.updatedAt.toISOString(),
       },

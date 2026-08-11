@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, TradeAnalysisEconomicIndicatorInput } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignReviewRequest, TradeAnalysisEconomicIndicatorInput } from '@trading-journal/shared';
 const enumValues = {
   primaryTrend: ['up', 'up_sideways', 'down', 'down_sideways'],
   bollingerBandCount: ['one_band', 'two_band'],
@@ -46,8 +46,6 @@ const campaignFields = new Set<keyof PatchTradeCampaignAnalysisRequest>([
   'retailPositionEnabled', 'retailBuyAveragePrice', 'retailSellAveragePrice',
   'retailBuyRatio', 'fibonacciEnabled', 'fibonacciStartPrice',
   'fibonacciEndPrice', 'economicIndicators',
-  'entryReason', 'invalidationCondition', 'takeProfitCondition', 'additionalEntryPlan',
-  'tradeScore', 'strengths', 'weaknesses',
 ]);
 
 export function validateTradeAnalysisPatchRequest(request: PatchTradeAnalysisRequest): void {
@@ -90,8 +88,6 @@ export function validateTradeCampaignAnalysisPatchRequest(request: PatchTradeCam
   for (const field of ['marketZoneEnabled', 'retailPositionEnabled', 'fibonacciEnabled'] as const) if (request[field] !== undefined && typeof request[field] !== 'boolean') fail(`${field} must be boolean`);
   for (const field of ['marketZoneHigh', 'marketZoneLow', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'fibonacciStartPrice', 'fibonacciEndPrice'] as const) positive(request[field], `${field} must be positive`, true);
   if (request.retailBuyRatio !== undefined && request.retailBuyRatio !== null && (typeof request.retailBuyRatio !== 'number' || !Number.isFinite(request.retailBuyRatio) || request.retailBuyRatio < 0 || request.retailBuyRatio > 100)) fail('retailBuyRatio must be 0 through 100');
-  for (const field of ['entryReason', 'invalidationCondition', 'takeProfitCondition', 'additionalEntryPlan', 'strengths', 'weaknesses'] as const) string(request[field], `${field} must be a string or null`, true);
-  if (request.tradeScore !== undefined && request.tradeScore !== null && (!Number.isInteger(request.tradeScore) || request.tradeScore < 1 || request.tradeScore > 10)) fail('tradeScore must be an integer from 1 through 10');
   if (request.economicIndicators !== undefined) {
     if (!Array.isArray(request.economicIndicators)) fail('economicIndicators must be an array');
     const indicatorIds = request.economicIndicators.flatMap((indicator) => indicator?.id ? [indicator.id] : []);
@@ -104,4 +100,15 @@ export function validateTradeCampaignAnalysisPatchRequest(request: PatchTradeCam
       if (indicator.announcedAt !== undefined && indicator.announcedAt !== null) date(indicator.announcedAt, 'economic indicator announcedAt must be a valid ISO date');
     });
   }
+}
+export function validateTradeCampaignReviewPatchRequest(request: PatchTradeCampaignReviewRequest): void {
+  object(request, 'Invalid campaign review patch');
+  const fields = new Set<keyof PatchTradeCampaignReviewRequest>([
+    'expectedReviewUpdatedAt', 'entryReason', 'invalidationCondition', 'takeProfitCondition',
+    'additionalEntryPlan', 'tradeScore', 'strengths', 'weaknesses',
+  ]);
+  for (const key of Object.keys(request)) if (!fields.has(key as keyof PatchTradeCampaignReviewRequest)) fail(`${key} is server managed`);
+  date(request.expectedReviewUpdatedAt, 'expectedReviewUpdatedAt must be a valid ISO date');
+  for (const field of ['entryReason', 'invalidationCondition', 'takeProfitCondition', 'additionalEntryPlan', 'strengths', 'weaknesses'] as const) string(request[field], `${field} must be a string or null`, true);
+  if (request.tradeScore !== undefined && request.tradeScore !== null && (!Number.isInteger(request.tradeScore) || request.tradeScore < 1 || request.tradeScore > 10)) fail('tradeScore must be an integer from 1 through 10');
 }

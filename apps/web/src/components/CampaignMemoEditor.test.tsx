@@ -5,11 +5,11 @@ import { CampaignMemoEditor } from './CampaignMemoEditor';
 describe('CampaignMemoEditor', () => {
   it('saves one campaign memo with its optimistic concurrency token', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const onSaveAnalysis = vi.fn().mockResolvedValue(undefined);
+    const onSaveReview = vi.fn().mockResolvedValue(undefined);
     render(<CampaignMemoEditor campaign={{
       id: 'campaign-1', memo: '기존 메모', updatedAt: '2026-08-10T12:00:00.000Z',
-      analysis: { updatedAt: '2026-08-10T11:00:00.000Z' },
-    } as any} onSave={onSave} onSaveAnalysis={onSaveAnalysis} />);
+      analysis: { updatedAt: '2026-08-10T11:00:00.000Z', reviewUpdatedAt: '2026-08-10T10:00:00.000Z' },
+    } as any} onSave={onSave} onSaveReview={onSaveReview} />);
 
     fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '새 메모' } });
     fireEvent.change(screen.getByLabelText('진입 근거'), { target: { value: '추세 눌림 진입' } });
@@ -19,8 +19,8 @@ describe('CampaignMemoEditor', () => {
     expect(onSave).toHaveBeenCalledWith('campaign-1', {
       memo: '새 메모', expectedUpdatedAt: '2026-08-10T12:00:00.000Z',
     });
-    await waitFor(() => expect(onSaveAnalysis).toHaveBeenCalledWith('campaign-1', expect.objectContaining({
-      expectedUpdatedAt: '2026-08-10T11:00:00.000Z',
+    await waitFor(() => expect(onSaveReview).toHaveBeenCalledWith('campaign-1', expect.objectContaining({
+      expectedReviewUpdatedAt: '2026-08-10T10:00:00.000Z',
       entryReason: '추세 눌림 진입',
       tradeScore: 8,
     })));

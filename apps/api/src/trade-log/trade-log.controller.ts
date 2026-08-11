@@ -5,6 +5,7 @@ import type {
   PatchTradeAnalysisRequest,
   PatchTradeCampaignAnalysisRequest,
   PatchTradeCampaignMemoRequest,
+  PatchTradeCampaignReviewRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
   TradeCampaignDateResponse,
@@ -63,6 +64,10 @@ export class TradeLogController {
   @Patch('campaigns/:id/analysis')
   patchCampaignAnalysis(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Query('accountId') accountId: string | undefined, @Body() request: PatchTradeCampaignAnalysisRequest): Promise<void> {
     return this.tradeLogService.patchCampaignAnalysis(user.id, accountId, id, request);
+  }
+  @Patch('campaigns/:id/review')
+  patchCampaignReview(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Query('accountId') accountId: string | undefined, @Body() request: PatchTradeCampaignReviewRequest): Promise<void> {
+    return this.tradeLogService.patchCampaignReview(user.id, accountId, id, request);
   }
   @Patch('campaigns/:id/memo')
   patchCampaignMemo(

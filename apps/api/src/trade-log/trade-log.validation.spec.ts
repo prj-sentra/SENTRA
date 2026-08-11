@@ -1,4 +1,4 @@
-import { validateTradeAnalysisPatchRequest as validateExecution, validateTradeCampaignAnalysisPatchRequest as validateCampaign } from './trade-log.validation';
+import { validateTradeAnalysisPatchRequest as validateExecution, validateTradeCampaignAnalysisPatchRequest as validateCampaign, validateTradeCampaignReviewPatchRequest as validateReview } from './trade-log.validation';
 
 const campaignKeys = new Set(['primaryTrend', 'maTimeframes', 'marketZoneEnabled', 'marketZoneHigh', 'marketZoneLow', 'chartPatternObserved', 'chartPatternTimeframe', 'chartPatternType', 'retailPositionEnabled', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'retailBuyRatio', 'fibonacciEnabled', 'fibonacciStartPrice', 'fibonacciEndPrice', 'economicIndicators']);
 const validateTradeAnalysisPatchRequest = (request: any) => Object.keys(request).some((key) => campaignKeys.has(key)) ? validateCampaign(request) : validateExecution(request);
@@ -72,5 +72,17 @@ describe('trade analysis validation', () => {
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, legacyStopLossLine: 100 } as never)).toThrow('legacyStopLossLine is server managed');
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, marketZoneLow: Number.POSITIVE_INFINITY })).toThrow('marketZoneLow must be positive');
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, economicIndicators: [{ type: 'CPI', impact: 'neutral' }] } as never)).toThrow('economic indicator impact is invalid');
+  });
+});
+describe('campaign review validation', () => {
+  const version = '2026-08-01T00:00:00.000Z';
+
+  it('accepts review fields with a dedicated optimistic token', () => {
+    expect(() => validateReview({ expectedReviewUpdatedAt: version, entryReason: '추세 돌파', tradeScore: 8 })).not.toThrow();
+  });
+
+  it('rejects invalid review scores and analysis tokens', () => {
+    expect(() => validateReview({ expectedReviewUpdatedAt: version, tradeScore: 11 })).toThrow('tradeScore must be an integer from 1 through 10');
+    expect(() => validateReview({ expectedReviewUpdatedAt: version, expectedUpdatedAt: version } as never)).toThrow('expectedUpdatedAt is server managed');
   });
 });

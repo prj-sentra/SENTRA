@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, SafeMt5AccountRef, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, TradeStatsResponse, UpdateMt5AccountRequest } from '@trading-journal/shared';
+import type { CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, TradeStatsResponse, UpdateMt5AccountRequest } from '@trading-journal/shared';
 import { UserManagement } from './admin/UserManagement';
 import { apiBaseUrl, apiRequest, setUnauthorizedHandler } from './api/client';
 import { AuthScreen, type CurrentUser } from './auth/AuthScreen';
@@ -102,6 +102,7 @@ export function App() {
           imageUrl={(campaignId, imageId) => `${apiBaseUrl}/trade-log/campaigns/${encodeURIComponent(campaignId)}/images/${encodeURIComponent(imageId)}?accountId=${encodeURIComponent(accountId!)}`}
           onPatchAnalysis={(tradeId: string, patch: PatchTradeAnalysisRequest) => mutate(`/trade-log/trades/${encodeURIComponent(tradeId)}/analysis?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onPatchCampaignAnalysis={(campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/analysis?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
+          onPatchCampaignReview={(campaignId: string, patch: PatchTradeCampaignReviewRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/review?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onPatchMemo={(campaignId: string, patch: PatchTradeCampaignMemoRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/memo?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onRefresh={loadAccountData}
           onUploadImage={uploadImage}

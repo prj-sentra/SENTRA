@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useState, type FormEvent } from 'react';
-import type { PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, TradeCampaign } from '@trading-journal/shared';
+import type { PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, TradeCampaign } from '@trading-journal/shared';
 
 export const CampaignMemoEditor = forwardRef<HTMLFormElement, {
   campaign: TradeCampaign;
   onSave: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
-  onSaveAnalysis?: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
-}>(({ campaign, onSave, onSaveAnalysis }, ref) => {
+  onSaveReview?: (campaignId: string, patch: PatchTradeCampaignReviewRequest) => Promise<void>;
+}>(({ campaign, onSave, onSaveReview }, ref) => {
   const [memo, setMemo] = useState(campaign.memo ?? '');
   const analysis = campaign.analysis ?? {} as TradeCampaign['analysis'];
   const [review, setReview] = useState({
@@ -39,8 +39,8 @@ export const CampaignMemoEditor = forwardRef<HTMLFormElement, {
     setError(undefined);
     try {
       await onSave(campaign.id, { memo: memo.trim() || null, expectedUpdatedAt: campaign.updatedAt });
-      if (onSaveAnalysis && campaign.analysis) await onSaveAnalysis(campaign.id, {
-        expectedUpdatedAt: campaign.analysis.updatedAt,
+      if (onSaveReview && campaign.analysis) await onSaveReview(campaign.id, {
+        expectedReviewUpdatedAt: campaign.analysis.reviewUpdatedAt ?? campaign.analysis.updatedAt,
         entryReason: review.entryReason.trim() || null,
         invalidationCondition: review.invalidationCondition.trim() || null,
         takeProfitCondition: review.takeProfitCondition.trim() || null,

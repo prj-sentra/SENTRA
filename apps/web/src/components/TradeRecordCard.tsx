@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { ImageLightbox } from './ImageLightbox';
 import { CampaignMemoEditor } from './CampaignMemoEditor';
 import { TradeDetail, type TradeDetailHandle } from './TradeDetail';
@@ -10,6 +10,7 @@ export interface TradeRecordCardProps {
   imageUrl: (campaignId: string, imageId: string) => string;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
   onPatchCampaignAnalysis: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
+  onPatchCampaignReview: (campaignId: string, patch: PatchTradeCampaignReviewRequest) => Promise<void>;
   onPatchMemo: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
   onRefresh?: () => Promise<void>;
   onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
@@ -86,7 +87,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
         </div>
       </div>
     </div>
-    {expanded ? <div className="expanded-content" onChangeCapture={() => setDirty(true)}><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><div className="campaign-detail-layout"><CampaignMemoEditor ref={memoForm} campaign={campaign} onSave={props.onPatchMemo} onSaveAnalysis={props.onPatchCampaignAnalysis} /><TradeDetail ref={tradeDetail} campaign={campaign} onPatchAnalysis={props.onPatchAnalysis} onPatchCampaignAnalysis={props.onPatchCampaignAnalysis} /></div></div> : null}
+    {expanded ? <div className="expanded-content" onChangeCapture={() => setDirty(true)}><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><div className="campaign-detail-layout"><CampaignMemoEditor ref={memoForm} campaign={campaign} onSave={props.onPatchMemo} onSaveReview={props.onPatchCampaignReview} /><TradeDetail ref={tradeDetail} campaign={campaign} onPatchAnalysis={props.onPatchAnalysis} onPatchCampaignAnalysis={props.onPatchCampaignAnalysis} /></div></div> : null}
     {previewImage ? <ImageLightbox
       src={props.imageUrl(campaign.id, previewImage.id)}
       alt={`${campaign.symbol} 거래 차트 ${previewIndex + 1}`}
