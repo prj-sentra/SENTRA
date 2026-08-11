@@ -1337,16 +1337,10 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-preferences-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .stats-preferences-actions { display: flex; align-items: center; gap: 12px; }
 .settings-page { display: grid; gap: 22px; max-width: 1380px; margin: 0 auto; }
-.settings-hero { padding: 4px 10px 18px; border-bottom: 1px solid var(--border); background: transparent; }
-.settings-hero h1, .settings-card h2 { margin: 4px 0; }
-.settings-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(520px, 1.4fr); gap: 0; align-items: start; }
+.settings-card h2, .settings-mt5-section h2 { margin: 4px 0; }
+.settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .settings-card { min-width: 0; padding: 22px 24px; border: 0; background: transparent; box-shadow: none; }
-.settings-card + .settings-card { border-left: 1px solid var(--border); }
-.settings-account-selector { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 24px; padding: 12px 10px; border-bottom: 1px solid var(--border); }
-.settings-account-selector > div { display: grid; gap: 4px; }
-.settings-section-label { color: var(--text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .06em; }
-.settings-account-selector .account-switcher { width: min(360px, 45vw); }
-.settings-account-selector .account-switcher > span { display: none; }
+.settings-card + .settings-card { border-top: 1px solid var(--border); }
 .settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .settings-badge { padding: 5px 9px; border: 1px solid #b8d6f5; border-radius: 999px; background: #edf5ff; color: var(--blue); font-size: .72rem; font-weight: 700; }
 .credential-card .primary-button { justify-self: start; }
@@ -1354,6 +1348,9 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .session-setting { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border: 1px solid var(--border); background: var(--layer-01); }
 .session-setting strong { grid-column: 1 / -1; font-size: .84rem; }
 .settings-preview { margin: 0; padding: 12px 14px; border-left: 3px solid var(--blue); background: var(--layer-01); color: var(--text-secondary); font-size: .82rem; line-height: 1.6; }
+.settings-mt5-section { display: grid; gap: 18px; padding: 22px 24px; border-top: 1px solid var(--border); }
+.settings-section-heading { display: grid; gap: 2px; }
+.settings-mt5-content { grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); width: 100%; }
 
 @media (max-width: 800px) {
   .trade-calendar-popover { position: fixed; inset: 72px 16px auto; width: auto; aspect-ratio: 4 / 3; max-height: calc(100vh - 88px); overflow: auto; transform: none; }
@@ -1366,10 +1363,9 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
   .stats-table th, .stats-table td { padding: 8px; font-size: .76rem; }
   .settings-layout { grid-template-columns: 1fr; }
   .settings-password-grid { grid-template-columns: 1fr; }
-  .settings-hero, .settings-card { padding: 20px; }
+  .settings-card, .settings-mt5-section { padding: 20px; }
   .settings-card + .settings-card { border-left: 0; border-top: 1px solid var(--border); }
-  .settings-account-selector { display: grid; padding-inline: 20px; }
-  .settings-account-selector .account-switcher { width: 100%; }
+  .settings-mt5-content { grid-template-columns: 1fr; }
   .stats-toolbar { flex-wrap: wrap; }
   .stats-toolbar-actions { width: 100%; }
   .stats-toolbar-actions .secondary-button { flex: 1; }
