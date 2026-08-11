@@ -932,7 +932,7 @@ button.trade-cover { cursor: pointer; }
 .campaign-memo-editor { display: flex; min-height: 0; flex-direction: column; gap: 14px; padding: 20px 0 0; background: var(--surface); }
 .campaign-memo-editor h3, .analysis-editor h3 { margin: 0; }
 .campaign-memo-editor h3 { margin: 0; border-top: 1px solid var(--border); padding-top: 16px; color: var(--text-primary); font-size: 13px; font-weight: 750; }
-.campaign-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
+.campaign-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; line-height: 1.2; }
 .campaign-memo-editor > textarea,
 .campaign-journal-fields textarea,
 .execution-violation-fields textarea {
@@ -1044,6 +1044,7 @@ button.trade-cover { cursor: pointer; }
 .ma-timeframe-reading { padding: 6px 0; }
 .ma-timeframe-reading > strong { color: var(--text-primary); }
 .campaign-analysis-section { display: grid; grid-column: 1; grid-row: 1 / span 3; align-content: start; gap: 14px; margin: 0; padding: 16px 0 0; border: 0; }
+.campaign-analysis-section::before { content: ""; height: 19.2px; }
 .execution-analysis-heading { margin: 0; color: var(--text-primary); font-size: 16px; font-weight: 800; }
 .execution-analysis-heading { grid-column: 2; grid-row: 1; padding: 16px 0 14px; }
 .trade-detail > .split-trade-navigation { grid-column: 2; grid-row: 2; }
@@ -1074,6 +1075,7 @@ button.trade-cover { cursor: pointer; }
   .trade-card-summary, .expanded-content, .trade-editor-grid { grid-template-columns: 1fr; }
   .campaign-detail-layout, .trade-detail { grid-template-columns: 1fr; }
   .campaign-analysis-section, .execution-analysis-heading, .trade-detail > .split-trade-navigation, .trade-detail > .desktop-trade-detail { grid-column: 1; grid-row: auto; }
+  .campaign-analysis-section::before { display: none; }
   .campaign-memo-editor { min-height: 0; }
   .trade-cover { min-height: 0; }
   .trade-summary-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
