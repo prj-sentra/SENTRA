@@ -956,9 +956,9 @@ button.trade-cover { cursor: pointer; }
 }
 .campaign-journal-fields textarea,
 .execution-violation-fields textarea {
-  height: calc(3 * 1.6em + 30px);
-  min-height: calc(3 * 1.6em + 30px);
-  max-height: calc(3 * 1.6em + 30px);
+  height: calc(2 * 1.6em + 30px);
+  min-height: calc(2 * 1.6em + 30px);
+  max-height: calc(2 * 1.6em + 30px);
 }
 .campaign-memo-editor > textarea:hover,
 .campaign-journal-fields textarea:hover,
@@ -1025,8 +1025,8 @@ button.trade-cover { cursor: pointer; }
 .detail-editor label { display: grid; gap: 7px; }
 .detail-editor label span { color: var(--text-secondary); font-size: 12px; font-weight: 650; }
 .analysis-editor { gap: 14px; }
-.analysis-editor fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); padding: 16px; background: var(--surface); }
-.analysis-editor legend { padding: 0 8px; color: var(--text-primary); font-size: 13px; font-weight: 750; }
+.analysis-editor fieldset { min-width: 0; margin: 0; border: 0; padding: 0; background: var(--surface); }
+.analysis-editor legend { width: 100%; margin-bottom: 12px; border-top: 1px solid var(--border); padding: 16px 0 0; color: var(--text-primary); font-size: 13px; font-weight: 750; }
 .analysis-info { display: inline-grid; width: 19px; height: 19px; place-items: center; margin-left: 5px; border: 1px solid var(--border-strong); border-radius: 50%; padding: 0; color: var(--text-secondary); background: var(--surface); font: inherit; font-size: 11px; font-weight: 800; cursor: help; }
 .analysis-editor .target-price-row > .analysis-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "prices percentages rr"; align-items: stretch; }
 .target-price-inputs, .target-price-percentages { display: grid; align-content: center; gap: 12px; min-width: 0; }
