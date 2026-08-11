@@ -114,8 +114,8 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
             onClick={() => { onSelectDate(key); setOpen(false); triggerRef.current?.focus(); }}
           >
             <span className="trade-calendar-date">{date.getDate()}</span>
-            <span className="trade-calendar-counts"><span>매매 {summary.campaignCount}</span><span>진입 {summary.tradeCount}</span></span>
             <span className={`trade-calendar-pnl ${pnlClass}`}>{formatPnl(summary.realizedPnl)}</span>
+            <span className="trade-calendar-counts">매매 {summary.campaignCount}, 진입 {summary.tradeCount}</span>
           </button>;
         })}
       </div>

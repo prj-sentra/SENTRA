@@ -17,8 +17,7 @@ describe('TradeCalendarPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: '거래일 달력 열기' }));
 
     expect(screen.getByRole('button', { name: /2026-08-03, 매매 2개, 진입 3개, 손익 \+125.5/ })).toHaveFocus();
-    expect(screen.getByText('매매 2')).toBeInTheDocument();
-    expect(screen.getByText('진입 3')).toBeInTheDocument();
+    expect(screen.getByText('매매 2, 진입 3')).toBeInTheDocument();
     expect(screen.getByText('+125.5')).toHaveClass('is-positive');
     expect(screen.getByText('-20')).toHaveClass('is-negative');
     expect(screen.queryByRole('button', { name: /2026-08-04/ })).not.toBeInTheDocument();

@@ -1212,13 +1212,13 @@ button.trade-cover { cursor: pointer; }
 .trade-calendar-grid { display: grid; min-height: 0; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(0, 1fr)); gap: 4px; }
 .trade-calendar-weekday { padding: 5px 0; color: var(--text-muted); text-align: center; font-size: .7rem; }
 .trade-calendar-day, .trade-calendar-empty { min-width: 0; min-height: 0; border: 1px solid var(--border); }
-.trade-calendar-day { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 6px; background: var(--surface); color: var(--text-primary); text-align: left; }
+.trade-calendar-day { display: grid; grid-template-rows: auto auto minmax(0, 1fr); align-content: start; gap: 3px; padding: 6px; overflow: hidden; background: var(--surface); color: var(--text-primary); text-align: left; }
 .trade-calendar-empty { background: var(--layer-01); }
 button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-color: var(--blue); background: #edf5ff; }
 .trade-calendar-day.is-disabled { color: var(--text-muted); background: var(--layer-01); }
 .trade-calendar-date { font-weight: 600; }
-.trade-calendar-counts { display: grid; margin-top: 5px; color: var(--text-secondary); font-size: .62rem; }
-.trade-calendar-pnl { display: block; align-self: end; margin-top: 4px; overflow: visible; white-space: nowrap; font: 600 .66rem 'IBM Plex Mono', monospace; }
+.trade-calendar-counts { align-self: end; color: var(--text-secondary); font-size: .62rem; white-space: nowrap; }
+.trade-calendar-pnl { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 .74rem 'IBM Plex Mono', monospace; }
 .trade-calendar-pnl.is-positive { color: #198038; }
 .trade-calendar-pnl.is-negative { color: var(--danger); }
 
@@ -1275,7 +1275,7 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 @media (max-width: 800px) {
   .trade-calendar-popover { position: fixed; inset: 72px 16px auto; width: auto; aspect-ratio: 4 / 3; max-height: calc(100vh - 88px); overflow: auto; transform: none; }
   .trade-calendar-day { min-height: 58px; padding: 4px; }
-  .trade-calendar-counts { display: none; }
+  .trade-calendar-counts { font-size: .56rem; }
   .stats-header { gap: 12px; }
   .stats-unit { width: 100%; }
   .stats-unit button { flex: 1; }
