@@ -1,17 +1,23 @@
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignMemoRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse } from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
 
 function createController(service: object, chartImageService: object = {}): TradeLogController { return new TradeLogController(service as never, chartImageService as never); }
 const user = { id: 'owner-1' } as never;
-const tradeRecord = { id: 'trade-1', accountId: 'account-1', symbol: 'XAUUSD', side: 'long', status: 'planned', analysisComplete: false, analysis: { schemaVersion: 1, marketZoneEnabled: false, chartPatternObserved: false, retailPositionEnabled: false, fibonacciEnabled: false, economicIndicators: [], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' } satisfies TradeRecord;
+const tradeRecord = { id: 'trade-1', accountId: 'account-1', symbol: 'XAUUSD', side: 'long', status: 'planned', analysisComplete: false, analysis: { schemaVersion: 3, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' }, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z' } satisfies TradeRecord;
 const tradeStats: TradeStatsResponse = { overview: { totalTrades: 1, totalRealizedPnl: 0, averageRealizedPnl: 0, winRate: 0, totalRiskAmount: 0, riskAmountCount: 0, averageRiskPercent: 0, riskPercentCount: 0 }, bySession: [], byBaseTimeframe: [] };
 
 describe('TradeLogController', () => {
   it('forwards analysis patches to the service', async () => {
     const service = { patchTradeAnalysis: jest.fn().mockResolvedValue(tradeRecord) }; const controller = createController(service);
-    const request: PatchTradeAnalysisRequest = { expectedUpdatedAt: '2026-08-01T00:00:00.000Z', marketZoneEnabled: true, marketZoneHigh: 120, marketZoneLow: 100, economicIndicators: [{ type: 'CPI', impact: 'negative' }] };
+    const request: PatchTradeAnalysisRequest = { expectedUpdatedAt: '2026-08-01T00:00:00.000Z', baseTimeframe: '1h' };
     await expect(controller.patchAnalysis(user, 'trade-1', 'account-1', request)).resolves.toBe(tradeRecord);
     expect(service.patchTradeAnalysis).toHaveBeenCalledWith('owner-1', 'account-1', 'trade-1', request);
+  });
+  it('forwards campaign analysis patches to the service', async () => {
+    const service = { patchCampaignAnalysis: jest.fn().mockResolvedValue(undefined) }; const controller = createController(service);
+    const request: PatchTradeCampaignAnalysisRequest = { expectedUpdatedAt: '2026-08-01T00:00:00.000Z', primaryTrend: 'up' };
+    await expect(controller.patchCampaignAnalysis(user, 'campaign-1', 'account-1', request)).resolves.toBeUndefined();
+    expect(service.patchCampaignAnalysis).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-1', request);
   });
   it('forwards campaign memo patches to the service', async () => {
     const service = { patchCampaignMemo: jest.fn().mockResolvedValue(undefined) };

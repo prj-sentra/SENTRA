@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TradeRecordCard } from './TradeRecordCard';
 
@@ -80,6 +80,62 @@ describe('TradeRecordCard memo preview', () => {
     fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
     const memo = screen.getByLabelText('거래 메모') as HTMLTextAreaElement;
     expect(memo.value).toBe('첫 번째 줄\n두 번째 줄');
+  });
+
+  it('confirms save and cancel actions, refreshes content, and keeps details open', async () => {
+    const onPatchMemo = vi.fn().mockResolvedValue(undefined);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<TradeRecordCard
+      campaign={{ ...campaign, memo: '기존 메모' }}
+      imageUrl={vi.fn()}
+      onPatchAnalysis={vi.fn()}
+      onPatchMemo={onPatchMemo}
+      onRefresh={onRefresh}
+      onUploadImage={vi.fn()}
+      onReorderImages={vi.fn()}
+      onDeleteImage={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '변경 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(onPatchMemo).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '취소할 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '변경사항 취소' }));
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+    expect(screen.getByLabelText('거래 메모')).toHaveValue('기존 메모');
+    expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    confirm.mockRestore();
+  });
+
+  it('asks to save dirty fields before collapsing and saves them when confirmed', async () => {
+    const onPatchMemo = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<TradeRecordCard
+      campaign={{ ...campaign, memo: '기존 메모' }}
+      imageUrl={vi.fn()}
+      onPatchAnalysis={vi.fn()}
+      onPatchMemo={onPatchMemo}
+      onUploadImage={vi.fn()}
+      onReorderImages={vi.fn()}
+      onDeleteImage={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '저장할 메모' } });
+    fireEvent.click(screen.getByRole('button', { name: '간단하게 ▲' }));
+    expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
+    expect(onPatchMemo).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '간단하게 ▲' }));
+    await waitFor(() => expect(onPatchMemo).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: '상세 보기' })).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('저장하고'));
+    confirm.mockRestore();
   });
 
   it('opens the complete image viewer from the summary cover', () => {

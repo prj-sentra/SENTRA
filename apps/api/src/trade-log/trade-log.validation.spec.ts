@@ -1,5 +1,7 @@
-import { validateTradeAnalysisPatchRequest } from './trade-log.validation';
+import { validateTradeAnalysisPatchRequest as validateExecution, validateTradeCampaignAnalysisPatchRequest as validateCampaign } from './trade-log.validation';
 
+const campaignKeys = new Set(['primaryTrend', 'maTimeframes', 'marketZoneEnabled', 'marketZoneHigh', 'marketZoneLow', 'chartPatternObserved', 'chartPatternTimeframe', 'chartPatternType', 'retailPositionEnabled', 'retailBuyAveragePrice', 'retailSellAveragePrice', 'retailBuyRatio', 'fibonacciEnabled', 'fibonacciStartPrice', 'fibonacciEndPrice', 'economicIndicators']);
+const validateTradeAnalysisPatchRequest = (request: any) => Object.keys(request).some((key) => campaignKeys.has(key)) ? validateCampaign(request) : validateExecution(request);
 describe('trade analysis validation', () => {
   const version = '2026-08-01T00:00:00.000Z';
 
@@ -42,18 +44,6 @@ describe('trade analysis validation', () => {
     ['bollingerDirection', 'normal'],
     ['bollingerDirection', 'reverse'],
     ['bollingerDirection', 'chase'],
-    ['maArrangement', 'bullish'],
-    ['maArrangement', 'bearish'],
-    ['maArrangement', 'congested'],
-    ['cross', 'none'],
-    ['cross', 'golden_20_60'],
-    ['cross', 'golden_20_120'],
-    ['cross', 'dead_20_60'],
-    ['cross', 'dead_20_120'],
-    ['chartPatternType', 'double_top'],
-    ['chartPatternType', 'double_bottom'],
-    ['chartPatternType', 'head_shoulders'],
-    ['chartPatternType', 'inverse_head_shoulders'],
   ])('accepts the documented %s enum value %s', (field, value) => {
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, [field]: value })).not.toThrow();
   });
@@ -62,17 +52,22 @@ describe('trade analysis validation', () => {
     ['primaryTrend', 'bullish'],
     ['bollingerBandCount', 'three_band'],
     ['bollingerDirection', 'sideways'],
-    ['maArrangement', 'up'],
-    ['cross', 'golden_60_120'],
-    ['chartPatternType', 'triangle'],
   ])('rejects unsupported %s enum value %s', (field, value) => {
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, [field]: value } as never)).toThrow(`${field} is invalid`);
+  });
+
+  it('validates moving-average readings by supported timeframe', () => {
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, maTimeframes: { '15m': { arrangement: 'bullish', cross20_60: 'golden', cross20_120: 'dead', chartPattern: 'double_top' }, '1MN': { arrangement: 'congested', cross20_60: 'none', cross20_120: 'none' } } })).not.toThrow();
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, maTimeframes: { '5m': { arrangement: 'bullish' } } } as never)).toThrow('5m is not a supported');
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, maTimeframes: { '1h': { arrangement: 'up' } } } as never)).toThrow('1h arrangement is invalid');
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, maTimeframes: { '4h': { cross20_60: 'sideways' } } } as never)).toThrow('4h 20-60 cross is invalid');
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, maTimeframes: { '1D': { chartPattern: 'triangle' } } } as never)).toThrow('1D chart pattern is invalid');
   });
 
   it('enforces numeric boundaries and indicator impact values', () => {
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, retailBuyRatio: 0 })).not.toThrow();
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, retailBuyRatio: 100 })).not.toThrow();
-    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, stopLossLine: 0 })).toThrow('stopLossLine must be positive');
+    expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, legacyStopLossLine: 100 } as never)).toThrow('legacyStopLossLine is server managed');
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, marketZoneLow: Number.POSITIVE_INFINITY })).toThrow('marketZoneLow must be positive');
     expect(() => validateTradeAnalysisPatchRequest({ expectedUpdatedAt: version, economicIndicators: [{ type: 'CPI', impact: 'neutral' }] } as never)).toThrow('economic indicator impact is invalid');
   });

@@ -23,8 +23,8 @@ export const exitReasonLabel = (reason?: TradeExitReason): string => reason ? EX
 
 export function ExecutionTradeRow({ trade }: { trade: TradeRecord }) {
   return <article className="execution-row">
+    <p className="execution-period">{dateTime(trade.openedAt)} - {dateTime(trade.closedAt)}</p>
     <dl className="execution-metrics">
-      <div className="execution-period"><dt>진입시간 / 청산시간</dt><dd>{dateTime(trade.openedAt)} / {dateTime(trade.closedAt)}</dd></div>
       <div className="price-range"><dt>진입가 / 청산가</dt><dd>{price(trade.entry?.price ?? trade.entryPrice)} / {price(trade.exit?.price ?? trade.exitPrice)}</dd></div>
       <div className="quantity"><dt>수량</dt><dd>{number(trade.entry?.quantity ?? trade.quantityLots)}</dd></div>
       <div className="exit-reason"><dt>청산 사유</dt><dd>{exitReasonLabel(trade.exit?.reason ?? trade.exitReason)}</dd></div>

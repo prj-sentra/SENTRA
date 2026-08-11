@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import type {
   PatchTradeAnalysisRequest,
+  PatchTradeCampaignAnalysisRequest,
   PatchTradeCampaignMemoRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
@@ -59,6 +60,10 @@ export class TradeLogController {
     return this.tradeLogService.patchTradeAnalysis(user.id, accountId, id, request);
   }
 
+  @Patch('campaigns/:id/analysis')
+  patchCampaignAnalysis(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Query('accountId') accountId: string | undefined, @Body() request: PatchTradeCampaignAnalysisRequest): Promise<void> {
+    return this.tradeLogService.patchCampaignAnalysis(user.id, accountId, id, request);
+  }
   @Patch('campaigns/:id/memo')
   patchCampaignMemo(
     @CurrentUser() user: AuthenticatedUser,

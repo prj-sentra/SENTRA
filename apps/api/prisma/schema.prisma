@@ -46,6 +46,11 @@ enum TradeAnalysisBollingerDirection {
   CHASE   @map("chase")
 }
 
+enum TradeExecutionEvaluation {
+  AS_PLANNED    @map("as_planned")
+  PLAN_VIOLATED @map("plan_violated")
+}
+
 enum TradeAnalysisMaArrangement {
   BULLISH   @map("bullish")
   BEARISH   @map("bearish")
@@ -174,6 +179,7 @@ model TradeCampaign {
   rootTrade    Trade                @relation("CampaignRoot", fields: [rootTradeId], references: [id], onDelete: Restrict)
   memberships  CampaignMembership[]
   conflicts    CampaignConflict[]   @relation("ConflictResolvedCampaign")
+  analysis      TradeCampaignAnalysis?
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
@@ -213,35 +219,68 @@ model CampaignConflict {
 }
 
 model TradeAnalysis {
-  id                     String                           @id @default(uuid())
-  tradeId                String                           @unique @map("trade_id")
-  schemaVersion          Int                              @default(1) @map("schema_version")
-  baseTimeframe          String?                          @map("base_timeframe")
-  primaryTrend           TradeAnalysisPrimaryTrend?       @map("primary_trend")
-  bollingerBandCount     TradeAnalysisBollingerBandCount? @map("bollinger_band_count")
-  bollingerDirection     TradeAnalysisBollingerDirection? @map("bollinger_direction")
-  maArrangement          TradeAnalysisMaArrangement?      @map("ma_arrangement")
-  cross                  TradeAnalysisCross?
-  stopLossLine           Decimal?                         @map("stop_loss_line") @db.Decimal(65, 30)
-  marketZoneEnabled      Boolean                          @default(false) @map("market_zone_enabled")
-  marketZoneHigh         Decimal?                         @map("market_zone_high") @db.Decimal(65, 30)
-  marketZoneLow          Decimal?                         @map("market_zone_low") @db.Decimal(65, 30)
-  chartPatternObserved   Boolean                          @default(false) @map("chart_pattern_observed")
-  chartPatternTimeframe  String?                          @map("chart_pattern_timeframe")
-  chartPatternType       TradeAnalysisChartPatternType?   @map("chart_pattern_type")
-  retailPositionEnabled  Boolean                          @default(false) @map("retail_position_enabled")
-  retailBuyAveragePrice  Decimal?                         @map("retail_buy_average_price") @db.Decimal(65, 30)
-  retailSellAveragePrice Decimal?                         @map("retail_sell_average_price") @db.Decimal(65, 30)
-  retailBuyRatio         Decimal?                         @map("retail_buy_ratio") @db.Decimal(65, 30)
-  fibonacciEnabled       Boolean                          @default(false) @map("fibonacci_enabled")
-  fibonacciStartPrice    Decimal?                         @map("fibonacci_start_price") @db.Decimal(65, 30)
-  fibonacciEndPrice      Decimal?                         @map("fibonacci_end_price") @db.Decimal(65, 30)
-  createdAt              DateTime                         @default(now()) @map("created_at")
-  updatedAt              DateTime                         @updatedAt @map("updated_at")
-  trade                  Trade                            @relation(fields: [tradeId], references: [id], onDelete: Cascade)
-  economicIndicators     TradeAnalysisEconomicIndicator[]
+  id                 String                           @id @default(uuid())
+  tradeId            String                           @unique @map("trade_id")
+  schemaVersion      Int                              @default(3) @map("schema_version")
+  baseTimeframe      String?                          @map("base_timeframe")
+  bollingerBandCount TradeAnalysisBollingerBandCount? @map("bollinger_band_count")
+  bollingerDirection       TradeAnalysisBollingerDirection? @map("bollinger_direction")
+  executionEvaluation      TradeExecutionEvaluation?         @map("execution_evaluation")
+  unplannedAdditionalEntry Boolean                           @default(false) @map("unplanned_additional_entry")
+  excessiveSize            Boolean                           @default(false) @map("excessive_size")
+  stopLossViolation        Boolean                           @default(false) @map("stop_loss_violation")
+  earlyExit                Boolean                           @default(false) @map("early_exit")
+  lateExit                 Boolean                           @default(false) @map("late_exit")
+  otherViolation           String?                           @map("other_violation")
+  createdAt          DateTime                         @default(now()) @map("created_at")
+  updatedAt          DateTime                         @updatedAt @map("updated_at")
+  trade              Trade                            @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@map("trade_analyses")
+}
+
+model TradeCampaignAnalysis {
+  id                     String                              @id @default(uuid())
+  campaignId             String                              @unique(map: "campaign_analysis_campaign_key") @map("campaign_id")
+  schemaVersion          Int                                 @default(1) @map("schema_version")
+  primaryTrend           TradeAnalysisPrimaryTrend?          @map("primary_trend")
+  maTimeframes           Json                                @default("{}") @map("ma_timeframes")
+  marketZoneEnabled      Boolean                             @default(false) @map("market_zone_enabled")
+  marketZoneHigh         Decimal?                            @map("market_zone_high") @db.Decimal(65, 30)
+  marketZoneLow          Decimal?                            @map("market_zone_low") @db.Decimal(65, 30)
+  retailPositionEnabled  Boolean                             @default(false) @map("retail_position_enabled")
+  retailBuyAveragePrice  Decimal?                            @map("retail_buy_average_price") @db.Decimal(65, 30)
+  retailSellAveragePrice Decimal?                            @map("retail_sell_average_price") @db.Decimal(65, 30)
+  retailBuyRatio         Decimal?                            @map("retail_buy_ratio") @db.Decimal(65, 30)
+  fibonacciEnabled       Boolean                             @default(false) @map("fibonacci_enabled")
+  fibonacciStartPrice    Decimal?                            @map("fibonacci_start_price") @db.Decimal(65, 30)
+  fibonacciEndPrice      Decimal?                            @map("fibonacci_end_price") @db.Decimal(65, 30)
+  entryReason              String?                              @map("entry_reason")
+  invalidationCondition    String?                              @map("invalidation_condition")
+  takeProfitCondition      String?                              @map("take_profit_condition")
+  additionalEntryPlan      String?                              @map("additional_entry_plan")
+  tradeScore               Int?                                 @map("trade_score")
+  strengths                String?
+  weaknesses               String?
+  createdAt              DateTime                            @default(now()) @map("created_at")
+  updatedAt              DateTime                            @updatedAt @map("updated_at")
+  campaign               TradeCampaign                       @relation(fields: [campaignId], references: [id], onDelete: Cascade, map: "campaign_analysis_campaign_fkey")
+  economicIndicators     TradeCampaignAnalysisEconomicIndicator[]
+  archives               TradeCampaignAnalysisArchive[]
+
+  @@map("trade_campaign_analyses")
+}
+
+model TradeCampaignAnalysisArchive {
+  id                 String                @id @default(uuid())
+  campaignAnalysisId String                @map("campaign_analysis_id")
+  source             String
+  content            Json
+  createdAt          DateTime              @default(now()) @map("created_at")
+  analysis           TradeCampaignAnalysis @relation(fields: [campaignAnalysisId], references: [id], onDelete: Cascade, map: "campaign_analysis_archive_analysis_fkey")
+
+  @@unique([campaignAnalysisId, source], map: "campaign_analysis_archive_source_key")
+  @@map("trade_campaign_analysis_archives")
 }
 
 model TradeAnalysisArchive {
@@ -255,17 +294,18 @@ model TradeAnalysisArchive {
   @@unique([tradeId, source])
   @@map("trade_analysis_archives")
 }
-model TradeAnalysisEconomicIndicator {
-  id         String                               @id @default(uuid())
-  analysisId String                               @map("analysis_id")
-  type       String
-  impact     TradeAnalysisEconomicIndicatorImpact
-  position   Int
-  analysis   TradeAnalysis                        @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+model TradeCampaignAnalysisEconomicIndicator {
+  id                 String                               @id @default(uuid())
+  campaignAnalysisId String                               @map("campaign_analysis_id")
+  type               String
+  impact             TradeAnalysisEconomicIndicatorImpact
+  announcedAt        DateTime?                            @map("announced_at")
+  position           Int
+  analysis           TradeCampaignAnalysis                @relation(fields: [campaignAnalysisId], references: [id], onDelete: Cascade, map: "campaign_indicator_analysis_fkey")
 
-  @@unique([analysisId, position])
-  @@index([analysisId, position])
-  @@map("trade_analysis_economic_indicators")
+  @@unique([campaignAnalysisId, position], map: "campaign_indicator_analysis_position_key")
+  @@index([campaignAnalysisId, position], map: "campaign_indicator_analysis_position_idx")
+  @@map("trade_campaign_analysis_economic_indicators")
 }
 
 model TradeCampaignImage {

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type {
   HealthResponse,
   PatchTradeAnalysisRequest,
+  PatchTradeCampaignAnalysisRequest,
   PatchTradeCampaignMemoRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
@@ -16,25 +17,24 @@ import {
   Prisma,
   TradeAnalysisBollingerBandCount as PrismaBollingerBandCount,
   TradeAnalysisBollingerDirection as PrismaBollingerDirection,
-  TradeAnalysisChartPatternType as PrismaChartPatternType,
-  TradeAnalysisCross as PrismaCross,
   TradeAnalysisEconomicIndicatorImpact as PrismaIndicatorImpact,
-  TradeAnalysisMaArrangement as PrismaMaArrangement,
+  TradeExecutionEvaluation as PrismaExecutionEvaluation,
   TradeAnalysisPrimaryTrend as PrismaPrimaryTrend,
   TradeSide as PrismaTradeSide,
   TradeStatus as PrismaTradeStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
-import { validateTradeAnalysisPatchRequest } from './trade-log.validation';
+import { validateTradeAnalysisPatchRequest, validateTradeCampaignAnalysisPatchRequest } from './trade-log.validation';
 import { calculateExecutionBasedMetrics, calculateTradePlanMetrics } from './trade-plan-metrics';
 
 export interface TradeScopeInput { accountId?: string; }
 
-const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, initialPlan: true, analysis: { include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } } } });
+const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, initialPlan: true, analysis: true } });
 type TradeWithRelations = Prisma.TradeGetPayload<typeof tradeWithRelations>;
 const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>()({
   include: {
+    analysis: { include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } },
     rootTrade: { include: tradeWithRelations.include },
     memberships: { include: { trade: { include: tradeWithRelations.include } }, orderBy: { createdAt: 'asc' } },
     conflicts: { orderBy: { createdAt: 'asc' } },
@@ -43,7 +43,8 @@ const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>(
 });
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
 type Tx = Prisma.TransactionClient;
-const analysisFields = ['baseTimeframe','primaryTrend','bollingerBandCount','bollingerDirection','maArrangement','cross','stopLossLine','marketZoneEnabled','marketZoneHigh','marketZoneLow','chartPatternObserved','chartPatternTimeframe','chartPatternType','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice'] as const;
+const analysisFields = ['baseTimeframe','bollingerBandCount','bollingerDirection','executionEvaluation','unplannedAdditionalEntry','excessiveSize','stopLossViolation','earlyExit','lateExit','otherViolation'] as const;
+const campaignAnalysisFields = ['primaryTrend','maTimeframes','marketZoneEnabled','marketZoneHigh','marketZoneLow','retailPositionEnabled','retailBuyAveragePrice','retailSellAveragePrice','retailBuyRatio','fibonacciEnabled','fibonacciStartPrice','fibonacciEndPrice','entryReason','invalidationCondition','takeProfitCondition','additionalEntryPlan','tradeScore','strengths','weaknesses'] as const;
 
 @Injectable()
 export class TradeLogService {
@@ -62,45 +63,24 @@ export class TradeLogService {
       const rows = await tx.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`SELECT id, updated_at FROM "trade_analyses" WHERE trade_id = ${id} FOR UPDATE`);
       if (!rows.length) throw new NotFoundException(`Trade ${id} not found`);
       if (rows[0].updated_at.getTime() !== new Date(request.expectedUpdatedAt).getTime()) throw new ConflictException('Trade analysis was updated by another request');
-      const current = await tx.tradeAnalysis.findUniqueOrThrow({ where: { id: rows[0].id }, include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } });
+      const current = await tx.tradeAnalysis.findUniqueOrThrow({ where: { id: rows[0].id } });
       const data: Record<string, unknown> = {};
       for (const field of analysisFields) {
         if (request[field] !== undefined) data[field] = request[field];
       }
-      if (request.primaryTrend !== undefined) data.primaryTrend = request.primaryTrend === null ? null : PrismaPrimaryTrend[request.primaryTrend.toUpperCase() as keyof typeof PrismaPrimaryTrend];
       if (request.bollingerBandCount !== undefined) data.bollingerBandCount = request.bollingerBandCount === null ? null : PrismaBollingerBandCount[request.bollingerBandCount.toUpperCase() as keyof typeof PrismaBollingerBandCount];
       if (request.bollingerDirection !== undefined) data.bollingerDirection = request.bollingerDirection === null ? null : PrismaBollingerDirection[request.bollingerDirection.toUpperCase() as keyof typeof PrismaBollingerDirection];
-      if (request.maArrangement !== undefined) data.maArrangement = request.maArrangement === null ? null : PrismaMaArrangement[request.maArrangement.toUpperCase() as keyof typeof PrismaMaArrangement];
-      if (request.cross !== undefined) data.cross = request.cross === null ? null : PrismaCross[request.cross.toUpperCase() as keyof typeof PrismaCross];
-      if (request.chartPatternType !== undefined) data.chartPatternType = request.chartPatternType === null ? null : PrismaChartPatternType[request.chartPatternType.toUpperCase() as keyof typeof PrismaChartPatternType];
-      this.canonicalizeDisabledGroups(request, data);
-      this.canonicalizeAndValidate({ ...current, ...data });
-      if (request.economicIndicators !== undefined) {
-        const currentIds = new Set(current.economicIndicators.map((indicator) => indicator.id));
-        const suppliedIds = request.economicIndicators.flatMap((indicator) => indicator.id ? [indicator.id] : []);
-        const unknownIds = suppliedIds.filter((indicatorId) => !currentIds.has(indicatorId));
-        if (unknownIds.length) throw new BadRequestException('Economic indicator id does not belong to this analysis');
-        await tx.tradeAnalysisEconomicIndicator.deleteMany({
-          where: { analysisId: current.id, id: { in: [...currentIds].filter((indicatorId) => !suppliedIds.includes(indicatorId)) } },
-        });
-        await tx.$executeRaw`UPDATE "trade_analysis_economic_indicators" SET "position" = -"position" - 1 WHERE "analysis_id" = ${current.id}`;
-        for (const [position, indicator] of request.economicIndicators.entries()) {
-          const indicatorData = {
-            type: indicator.type.trim(),
-            impact: indicator.impact === 'positive' ? PrismaIndicatorImpact.POSITIVE : PrismaIndicatorImpact.NEGATIVE,
-            position,
-          };
-          if (indicator.id) {
-            await tx.tradeAnalysisEconomicIndicator.update({ where: { id: indicator.id }, data: indicatorData });
-          } else {
-            await tx.tradeAnalysisEconomicIndicator.create({ data: { analysisId: current.id, ...indicatorData } });
-          }
-        }
+      if (request.executionEvaluation !== undefined) data.executionEvaluation = request.executionEvaluation === null ? null : PrismaExecutionEvaluation[request.executionEvaluation.toUpperCase() as keyof typeof PrismaExecutionEvaluation];
+      if (request.executionEvaluation !== undefined && request.executionEvaluation !== 'plan_violated') {
+        data.unplannedAdditionalEntry = false;
+        data.excessiveSize = false;
+        data.stopLossViolation = false;
+        data.earlyExit = false;
+        data.lateExit = false;
+        data.otherViolation = null;
       }
-      await tx.tradeAnalysis.update({
-        where: { id: current.id },
-        data,
-      });
+      this.canonicalizeAndValidate({ ...current, ...data });
+      await tx.tradeAnalysis.update({ where: { id: current.id }, data });
       if (request.plannedTakeProfitPrice !== undefined && request.plannedStopLossPrice !== undefined) {
         if (request.plannedTakeProfitPrice === null || request.plannedStopLossPrice === null) {
           await tx.trade.update({ where: { id }, data: {
@@ -128,6 +108,40 @@ export class TradeLogService {
     });
   }
 
+  async patchCampaignAnalysis(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignAnalysisRequest): Promise<void> {
+    validateTradeCampaignAnalysisPatchRequest(request);
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`
+        SELECT analysis.id, analysis.updated_at
+        FROM "trade_campaign_analyses" analysis
+        JOIN "trade_campaigns" campaign ON campaign.id = analysis.campaign_id
+        WHERE campaign.id = ${id} AND campaign.owner_id = ${ownerId}
+          AND (${accountId ?? null}::text IS NULL OR campaign.mt5_account_id = ${accountId ?? null})
+        FOR UPDATE
+      `);
+      if (!rows.length) throw new NotFoundException(`Campaign ${id} not found`);
+      if (rows[0].updated_at.getTime() !== new Date(request.expectedUpdatedAt).getTime()) throw new ConflictException('Campaign analysis was updated by another request');
+      const current = await tx.tradeCampaignAnalysis.findUniqueOrThrow({ where: { id: rows[0].id }, include: { economicIndicators: { orderBy: [{ position: 'asc' }, { id: 'asc' }] } } });
+      const data: Record<string, unknown> = {};
+      for (const field of campaignAnalysisFields) if (request[field] !== undefined) data[field] = request[field];
+      if (request.primaryTrend !== undefined) data.primaryTrend = request.primaryTrend === null ? null : PrismaPrimaryTrend[request.primaryTrend.toUpperCase() as keyof typeof PrismaPrimaryTrend];
+      this.canonicalizeDisabledGroups(request, data);
+      this.canonicalizeAndValidate({ ...current, ...data });
+      if (request.economicIndicators !== undefined) {
+        const currentIds = new Set(current.economicIndicators.map((indicator) => indicator.id));
+        const suppliedIds = request.economicIndicators.flatMap((indicator) => indicator.id ? [indicator.id] : []);
+        if (suppliedIds.some((indicatorId) => !currentIds.has(indicatorId))) throw new BadRequestException('Economic indicator id does not belong to this campaign analysis');
+        await tx.tradeCampaignAnalysisEconomicIndicator.deleteMany({ where: { campaignAnalysisId: current.id, id: { in: [...currentIds].filter((indicatorId) => !suppliedIds.includes(indicatorId)) } } });
+        await tx.$executeRaw`UPDATE "trade_campaign_analysis_economic_indicators" SET "position" = -"position" - 1 WHERE "campaign_analysis_id" = ${current.id}`;
+        for (const [position, indicator] of request.economicIndicators.entries()) {
+          const indicatorData = { type: indicator.type.trim(), impact: indicator.impact === 'positive' ? PrismaIndicatorImpact.POSITIVE : PrismaIndicatorImpact.NEGATIVE, announcedAt: indicator.announcedAt ? new Date(indicator.announcedAt) : null, position };
+          if (indicator.id) await tx.tradeCampaignAnalysisEconomicIndicator.update({ where: { id: indicator.id }, data: indicatorData });
+          else await tx.tradeCampaignAnalysisEconomicIndicator.create({ data: { campaignAnalysisId: current.id, ...indicatorData } });
+        }
+      }
+      await tx.tradeCampaignAnalysis.update({ where: { id: current.id }, data });
+    });
+  }
   async patchCampaignMemo(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignMemoRequest): Promise<void> {
     if (!request || (request.memo !== null && typeof request.memo !== 'string')
       || typeof request.expectedUpdatedAt !== 'string' || Number.isNaN(Date.parse(request.expectedUpdatedAt))) {
@@ -194,7 +208,7 @@ export class TradeLogService {
       const previous = await tx.campaignMembership.findUnique({ where: { tradeId: trade.id } });
       if (previous && previous.campaignId !== request.campaignId) await this.prepareCampaignForMemberMove(tx, previous.campaignId, trade.id);
       const campaignId = request.campaignId ?? (await tx.tradeCampaign.create({
-        data: { rootTradeId: trade.id, tradingDate: this.seoulMidnight(trade.openedAt), ownerId, mt5AccountId: trade.mt5AccountId },
+        data: { rootTradeId: trade.id, tradingDate: this.seoulMidnight(trade.openedAt), ownerId, mt5AccountId: trade.mt5AccountId, analysis: { create: {} } },
       })).id;
       const target = await tx.tradeCampaign.findFirst({ where: { id: campaignId, ownerId } });
       if (!target || target.mt5AccountId !== trade.mt5AccountId) throw new BadRequestException('Campaign and trade account scope must match');
@@ -369,10 +383,9 @@ export class TradeLogService {
     if (!trade) throw new NotFoundException(`Trade ${id} not found`);
     return trade;
   }
-  private canonicalizeDisabledGroups(request: PatchTradeAnalysisRequest, data: Record<string, unknown>): void {
-    const groups: Array<[keyof PatchTradeAnalysisRequest, Array<keyof PatchTradeAnalysisRequest>]> = [
+  private canonicalizeDisabledGroups(request: PatchTradeCampaignAnalysisRequest, data: Record<string, unknown>): void {
+    const groups: Array<[keyof PatchTradeCampaignAnalysisRequest, Array<keyof PatchTradeCampaignAnalysisRequest>]> = [
       ['marketZoneEnabled', ['marketZoneHigh', 'marketZoneLow']],
-      ['chartPatternObserved', ['chartPatternTimeframe', 'chartPatternType']],
       ['retailPositionEnabled', ['retailBuyAveragePrice', 'retailSellAveragePrice', 'retailBuyRatio']],
       ['fibonacciEnabled', ['fibonacciStartPrice', 'fibonacciEndPrice']],
     ];
@@ -394,13 +407,13 @@ export class TradeLogService {
       }
     };
     group('marketZoneEnabled', ['marketZoneHigh', 'marketZoneLow']);
-    group('chartPatternObserved', ['chartPatternTimeframe', 'chartPatternType']);
     group('retailPositionEnabled', ['retailBuyAveragePrice', 'retailSellAveragePrice', 'retailBuyRatio']);
     group('fibonacciEnabled', ['fibonacciStartPrice', 'fibonacciEndPrice']);
     if (analysis.marketZoneEnabled && Number(analysis.marketZoneHigh) <= Number(analysis.marketZoneLow)) throw new BadRequestException('marketZoneHigh must exceed marketZoneLow');
     if (analysis.fibonacciEnabled && Number(analysis.fibonacciStartPrice) === Number(analysis.fibonacciEndPrice)) throw new BadRequestException('fibonacci endpoints must differ');
   }
   private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeCampaign {
+    if (!campaign.analysis) throw new Error(`Campaign ${campaign.id} lacks analysis`);
     const root = this.serialize(campaign.rootTrade, provenBalances);
     const members = campaign.memberships.map((membership) => this.serialize(membership.trade, provenBalances));
     const firstOpened = [...members]
@@ -456,7 +469,32 @@ export class TradeLogService {
       })),
       memo: campaign.memo ?? undefined,
       updatedAt: campaign.updatedAt.toISOString(),
-      analysisComplete: members.every((member) => member.analysisComplete),
+      analysisComplete: members.every((member) => member.analysisComplete) && this.campaignAnalysisComplete(campaign.analysis),
+      analysis: {
+        schemaVersion: 1,
+        primaryTrend: campaign.analysis.primaryTrend?.toLowerCase() as TradeCampaign['analysis']['primaryTrend'],
+        maTimeframes: campaign.analysis.maTimeframes as TradeCampaign['analysis']['maTimeframes'],
+        marketZoneEnabled: campaign.analysis.marketZoneEnabled,
+        marketZoneHigh: campaign.analysis.marketZoneHigh === null ? undefined : Number(campaign.analysis.marketZoneHigh),
+        marketZoneLow: campaign.analysis.marketZoneLow === null ? undefined : Number(campaign.analysis.marketZoneLow),
+        retailPositionEnabled: campaign.analysis.retailPositionEnabled,
+        retailBuyAveragePrice: campaign.analysis.retailBuyAveragePrice === null ? undefined : Number(campaign.analysis.retailBuyAveragePrice),
+        retailSellAveragePrice: campaign.analysis.retailSellAveragePrice === null ? undefined : Number(campaign.analysis.retailSellAveragePrice),
+        retailBuyRatio: campaign.analysis.retailBuyRatio === null ? undefined : Number(campaign.analysis.retailBuyRatio),
+        fibonacciEnabled: campaign.analysis.fibonacciEnabled,
+        fibonacciStartPrice: campaign.analysis.fibonacciStartPrice === null ? undefined : Number(campaign.analysis.fibonacciStartPrice),
+        fibonacciEndPrice: campaign.analysis.fibonacciEndPrice === null ? undefined : Number(campaign.analysis.fibonacciEndPrice),
+        economicIndicators: campaign.analysis.economicIndicators.map((indicator) => ({ id: indicator.id, type: indicator.type, impact: indicator.impact.toLowerCase() as 'positive' | 'negative', announcedAt: indicator.announcedAt?.toISOString(), position: indicator.position })),
+        entryReason: campaign.analysis.entryReason ?? undefined,
+        invalidationCondition: campaign.analysis.invalidationCondition ?? undefined,
+        takeProfitCondition: campaign.analysis.takeProfitCondition ?? undefined,
+        additionalEntryPlan: campaign.analysis.additionalEntryPlan ?? undefined,
+        tradeScore: campaign.analysis.tradeScore ?? undefined,
+        strengths: campaign.analysis.strengths ?? undefined,
+        weaknesses: campaign.analysis.weaknesses ?? undefined,
+        createdAt: campaign.analysis.createdAt.toISOString(),
+        updatedAt: campaign.analysis.updatedAt.toISOString(),
+      },
       members,
       conflicts: campaign.conflicts.map((conflict) => ({
         id: conflict.id,
@@ -469,15 +507,21 @@ export class TradeLogService {
       })),
     };
   }
-  private analysisComplete(analysis: TradeWithRelations['analysis']): boolean {
-    if (!analysis) return false;
-    const required = [analysis.baseTimeframe, analysis.primaryTrend, analysis.maArrangement, analysis.cross, analysis.stopLossLine];
-    if (required.some((field) => field === null || field === undefined || field === '')) return false;
-    if (analysis.cross === 'NONE') return false;
+  private executionAnalysisComplete(analysis: TradeWithRelations['analysis']): boolean {
+    if (!analysis?.baseTimeframe) return false;
     if (!analysis.bollingerBandCount && analysis.bollingerDirection) return false;
     if (analysis.bollingerBandCount && !analysis.bollingerDirection) return false;
+    return true;
+  }
+
+  private campaignAnalysisComplete(analysis: NonNullable<CampaignWithRelations['analysis']>): boolean {
+    if (!analysis?.primaryTrend) return false;
+    const maTimeframes = (analysis.maTimeframes ?? {}) as Record<string, { arrangement?: string; cross20_60?: string; cross20_120?: string }>;
+    if (['15m', '30m', '1h', '4h', '1D', '1W', '1MN'].some((timeframe) => {
+      const reading = maTimeframes[timeframe];
+      return !reading?.arrangement || !reading.cross20_60 || !reading.cross20_120;
+    })) return false;
     if (analysis.marketZoneEnabled && (analysis.marketZoneHigh === null || analysis.marketZoneLow === null)) return false;
-    if (analysis.chartPatternObserved && (!analysis.chartPatternTimeframe || !analysis.chartPatternType)) return false;
     if (analysis.retailPositionEnabled && (analysis.retailBuyAveragePrice === null || analysis.retailSellAveragePrice === null || analysis.retailBuyRatio === null)) return false;
     if (analysis.fibonacciEnabled && (analysis.fibonacciStartPrice === null || analysis.fibonacciEndPrice === null)) return false;
     return analysis.economicIndicators.every((indicator) => Boolean(indicator.type.trim()) && Boolean(indicator.impact));
@@ -504,7 +548,7 @@ export class TradeLogService {
     return {
       id: trade.id, accountId: trade.mt5AccountId!, mt5Server: optional(trade.mt5Server), symbol: trade.symbol, side: trade.side.toLowerCase() as 'long' | 'short',
       status: trade.status.toLowerCase() as TradeRecord['status'],
-      analysisComplete: this.analysisComplete(analysis),
+      analysisComplete: this.executionAnalysisComplete(analysis),
       strategy: optional(trade.strategy), thesis: optional(trade.thesis),
       entryRationale: optional(trade.entryRationale), exitRationale: optional(trade.exitRationale),
       takeProfitCriteria: optional(trade.takeProfitCriteria), stopLossCriteria: optional(trade.stopLossCriteria),
@@ -538,22 +582,17 @@ export class TradeLogService {
       entry: trade.entry ? { price: Number(trade.entry.price), quantity: decimal(trade.entry.quantity), occurredAt: trade.entry.occurredAt.toISOString(), note: optional(trade.entry.note) } : undefined,
       exit: trade.exit ? { price: Number(trade.exit.price), quantity: decimal(trade.exit.quantity), occurredAt: trade.exit.occurredAt.toISOString(), reason: optional(trade.exit.reason) as TradeRecord['exitReason'], note: optional(trade.exit.note) } : undefined,
       analysis: {
-        schemaVersion: 1,
+        schemaVersion: 3,
         baseTimeframe: optional(analysis.baseTimeframe),
-        primaryTrend: optional(analysis.primaryTrend)?.toLowerCase() as TradeRecord['analysis']['primaryTrend'],
         bollingerBandCount: optional(analysis.bollingerBandCount)?.toLowerCase() as TradeRecord['analysis']['bollingerBandCount'],
         bollingerDirection: optional(analysis.bollingerDirection)?.toLowerCase() as TradeRecord['analysis']['bollingerDirection'],
-        maArrangement: optional(analysis.maArrangement)?.toLowerCase() as TradeRecord['analysis']['maArrangement'],
-        cross: optional(analysis.cross)?.toLowerCase() as TradeRecord['analysis']['cross'],
-        stopLossLine: decimal(analysis.stopLossLine), marketZoneEnabled: analysis.marketZoneEnabled,
-        marketZoneHigh: decimal(analysis.marketZoneHigh), marketZoneLow: decimal(analysis.marketZoneLow),
-        chartPatternObserved: analysis.chartPatternObserved, chartPatternTimeframe: optional(analysis.chartPatternTimeframe),
-        chartPatternType: optional(analysis.chartPatternType)?.toLowerCase() as TradeRecord['analysis']['chartPatternType'],
-        retailPositionEnabled: analysis.retailPositionEnabled, retailBuyAveragePrice: decimal(analysis.retailBuyAveragePrice),
-        retailSellAveragePrice: decimal(analysis.retailSellAveragePrice), retailBuyRatio: decimal(analysis.retailBuyRatio),
-        fibonacciEnabled: analysis.fibonacciEnabled, fibonacciStartPrice: decimal(analysis.fibonacciStartPrice),
-        fibonacciEndPrice: decimal(analysis.fibonacciEndPrice),
-        economicIndicators: analysis.economicIndicators.map((indicator) => ({ id: indicator.id, type: indicator.type, impact: indicator.impact.toLowerCase() as 'positive' | 'negative', position: indicator.position })),
+        executionEvaluation: optional(analysis.executionEvaluation)?.toLowerCase() as TradeRecord['analysis']['executionEvaluation'],
+        unplannedAdditionalEntry: analysis.unplannedAdditionalEntry,
+        excessiveSize: analysis.excessiveSize,
+        stopLossViolation: analysis.stopLossViolation,
+        earlyExit: analysis.earlyExit,
+        lateExit: analysis.lateExit,
+        otherViolation: optional(analysis.otherViolation),
         createdAt: analysis.createdAt.toISOString(), updatedAt: analysis.updatedAt.toISOString(),
       },
       createdAt: trade.createdAt.toISOString(), updatedAt: trade.updatedAt.toISOString(),

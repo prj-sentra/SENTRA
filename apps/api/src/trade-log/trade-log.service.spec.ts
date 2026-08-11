@@ -9,8 +9,8 @@ const rawTrade = {
   takeProfitPrice: null, stopLossPrice: null, openedAt: null, closedAt: null,
   seedBalance: null, riskAmount: null, riskPercent: null, createdAt: new Date(), updatedAt: new Date(),
   entry: null, exit: null,
-  analysis: { schemaVersion: 1, baseTimeframe: null, primaryTrend: null, bollingerBandCount: null,
-    bollingerDirection: null, maArrangement: null, cross: null, stopLossLine: null,
+  analysis: { schemaVersion: 2, baseTimeframe: null, primaryTrend: null, bollingerBandCount: null,
+    bollingerDirection: null, maTimeframes: {},
     marketZoneEnabled: false, marketZoneHigh: null, marketZoneLow: null,
     chartPatternObserved: false, chartPatternTimeframe: null, chartPatternType: null,
     retailPositionEnabled: false, retailBuyAveragePrice: null, retailSellAveragePrice: null,
@@ -133,24 +133,24 @@ describe('TradeLogService historical MT5 campaign operations', () => {
 describe('TradeLogService analysis completion', () => {
   const completeAnalysis = () => ({
     ...rawTrade.analysis,
-    baseTimeframe: 'H1', primaryTrend: 'UP', maArrangement: 'BULLISH', cross: 'GOLDEN_20_60',
-    stopLossLine: 100,
+    baseTimeframe: 'H1',
+    primaryTrend: 'UP',
+    maTimeframes: Object.fromEntries(['15m', '30m', '1h', '4h', '1D', '1W', '1MN'].map((timeframe) => [timeframe, { arrangement: 'bullish', cross20_60: 'golden', cross20_120: 'golden' }])),
   });
 
   it('accepts complete technical analysis with a real cross and no Bollinger touch', () => {
     const service = new TradeLogService(prisma() as never);
-    expect((service as any).analysisComplete(completeAnalysis())).toBe(true);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), cross: 'NONE' })).toBe(false);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), bollingerDirection: 'NORMAL' })).toBe(false);
+    expect((service as any).campaignAnalysisComplete(completeAnalysis())).toBe(true);
+    expect((service as any).campaignAnalysisComplete({ ...completeAnalysis(), maTimeframes: { ...completeAnalysis().maTimeframes, '1h': { arrangement: 'bullish', cross20_60: 'golden' } } })).toBe(false);
+    expect((service as any).executionAnalysisComplete({ ...completeAnalysis(), bollingerDirection: 'NORMAL' })).toBe(false);
   });
 
   it('requires Bollinger direction only when a band was touched and enforces enabled conditional groups', () => {
     const service = new TradeLogService(prisma() as never);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), bollingerBandCount: 'ONE_BAND', bollingerDirection: null })).toBe(false);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), marketZoneEnabled: true, marketZoneHigh: 110, marketZoneLow: null })).toBe(false);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), chartPatternObserved: true, chartPatternTimeframe: null, chartPatternType: null })).toBe(false);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), retailPositionEnabled: true, retailBuyAveragePrice: 100, retailSellAveragePrice: null, retailBuyRatio: 50 })).toBe(false);
-    expect((service as any).analysisComplete({ ...completeAnalysis(), fibonacciEnabled: true, fibonacciStartPrice: 100, fibonacciEndPrice: null })).toBe(false);
+    expect((service as any).executionAnalysisComplete({ ...completeAnalysis(), bollingerBandCount: 'ONE_BAND', bollingerDirection: null })).toBe(false);
+    expect((service as any).campaignAnalysisComplete({ ...completeAnalysis(), marketZoneEnabled: true, marketZoneHigh: 110, marketZoneLow: null })).toBe(false);
+    expect((service as any).campaignAnalysisComplete({ ...completeAnalysis(), retailPositionEnabled: true, retailBuyAveragePrice: 100, retailSellAveragePrice: null, retailBuyRatio: 50 })).toBe(false);
+    expect((service as any).campaignAnalysisComplete({ ...completeAnalysis(), fibonacciEnabled: true, fibonacciStartPrice: 100, fibonacciEndPrice: null })).toBe(false);
   });
 
 });
@@ -214,6 +214,7 @@ describe('TradeLogService initial-plan metric serialization', () => {
     const campaign = (service as any).serializeCampaign({
       id: 'campaign-1', rootTradeId: unproven.id, mt5AccountId: 'account-1', tradingDate: new Date('2026-08-10T00:00:00.000Z'),
       updatedAt: new Date('2026-08-10T12:00:00.000Z'),
+      analysis: { primaryTrend: null, maTimeframes: {}, marketZoneEnabled: false, marketZoneHigh: null, marketZoneLow: null, chartPatternObserved: false, chartPatternTimeframe: null, chartPatternType: null, retailPositionEnabled: false, retailBuyAveragePrice: null, retailSellAveragePrice: null, retailBuyRatio: null, fibonacciEnabled: false, fibonacciStartPrice: null, fibonacciEndPrice: null, economicIndicators: [], createdAt: new Date(), updatedAt: new Date() },
       rootTrade: unproven, memberships: [{ trade: unproven }], images: [], conflicts: [],
     });
     expect(campaign.seedBalance).toBeUndefined();

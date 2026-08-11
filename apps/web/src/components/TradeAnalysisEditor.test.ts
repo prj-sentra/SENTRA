@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalAnalysisPatch } from './TradeAnalysisEditor';
+import { canonicalCampaignAnalysisPatch } from './TradeAnalysisEditor';
 
 describe('analysis request canonicalization', () => {
   it('clears every dependent value when a populated group is disabled', () => {
-    const patch = canonicalAnalysisPatch({
+    const patch = canonicalCampaignAnalysisPatch({
       marketZoneEnabled: false,
       marketZoneHigh: 120,
       marketZoneLow: 100,
-      chartPatternObserved: false,
-      chartPatternTimeframe: 'M15',
-      chartPatternType: 'double_top',
       retailPositionEnabled: false,
       retailBuyAveragePrice: 101,
       retailSellAveragePrice: 102,
@@ -23,8 +20,6 @@ describe('analysis request canonicalization', () => {
     expect(patch).toMatchObject({
       marketZoneHigh: null,
       marketZoneLow: null,
-      chartPatternTimeframe: null,
-      chartPatternType: null,
       retailBuyAveragePrice: null,
       retailSellAveragePrice: null,
       retailBuyRatio: null,

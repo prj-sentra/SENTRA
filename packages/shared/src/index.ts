@@ -4,32 +4,52 @@ export type TradeAnalysisPrimaryTrend = 'up' | 'sideways' | 'down';
 export type TradeAnalysisBollingerBandCount = 'one_band' | 'two_band';
 export type TradeAnalysisBollingerDirection = 'normal' | 'reverse' | 'chase';
 export type TradeAnalysisMaArrangement = 'bullish' | 'bearish' | 'congested';
-export type TradeAnalysisCross = 'none' | 'golden_20_60' | 'golden_20_120' | 'dead_20_60' | 'dead_20_120';
+export type TradeAnalysisCrossDirection = 'none' | 'golden' | 'dead';
 export type TradeAnalysisChartPatternType = 'double_top' | 'double_bottom' | 'head_shoulders' | 'inverse_head_shoulders';
 export type TradeAnalysisEconomicIndicatorImpact = 'positive' | 'negative';
+export type TradeExecutionEvaluation = 'as_planned' | 'plan_violated';
 
-export interface TradeAnalysisEconomicIndicator { id: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; position: number; }
+export interface TradeAnalysisEconomicIndicator { id: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; announcedAt?: string; position: number; }
+export type TradeAnalysisMaTimeframe = '15m' | '30m' | '1h' | '4h' | '1D' | '1W' | '1MN';
+export interface TradeAnalysisMaReading { arrangement?: TradeAnalysisMaArrangement; cross20_60?: TradeAnalysisCrossDirection; cross20_120?: TradeAnalysisCrossDirection; chartPattern?: TradeAnalysisChartPatternType; }
+export type TradeAnalysisMaTimeframes = Partial<Record<TradeAnalysisMaTimeframe, TradeAnalysisMaReading>>;
 export interface TradeAnalysis {
-  schemaVersion: 1; baseTimeframe?: string; primaryTrend?: TradeAnalysisPrimaryTrend;
+  schemaVersion: 3; baseTimeframe?: string;
   bollingerBandCount?: TradeAnalysisBollingerBandCount; bollingerDirection?: TradeAnalysisBollingerDirection;
-  maArrangement?: TradeAnalysisMaArrangement; cross?: TradeAnalysisCross; stopLossLine?: number;
+  executionEvaluation?: TradeExecutionEvaluation;
+  unplannedAdditionalEntry?: boolean; excessiveSize?: boolean; stopLossViolation?: boolean; earlyExit?: boolean; lateExit?: boolean;
+  otherViolation?: string;
+  createdAt: string; updatedAt: string;
+}
+export interface TradeCampaignAnalysis {
+  schemaVersion: 1; primaryTrend?: TradeAnalysisPrimaryTrend;
+  maTimeframes: TradeAnalysisMaTimeframes;
   marketZoneEnabled: boolean; marketZoneHigh?: number; marketZoneLow?: number;
-  chartPatternObserved: boolean; chartPatternTimeframe?: string; chartPatternType?: TradeAnalysisChartPatternType;
   retailPositionEnabled: boolean; retailBuyAveragePrice?: number; retailSellAveragePrice?: number; retailBuyRatio?: number;
   fibonacciEnabled: boolean; fibonacciStartPrice?: number; fibonacciEndPrice?: number;
-  economicIndicators: TradeAnalysisEconomicIndicator[]; createdAt: string; updatedAt: string;
+  economicIndicators: TradeAnalysisEconomicIndicator[];
+  entryReason?: string; invalidationCondition?: string; takeProfitCondition?: string; additionalEntryPlan?: string;
+  tradeScore?: number; strengths?: string; weaknesses?: string;
+  createdAt: string; updatedAt: string;
 }
-export interface TradeAnalysisEconomicIndicatorInput { id?: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; }
+export interface TradeAnalysisEconomicIndicatorInput { id?: string; type: string; impact: TradeAnalysisEconomicIndicatorImpact; announcedAt?: string | null; }
 export interface PatchTradeAnalysisRequest {
-  expectedUpdatedAt: string; baseTimeframe?: string | null; primaryTrend?: TradeAnalysisPrimaryTrend | null;
+  expectedUpdatedAt: string; baseTimeframe?: string | null;
   bollingerBandCount?: TradeAnalysisBollingerBandCount | null; bollingerDirection?: TradeAnalysisBollingerDirection | null;
-  maArrangement?: TradeAnalysisMaArrangement | null; cross?: TradeAnalysisCross | null; stopLossLine?: number | null;
+  executionEvaluation?: TradeExecutionEvaluation | null;
+  unplannedAdditionalEntry?: boolean; excessiveSize?: boolean; stopLossViolation?: boolean; earlyExit?: boolean; lateExit?: boolean;
+  otherViolation?: string | null;
   plannedTakeProfitPrice?: number | null; plannedStopLossPrice?: number | null;
+}
+export interface PatchTradeCampaignAnalysisRequest {
+  expectedUpdatedAt: string; primaryTrend?: TradeAnalysisPrimaryTrend | null;
+  maTimeframes?: TradeAnalysisMaTimeframes;
   marketZoneEnabled?: boolean; marketZoneHigh?: number | null; marketZoneLow?: number | null;
-  chartPatternObserved?: boolean; chartPatternTimeframe?: string | null; chartPatternType?: TradeAnalysisChartPatternType | null;
   retailPositionEnabled?: boolean; retailBuyAveragePrice?: number | null; retailSellAveragePrice?: number | null; retailBuyRatio?: number | null;
   fibonacciEnabled?: boolean; fibonacciStartPrice?: number | null; fibonacciEndPrice?: number | null;
   economicIndicators?: TradeAnalysisEconomicIndicatorInput[];
+  entryReason?: string | null; invalidationCondition?: string | null; takeProfitCondition?: string | null; additionalEntryPlan?: string | null;
+  tradeScore?: number | null; strengths?: string | null; weaknesses?: string | null;
 }
 export interface PatchTradeCampaignMemoRequest { memo: string | null; expectedUpdatedAt: string; }
 export interface TradeEntry { price: number; quantity?: number; occurredAt: string; note?: string; }
@@ -38,7 +58,7 @@ export interface TradeExit { price: number; quantity?: number; occurredAt: strin
 export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; accountId: string; mt5Server?: string; strategy?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: TradeExitReason; realizedPnl?: number; openedAt?: string; closedAt?: string; seedBalance?: number; plannedTakeProfitPrice?: number; plannedStopLossPrice?: number; riskAmount?: number; riskPercent?: number; returnPercent?: number; rr?: number; analysisComplete: boolean; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; createdAt: string; updatedAt: string; }
 export type CampaignMembershipSource = 'auto' | 'manual';
 export interface CampaignConflict { id: string; tradeId: string; candidateCampaignIds: string[]; status: 'unresolved' | 'resolved'; resolvedCampaignId?: string; createdAt: string; resolvedAt?: string; }
-export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; members: TradeRecord[]; conflicts: CampaignConflict[]; }
+export interface TradeCampaign { id: string; rootTradeId: string; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; analysis: TradeCampaignAnalysis; members: TradeRecord[]; conflicts: CampaignConflict[]; }
 export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
 export interface RelinkTradeCampaignRequest { accountId: string; tradeId: string; campaignId?: string; }
 export interface ResolveCampaignConflictRequest { accountId: string; campaignId: string; }

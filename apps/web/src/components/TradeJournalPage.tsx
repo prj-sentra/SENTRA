@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignMemoRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { TradeRecordCard } from './TradeRecordCard';
 
 export interface TradeJournalPageProps {
@@ -12,7 +12,9 @@ export interface TradeJournalPageProps {
   error?: string | null;
   imageUrl: (campaignId: string, imageId: string) => string;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
+  onPatchCampaignAnalysis: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
   onPatchMemo: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
+  onRefresh?: () => Promise<void>;
   onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
   onReorderImages: (campaignId: string, imageIds: string[]) => Promise<void>;
   onDeleteImage: (campaignId: string, imageId: string) => Promise<void>;
@@ -40,6 +42,6 @@ export function TradeJournalPage({ campaigns, date, previousDate, nextDate, onSe
       {toolbar ? <div className="journal-page-toolbar">{toolbar}</div> : null}
     </header>
     {error ? <p className="error" role="alert">{error}</p> : null}
-    {loading ? <p className="journal-state" role="status">거래 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 거래 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => <TradeRecordCard key={campaign.id} campaign={campaign} {...actions} />)}</div>}
+    {loading && campaigns.length === 0 ? <p className="journal-state" role="status">거래 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 거래 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => <TradeRecordCard key={campaign.id} campaign={campaign} {...actions} />)}</div>}
   </section>;
 }

@@ -461,7 +461,7 @@ export class Mt5SyncService {
         const tradingDate = seoulTradingDate(opened.timeMscUtc);
         const campaign = await tx.tradeCampaign.upsert({
           where: { rootTradeId: trade.id },
-          create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId },
+          create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId, analysis: { create: {} } },
           update: {},
         });
         await tx.campaignMembership.create({

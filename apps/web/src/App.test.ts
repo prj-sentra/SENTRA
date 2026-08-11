@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { PatchTradeAnalysisRequest, TradeCampaignImage } from '@trading-journal/shared';
-import { canonicalAnalysisPatch } from './components/TradeAnalysisEditor';
+import type { PatchTradeCampaignAnalysisRequest, TradeCampaignImage } from '@trading-journal/shared';
+import { canonicalCampaignAnalysisPatch } from './components/TradeAnalysisEditor';
 import { moveGalleryImage } from './components/gallery-order';
 
 describe('redesigned journal web contracts', () => {
   it('canonicalizes disabled analysis conditionals and keeps the optimistic token', () => {
-    const patch = canonicalAnalysisPatch({
+    const patch = canonicalCampaignAnalysisPatch({
       baseTimeframe: '1h',
       marketZoneEnabled: false,
-      chartPatternObserved: false,
       retailPositionEnabled: false,
       fibonacciEnabled: false,
       economicIndicators: [{ type: 'CPI', impact: 'positive' }],
@@ -16,11 +15,10 @@ describe('redesigned journal web contracts', () => {
     expect(patch).toMatchObject({
       expectedUpdatedAt: '2026-08-07T00:00:00.000Z',
       marketZoneHigh: null, marketZoneLow: null,
-      chartPatternTimeframe: null, chartPatternType: null,
       retailBuyAveragePrice: null, retailSellAveragePrice: null, retailBuyRatio: null,
       fibonacciStartPrice: null, fibonacciEndPrice: null,
       economicIndicators: [{ type: 'CPI', impact: 'positive' }],
-    } satisfies Partial<PatchTradeAnalysisRequest>);
+    } satisfies Partial<PatchTradeCampaignAnalysisRequest>);
   });
 
   it('reorders only a valid gallery neighbor and preserves image order otherwise', () => {
