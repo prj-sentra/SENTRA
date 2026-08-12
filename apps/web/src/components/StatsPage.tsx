@@ -57,7 +57,15 @@ function FilterOptionsPanel({ unit, options, filters, setFilters }: { unit: Trad
   const valuesFor = (dimension: TradeStatsDimension) => [...(options[dimension] ?? [])].sort((left, right) => dimension === 'entryWeekday' ? weekdayOrder.indexOf(left.key) - weekdayOrder.indexOf(right.key) : left.label.localeCompare(right.label, 'ko'));
   const toggle = (dimension: TradeStatsDimension, key: string) => {
     const filterKey = predicateFilter[dimension], selected = (filters[filterKey] as string[] | undefined) ?? [];
-    setFilters({ ...filters, [filterKey]: selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key] });
+    const nextSelected = selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key];
+    const grouped = filters.groupDimensions?.includes(dimension) ?? false;
+    setFilters({
+      ...filters,
+      [filterKey]: nextSelected.length ? nextSelected as never : undefined,
+      groupDimensions: nextSelected.length
+        ? grouped ? filters.groupDimensions : [...(filters.groupDimensions ?? []), dimension]
+        : filters.groupDimensions?.filter((value) => value !== dimension),
+    });
   };
   const toggleAll = (dimension: TradeStatsDimension) => {
     const filterKey = predicateFilter[dimension], values = valuesFor(dimension).map(({ key }) => key);
@@ -105,7 +113,15 @@ function DashboardFilterSidebar({ unit, setUnit, filters, setFilters, throughLat
   const valuesFor = (dimension: TradeStatsDimension) => [...(options[dimension] ?? [])].sort((left, right) => dimension === 'entryWeekday' ? weekdayOrder.indexOf(left.key) - weekdayOrder.indexOf(right.key) : left.label.localeCompare(right.label, 'ko'));
   const toggle = (dimension: TradeStatsDimension, key: string) => {
     const filterKey = predicateFilter[dimension], selected = (filters[filterKey] as string[] | undefined) ?? [];
-    setFilters({ ...filters, [filterKey]: selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key] });
+    const nextSelected = selected.includes(key) ? selected.filter((value) => value !== key) : [...selected, key];
+    const grouped = filters.groupDimensions?.includes(dimension) ?? false;
+    setFilters({
+      ...filters,
+      [filterKey]: nextSelected.length ? nextSelected as never : undefined,
+      groupDimensions: nextSelected.length
+        ? grouped ? filters.groupDimensions : [...(filters.groupDimensions ?? []), dimension]
+        : filters.groupDimensions?.filter((value) => value !== dimension),
+    });
   };
   const toggleAll = (dimension: TradeStatsDimension) => {
     const filterKey = predicateFilter[dimension], values = valuesFor(dimension).map(({ key }) => key);

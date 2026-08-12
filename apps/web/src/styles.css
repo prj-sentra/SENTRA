@@ -1338,8 +1338,9 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .dashboard-filter-rail { display: grid; align-content: start; gap: 8px; padding: 14px 10px; border-right: 1px solid var(--border); background: var(--layer-01); }
 .dashboard-filter-rail .secondary-button { width: 100%; min-height: 40px; padding: 6px; font-size: .72rem; }
 .dashboard-unit { display: grid; grid-template-columns: 1fr; margin-bottom: 4px; }
-.dashboard-unit button { min-width: 0; padding-inline: 4px; font-size: .7rem; }
-.dashboard-unit button + button { border-top: 1px solid var(--border); }
+.dashboard-unit button { min-width: 0; border: 1px solid var(--border); padding-inline: 4px; font-size: .7rem; }
+.dashboard-unit button:first-child { border-radius: 4px 4px 0 0; }
+.dashboard-unit button:last-child { margin-top: -1px; border-left: 1px solid var(--border); border-radius: 0 0 4px 4px; }
 .dashboard-filter-expanded { display: grid; min-width: 0; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; background: var(--surface); }
 .dashboard-filter-expanded > header { display: grid; gap: 2px; padding: 15px 16px 11px; border-bottom: 1px solid var(--border); }
 .dashboard-filter-expanded > header span { color: var(--text-muted); font-size: .68rem; }
@@ -1347,9 +1348,9 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .dashboard-filter-dates > div { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 5px; }
 .dashboard-filter-dates input[type='date'] { width: 100%; min-width: 0; height: 36px; border: 1px solid var(--border); padding: 0 7px; background: var(--surface); font: inherit; font-size: .7rem; }
 .dashboard-filter-criteria { overflow-y: auto; padding: 5px 14px 18px; }
-.dashboard-filter-criteria fieldset { margin: 0; padding: 14px 2px 10px; border: 0; border-top: 1px solid var(--border); }
-.dashboard-filter-criteria fieldset:first-child { border-top: 0; }
-.dashboard-filter-criteria legend { padding: 0 0 2px; }
+.dashboard-filter-criteria fieldset { margin: 0; padding: 12px 2px 9px; border: 0; }
+.dashboard-filter-criteria legend { display: flex; width: 100%; align-items: center; gap: 9px; padding: 0 0 2px; }
+.dashboard-filter-criteria legend::after { flex: 1; border-top: 1px solid var(--border); content: ''; }
 .dashboard-filter-criteria fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
 .dashboard-filter-criteria fieldset > div > label { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 3px; color: var(--text-secondary); background: var(--layer-01); cursor: pointer; font-size: .7rem; }
 .dashboard-filter-criteria fieldset > div > label:has(input:checked) { color: var(--blue); background: #edf5ff; font-weight: 650; }
