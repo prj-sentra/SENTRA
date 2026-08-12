@@ -290,6 +290,10 @@ describe('TradeLogService statistics helpers', () => {
       { id: 'early', type: 'trade', trades: [record('early', 10, 1, '2026-08-01T00:00:00.000Z', '2026-08-01T01:00:00.000Z', 1000)], openedAt: '2026-08-01T00:00:00.000Z', closedAt: '2026-08-01T01:00:00.000Z', realizedPnl: 10, lots: 1, seedBalance: 1000, sessions: ['asia'] },
     ];
     expect(service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1' }).day.points.map((point: any) => point.equity)).toEqual([10, -10]);
+    expect(service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1', unit: 'campaign' }).sequence.points[0]).toEqual(expect.objectContaining({
+      timestamp: Date.parse('2026-08-01T01:00:00.000Z'),
+      label: expect.stringContaining('매매 1'),
+    }));
     expect(service.priorStatsBounds({ from: '2026-08-02T00:00:00.000Z', to: '2026-08-03T00:00:00.000Z' })).toEqual({ from: '2026-07-31T23:59:59.999Z', to: '2026-08-01T23:59:59.999Z' });
     expect(service.priorStatsBounds({ from: '2026-08-02', to: '2026-08-03' })).toEqual({ from: '2026-07-31', to: '2026-08-01' });
     expect(service.statsDrawdown(samples.sort((a: any, b: any) => a.closedAt.localeCompare(b.closedAt)), [])).toMatchObject({ money: -20, percent: expect.closeTo(-20 / 1010 * 100) });

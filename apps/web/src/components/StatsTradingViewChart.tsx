@@ -18,9 +18,8 @@ export function StatsTradingViewChart({ points, value, label, percent = false }:
     const container = containerRef.current;
     if (!container || navigator.userAgent.includes('jsdom')) return;
     const labels = new Map<number, string>();
-    const base = Math.floor(Date.UTC(2000, 0, 1) / 1000);
-    const data = points.map((point, index) => {
-      const time = (base + index * 86400) as UTCTimestamp;
+    const data = points.map((point) => {
+      const time = Math.floor(point.timestamp / 1000) as UTCTimestamp;
       labels.set(time, point.label);
       return { time, value: value(point) };
     });
@@ -34,7 +33,10 @@ export function StatsTradingViewChart({ points, value, label, percent = false }:
       crosshair: { vertLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' }, horzLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' } },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
-      localization: { priceFormatter: (entry: number) => percent ? `${entry.toFixed(1)}%` : entry.toLocaleString('ko-KR', { maximumFractionDigits: 2 }) },
+      localization: {
+        priceFormatter: (entry: number) => percent ? `${entry.toFixed(1)}%` : entry.toLocaleString('ko-KR', { maximumFractionDigits: 2 }),
+        timeFormatter: (time: Time) => labels.get(Number(time)) ?? new Date(Number(time) * 1000).toLocaleString('ko-KR'),
+      },
     });
     chartRef.current = chart;
     const series = chart.addSeries(LineSeries, { color: '#0f62fe', lineWidth: 2, lineType: LineType.WithSteps, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: true });
