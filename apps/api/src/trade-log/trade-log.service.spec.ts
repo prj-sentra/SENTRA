@@ -341,6 +341,22 @@ describe('TradeLogService expanded statistics', () => {
     const series = (new TradeLogService(prisma() as never) as any).statsSeriesByGranularity([], { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 }, { accountId: 'account-1' });
     expect(series).toEqual(expect.objectContaining({ sequence: expect.objectContaining({ points: [] }), day: expect.objectContaining({ points: [], activeBucketAverage: 0, calendarBucketAverage: 0 }), week: expect.any(Object), month: expect.any(Object), year: expect.any(Object) }));
   });
+  it('combines Bollinger touch count and direction into localized statistics keys', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const sample = {
+      openedAt: '2026-08-01T00:00:00.000Z',
+      closedAt: '2026-08-01T01:00:00.000Z',
+      sessions: ['asia'],
+      trades: [
+        { analysis: { bollingerBandCount: 'one_band', bollingerDirection: 'normal' } },
+        { analysis: { bollingerBandCount: undefined, bollingerDirection: undefined } },
+      ],
+    };
+    expect(service.statsDimension(sample, 'bollingerSetup')).toEqual(['one_band:normal', 'no_touch']);
+    expect(service.statsDimensionLabel('bollingerSetup', 'one_band:normal')).toBe('원볼 정볼');
+    expect(service.statsDimensionLabel('bollingerSetup', 'two_band:chase')).toBe('투볼 추볼');
+    expect(service.statsDimensionLabel('bollingerSetup', 'no_touch')).toBe('터치 안함');
+  });
 });
 describe('TradeLogService stats range and risk coverage', () => {
   const preferences = { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 };
