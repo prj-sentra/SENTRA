@@ -1,0 +1,94 @@
+{
+  "kind": "api-production-recovery-test-report",
+  "sourceHash": "dbab4a84c597a4e65d6ab2d1b1d94af28c6e31d2",
+  "generatedAt": "2026-08-12T13:57:00Z",
+  "backup": "/home/hoya/trading-journal-backups/pre-ledger-repair-20260812.dump",
+  "verification": [
+    {
+      "command": "pnpm --filter @trading-journal/api test -- mt5-sync.stateful.spec.ts",
+      "result": "10 passed"
+    },
+    {
+      "command": "pnpm test",
+      "result": "API 163 passed; web 63 passed; configured skips unchanged"
+    },
+    {
+      "command": "pnpm typecheck && pnpm build",
+      "result": "passed"
+    },
+    {
+      "command": "TEST_DATABASE_URL=<disposable sentra_test> campaign serialization integration",
+      "result": "4 passed"
+    },
+    {
+      "command": "docker compose up -d --build && public /health",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "liveRecovery": {
+    "MAIN (low spread)": {
+      "ledger": "VERIFIED",
+      "calculatedBalance": "999.91",
+      "currentBalance": "999.91",
+      "trades": 89,
+      "tradesWithSeedBalance": 89,
+      "provenPositions": 89
+    },
+    "망치뿅": {
+      "ledger": "VERIFIED",
+      "calculatedBalance": "0",
+      "currentBalance": "0"
+    },
+    "Jxhxxn10": {
+      "ledger": "DIVERGED",
+      "calculatedBalance": "57.35",
+      "currentBalance": "692.71",
+      "trades": 12,
+      "tradesWithSeedBalance": 0,
+      "note": "Genuine historical mismatch remains visible; no seed was invented."
+    }
+  },
+  "invariants": [
+    "Incremental reconstruction reads every persisted account Deal and records epoch ledger coverage.",
+    "A genuine mismatch preserves existing PROVEN position assertions and Trade seed balances.",
+    "A first mismatch without prior proof creates no guessed assertion.",
+    "A verified incremental rebuild projects every persisted position and restores missing seed balances."
+  ],
+  "backupEvidence": {
+    "path": "/home/hoya/trading-journal-backups/pre-ledger-repair-20260812.dump",
+    "sha256": "44cec7c5a4aedb36272f5a023f7814f6b7962abf3323a75e808048d7b1a7fcc4",
+    "pgRestoreListEntries": 212,
+    "restoreRehearsal": {
+      "database": "ledger_restore_test (isolated, dropped after verification)",
+      "result": "passed",
+      "counts": {
+        "users": 6,
+        "accounts": 7,
+        "trades": 101,
+        "deals": 229,
+        "entryBalances": 101,
+        "ledgerStates": 5
+      },
+      "representativePreRepairState": {
+        "MAIN (low spread)": {
+          "ledger": "DIVERGED",
+          "calculated": "999.91",
+          "current": "999.91",
+          "trades": 89,
+          "seeded": 88
+        },
+        "Jxhxxn10": {
+          "ledger": "DIVERGED",
+          "calculated": "27.61",
+          "current": "692.71",
+          "trades": 11,
+          "seeded": 0
+        }
+      }
+    }
+  }
+}

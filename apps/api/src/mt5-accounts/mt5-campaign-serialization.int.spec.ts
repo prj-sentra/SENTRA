@@ -84,7 +84,7 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
         mode: request.mode,
         snapshotToMsc: request.snapshotToMsc,
         page: { hasMore: false, bytes: 1 },
-        account: { currency: 'USD', currencyDigits: 2, currentBalance: '10011' },
+        account: { currency: 'USD', currencyDigits: 2, currentBalance: '11' },
         deals: [{
           ticket: '9001', order: '8001', positionId: '5001', time: 1_760_000_000, timeMsc: 1_760_000_000_000,
           type: 0, entry: 0, magic: '0', reason: 0, volume: 1, price: 100, commission: -1, swap: 0, profit: 12, fee: 0,
@@ -191,6 +191,12 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
       const results = await Promise.all([winning, contending]);
       const syncResult = winner === 'sync' ? results[0] : results[1];
       expect(syncResult).toMatchObject({ state: 'completed' });
+      expect(await database.mt5AccountBalanceLedgerState.findUniqueOrThrow({
+        where: { accountId: fixture.accountId },
+      })).toMatchObject({ status: 'VERIFIED', historyFromMsc: 0n });
+      expect((await database.trade.findFirstOrThrow({
+        where: { mt5AccountId: fixture.accountId, mt5PositionId: 5001n },
+      })).seedBalance?.toString()).toBe('0');
       await assertOutcome(fixture, kind === 'resolve');
     } finally {
       lockGate.release();

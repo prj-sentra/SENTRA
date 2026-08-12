@@ -186,7 +186,7 @@ export class Mt5SyncService {
           return { importedCount: projected, ledger: null };
         }
         const ledger = await this.rebuildBalanceLedger(tx, accountId, account.canonicalServer, account.accountLogin, payload.account.currency, payload.account.currencyDigits, payload.account.currentBalance, { fromMsc: mode === 'bootstrap' ? FULL_HISTORY_FROM_MSC : changedSinceMsc!, toMsc: snapshotToMsc }, syncedAt);
-        if (mode === 'bootstrap') {
+        if (mode === 'bootstrap' || ledger.verified) {
           for (const positionId of ledger.positionIds) changedPositions.add(positionId);
         }
         const projected = await this.projectTrades(tx, ownerId, accountId, account.server, account.canonicalServer, account.accountLogin, [...changedPositions], ledger.assertions, []);
@@ -339,21 +339,23 @@ export class Mt5SyncService {
     }
 
     const currentBalance = new Prisma.Decimal(currentBalanceValue).toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
-    const verified = historyRange.fromMsc === FULL_HISTORY_FROM_MSC && balance.equals(currentBalance);
+    // This ledger is rebuilt from every raw Deal persisted for the account.
+    // The bridge request overlap is therefore not the ledger coverage boundary.
+    const verified = balance.equals(currentBalance);
     await tx.mt5AccountBalanceEvent.deleteMany({ where: { accountId } });
     if (events.length) await tx.mt5AccountBalanceEvent.createMany({ data: events });
     await tx.mt5AccountBalanceLedgerState.upsert({
       where: { accountId },
       create: {
         accountId, server, accountLogin, currency, currencyDigits, calculatedBalance: balance, currentBalance,
-        historyFromMsc: BigInt(historyRange.fromMsc), historyToMsc: BigInt(historyRange.toMsc),
+        historyFromMsc: BigInt(FULL_HISTORY_FROM_MSC), historyToMsc: BigInt(historyRange.toMsc),
         ledgerVersion: BALANCE_LEDGER_VERSION, status: verified ? 'VERIFIED' : 'DIVERGED',
         lastVerifiedAt: verified ? fetchedAt : null,
         lastError: verified ? null : 'CALCULATED_BALANCE_MISMATCH',
       },
       update: {
         server, accountLogin, currency, currencyDigits, calculatedBalance: balance, currentBalance,
-        historyFromMsc: BigInt(historyRange.fromMsc), historyToMsc: BigInt(historyRange.toMsc),
+        historyFromMsc: BigInt(FULL_HISTORY_FROM_MSC), historyToMsc: BigInt(historyRange.toMsc),
         ledgerVersion: BALANCE_LEDGER_VERSION, status: verified ? 'VERIFIED' : 'DIVERGED',
         ...(verified && { lastVerifiedAt: fetchedAt }),
         lastError: verified ? null : 'CALCULATED_BALANCE_MISMATCH',
@@ -367,6 +369,22 @@ export class Mt5SyncService {
       const rows = byPosition.get(positionId) ?? [];
       rows.push(deal);
       byPosition.set(positionId, rows);
+    }
+    if (!verified) {
+      const persisted = await tx.mt5PositionEntryBalance.findMany({
+        where: { accountId, state: 'PROVEN', preEntryBalance: { not: null } },
+        select: { positionId: true, state: true, preEntryBalance: true },
+      });
+      return {
+        positionIds: [...byPosition.keys()],
+        assertions: persisted.map((row) => ({
+          positionId: row.positionId.toString(),
+          state: row.state,
+          preEntryBalance: row.preEntryBalance!.toString(),
+        })),
+        verified,
+        calculatedBalance: balance,
+      };
     }
     await tx.mt5PositionEntryBalance.deleteMany({ where: { accountId } });
     const assertions: Array<{ positionId: string; state: string; preEntryBalance?: string }> = [];
@@ -460,6 +478,7 @@ export class Mt5SyncService {
         select: {
           riskAmount: true, riskPercent: true, returnPercent: true, initialPlanId: true,
           initialPlanMetricContractVersion: true, plannedTakeProfitPrice: true, plannedStopLossPrice: true,
+          seedBalance: true,
         },
       });
       const manualMetrics = Boolean(existingTrade?.plannedTakeProfitPrice && existingTrade.plannedStopLossPrice
@@ -496,7 +515,7 @@ export class Mt5SyncService {
         openedAt: opened.timeMscUtc, ...(closed && { closedAt: exits[exits.length - 1].timeMscUtc }),
         takeProfitPrice: takeProfitPrice ?? null,
         stopLossPrice: stopLossPrice ?? null,
-        seedBalance: balance?.preEntryBalance ?? null,
+        seedBalance: balance?.preEntryBalance ?? existingTrade?.seedBalance ?? null,
         ...metricData,
       };
       const trade = await tx.trade.upsert({

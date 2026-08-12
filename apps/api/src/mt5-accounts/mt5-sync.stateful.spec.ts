@@ -3,6 +3,7 @@ import { Mt5SyncService } from './mt5-sync.service';
 
 const account = { id: 'account-1', ownerId: 'owner-1', active: true, server: 'Broker', canonicalServer: 'broker', accountLogin: 7n, credentialCiphertext: Buffer.from('x'), credentialIv: Buffer.alloc(12), credentialTag: Buffer.alloc(16), credentialVersion: 1 };
 const deal = { ticket: '11', order: '10', positionId: '9', time: 1, timeMsc: 1000, type: 0, entry: 0, magic: '0', reason: 0, volume: 1, price: 2, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'XAUUSD', comment: '', externalId: '' };
+const secondDeal = { ...deal, ticket: '21', order: '20', positionId: '19', timeMsc: 1500, symbol: 'EURUSD' };
 
 function statefulDb() {
   const state = { lease: undefined as any, status: undefined as any, deals: [] as any[], orders: [] as any[], balances: [] as any[], balanceEvents: [] as any[], ledger: undefined as any, plans: [] as any[], trade: undefined as any, campaign: undefined as any, membership: undefined as any };
@@ -87,6 +88,10 @@ function statefulDb() {
     },
     mt5PositionEntryBalance: {
       findUnique: jest.fn(async ({ where }: any) => state.balances.find((row) => row.positionId === where.server_accountLogin_positionId.positionId) ?? null),
+      findMany: jest.fn(async ({ where }: any) => state.balances.filter((row) =>
+        row.accountId === where.accountId
+        && row.state === where.state
+        && row.preEntryBalance !== null)),
       deleteMany: jest.fn(async () => { const count = state.balances.length; state.balances = []; return { count }; }),
       create: jest.fn(async ({ data }: any) => { state.balances.push({ ...data, preEntryBalance: data.preEntryBalance === null ? null : new Prisma.Decimal(data.preEntryBalance) }); }),
     },
@@ -227,7 +232,49 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.deals).toHaveLength(2);
     expect(state.balanceEvents).toHaveLength(2);
     expect(state.trade.seedBalance.toString()).toBe('1000');
+    expect(state.ledger).toMatchObject({ status: 'VERIFIED', historyFromMsc: 0n });
     expect(upstream.sync.mock.calls[1][0]).toMatchObject({ mode: 'incremental', changedSinceMsc: expect.any(Number) });
+  });
+
+  it('restores a missing trade seed from a verified full persisted ledger during incremental sync', async () => {
+    const { db, state } = statefulDb();
+    const service = new Mt5SyncService(db, cipher as never, bridge([
+      { deals: [deposit, deal] },
+      {},
+    ]) as never);
+
+    await service.sync('owner-1', 'account-1');
+    state.trade.seedBalance = null;
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+      state: 'completed',
+      balanceLedger: { status: 'verified' },
+    });
+
+    expect(state.trade.seedBalance.toString()).toBe('1000');
+  });
+
+  it('projects every persisted position after verified incremental reconstruction', async () => {
+    const { db } = statefulDb();
+    const projected: string[][] = [];
+    const service = new Mt5SyncService(db, cipher as never, bridge([
+      { deals: [deposit, deal, secondDeal] },
+      {},
+    ]) as never);
+    const originalUpsert = db.trade.upsert;
+    db.trade.upsert = jest.fn(async (args: any) => {
+      projected.push([args.create.mt5PositionId.toString(), args.create.seedBalance.toString()]);
+      return originalUpsert(args);
+    });
+
+    await service.sync('owner-1', 'account-1');
+    projected.length = 0;
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+      state: 'completed',
+      balanceLedger: { status: 'verified' },
+    });
+
+    expect(projected).toEqual(expect.arrayContaining([['9', '1000'], ['19', '1000']]));
   });
 
   it('persists a bootstrap cursor and releases its lease before resuming the same snapshot', async () => {
@@ -294,8 +341,28 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
 
     expect(state.ledger).toMatchObject({ status: 'DIVERGED', lastError: 'CALCULATED_BALANCE_MISMATCH' });
-    expect(state.balances[0]).toMatchObject({ state: 'UNSUPPORTED_ANCHORED', preEntryBalance: null });
+    expect(state.balances).toHaveLength(0);
     expect(state.trade.seedBalance).toBeNull();
+  });
+
+  it('preserves proven position and trade balances when a later account snapshot genuinely diverges', async () => {
+    const { db, state } = statefulDb();
+    const upstream = bridge([
+      { deals: [deposit, deal] },
+      { account: { currency: 'USD', currencyDigits: 2, currentBalance: '999' } },
+    ]);
+    const service = new Mt5SyncService(db, cipher as never, upstream as never);
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
+    const provenBalance = state.balances[0].preEntryBalance.toString();
+    const tradeBalance = state.trade.seedBalance.toString();
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
+
+    expect(state.ledger).toMatchObject({ status: 'DIVERGED', lastError: 'CALCULATED_BALANCE_MISMATCH' });
+    expect(state.balances[0]).toMatchObject({ state: 'PROVEN' });
+    expect(state.balances[0].preEntryBalance.toString()).toBe(provenBalance);
+    expect(state.trade.seedBalance.toString()).toBe(tradeBalance);
   });
 
   it('includes deposits, withdrawals, commissions, swap, fees, and realized profit in exact deal order', async () => {
