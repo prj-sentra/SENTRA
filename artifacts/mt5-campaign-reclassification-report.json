@@ -1,0 +1,79 @@
+{
+  "kind": "api-production-campaign-reclassification-test-report",
+  "sourceHash": "2d64ff4264501b89fed9c4f00937c62ebe733c1a",
+  "generatedAt": "2026-08-12T15:26:35.594Z",
+  "contract": "Closed interval overlap [openedAt,closedAt], open intervals end at +infinity, transitive components retain earliest campaign root; normal sync never moves MANUAL or historical authored memberships.",
+  "backup": {
+    "path": "/home/hoya/trading-journal-backups/pre-campaign-reclassification-20260812.dump",
+    "sha256": "9f4d8b87887dd794403108becf27472ac41807c73694aece2f49d6aff7edc2f1",
+    "pgRestoreEntries": 212,
+    "isolatedRestore": "passed",
+    "restoredCounts": {
+      "campaigns": 63,
+      "memberships": 102,
+      "trades": 102,
+      "campaignAnalyses": 63,
+      "images": 3
+    }
+  },
+  "audit": {
+    "accountsInspected": 7,
+    "accountsWithTrades": 3,
+    "tradesInspected": 102,
+    "before": {
+      "campaigns": 63,
+      "misclassifiedComponents": 9
+    },
+    "repair": {
+      "movedMemberships": 23,
+      "deletedEmptyCampaigns": 18,
+      "manualConflicts": 0
+    },
+    "after": {
+      "campaigns": 45,
+      "misclassifiedComponents": 0,
+      "memberships": 102
+    },
+    "idempotentSecondPass": true
+  },
+  "preservation": {
+    "manualMembershipsBefore": 0,
+    "manualMembershipsAfter": 0,
+    "deletedCampaignPayloadsArchived": 18,
+    "allDeletedPayloadsArchived": true,
+    "analysisArchiveSourcePrefix": "campaign-merge:",
+    "imageFilesBefore": 3,
+    "imageFilesAfter": 3,
+    "tradeAnalysisHashBefore": "4fcafba1eea84a3af8c1d5846ba8a837",
+    "tradeAnalysisHashAfter": "4fcafba1eea84a3af8c1d5846ba8a837",
+    "unresolvedConflictsAfter": 0
+  },
+  "verification": [
+    {
+      "command": "focused classifier and comparator suites",
+      "result": "passed including equal-time ticket-before-position case"
+    },
+    {
+      "command": "TEST_DATABASE_URL disposable PostgreSQL races",
+      "result": "passed: 25 tests"
+    },
+    {
+      "command": "pnpm test",
+      "result": "passed: API 188, web 63"
+    },
+    {
+      "command": "pnpm typecheck && pnpm build && git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "docker compose up -d --build && public health && live all-account second pass",
+      "result": "passed at 2026-08-12T15:26:35.594Z; all 7 accounts moved/deleted/conflicts zero"
+    }
+  ],
+  "locking": "Campaign analysis/review/memo, image upload/reorder/remove, manual relink/conflict resolution, sync projection, and operator reclassification all acquire the shared account row/advisory lock before campaign locks.",
+  "durableEvidence": {
+    "postgresqlRaceOutput": "artifacts/mt5-campaign-repair-race-test-output.txt",
+    "fullGateOutput": "artifacts/mt5-campaign-full-gate-output.txt",
+    "productionAudit": "artifacts/mt5-campaign-production-audit.json"
+  }
+}

@@ -1,0 +1,2 @@
+Source: 2d64ff4264501b89fed9c4f00937c62ebe733c1a
+pnpm test PASS: API 188, web 63. typecheck/build/diff PASS. Disposable PG 25/25 PASS. Compose rebuild/deploy and public health PASS at 2026-08-12T15:26:35.594Z. Live all-account reclassification second pass across 7 accounts moved/deleted/conflicts 0.

@@ -1,0 +1,2 @@
+Source: 2d64ff4264501b89fed9c4f00937c62ebe733c1a
+Disposable PostgreSQL PASS: 25/25 sync/manual/canonical+losing repair-writer races in both lock orders, including equal-time opening ticket order opposing position order.

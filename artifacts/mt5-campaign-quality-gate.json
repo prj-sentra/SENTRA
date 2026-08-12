@@ -1,0 +1,67 @@
+{
+  "architectReview": {
+    "architectureStatus": "CLEAR",
+    "productStatus": "CLEAR",
+    "codeStatus": "CLEAR",
+    "recommendation": "APPROVE",
+    "evidence": "Generation-3 architect review approved interval classification, shared comparator, preservation, locking, and domain-safe losing-upload behavior on frozen source 2d64ff4264501b89fed9c4f00937c62ebe733c1a.",
+    "commands": ["architect review receipt 14-CampaignIntervalReview"],
+    "blockers": []
+  },
+  "executorQa": {
+    "status": "passed",
+    "e2eStatus": "passed",
+    "redTeamStatus": "passed",
+    "evidence": "Generation-3 QA passed PG 25/25, API 188/web 63, typecheck/build/diff, deployment health, seven-account zero-drift validation, rollback and preservation checks.",
+    "e2eCommands": ["TEST_DATABASE_URL=<disposable> pnpm --filter @trading-journal/api test -- --runInBand mt5-campaign-serialization.int.spec.ts", "pnpm test", "pnpm typecheck", "pnpm build", "docker compose up -d --build", "GET /health"],
+    "redTeamCommands": ["repair-first losing upload race", "equal-time ticket-before-position race", "all-account idempotent repair"],
+    "artifactRefs": [
+      {"id":"campaign-report","kind":"api-package-test-report","path":"artifacts/mt5-campaign-reclassification-report.json","description":"Contract, backup, repair, preservation and verification report."},
+      {"id":"pg-races","kind":"api-package-test-report","path":"artifacts/mt5-campaign-repair-race-test-output.txt","description":"Disposable PostgreSQL 25/25 race evidence."},
+      {"id":"production-audit","kind":"black-box-api-receipt","path":"artifacts/mt5-campaign-production-audit.json","description":"Restore-tested production pre/post and all-account audit."}
+    ],
+    "contractCoverage": [
+      {"id":"intervals","contractRef":"interval-overlap classification","obligation":"Closed, touching, open and transitive intervals retain earliest root.","status":"covered","surfaceEvidenceRefs":["interval-surface"],"adversarialCaseRefs":["transitive","equal-time"]},
+      {"id":"preservation","contractRef":"manual and authored preservation","obligation":"Normal sync protects intent and explicit repair archives authored content.","status":"covered","surfaceEvidenceRefs":["preservation-surface"],"adversarialCaseRefs":["repair-race"]},
+      {"id":"upload-boundary","contractRef":"losing campaign upload serialization","obligation":"Deleted campaigns return domain 404/409 without database or filesystem residue.","status":"covered","surfaceEvidenceRefs":["upload-surface"],"adversarialCaseRefs":["losing-upload"]}
+    ],
+    "surfaceEvidence": [
+      {"id":"interval-surface","contractRef":"interval-overlap classification","surface":"api","invocation":"Jest unit and disposable PostgreSQL suites plus deployed health and live all-account repair","verdict":"passed","artifactRefs":["campaign-report","pg-races"]},
+      {"id":"preservation-surface","contractRef":"manual and authored preservation","surface":"api","invocation":"Disposable PostgreSQL writer races and production pre/post audit","verdict":"passed","artifactRefs":["pg-races","production-audit"]},
+      {"id":"upload-surface","contractRef":"losing campaign upload serialization","surface":"api","invocation":"Repair-first losing upload PostgreSQL race","verdict":"passed","artifactRefs":["pg-races"]}
+    ],
+    "adversarialCases": [
+      {"id":"transitive","contractRef":"interval-overlap classification","scenario":"Touching and open intervals bridge multiple positions transitively.","expectedBehavior":"One earliest-root campaign.","verdict":"passed","artifactRefs":["campaign-report"]},
+      {"id":"equal-time","contractRef":"interval-overlap classification","scenario":"Opening ticket order opposes position ID at equal time.","expectedBehavior":"Ticket order wins.","verdict":"passed","artifactRefs":["pg-races"]},
+      {"id":"repair-race","contractRef":"manual and authored preservation","scenario":"Repair races analysis, memo, review and image writers in both lock orders.","expectedBehavior":"No authored data or files are lost.","verdict":"passed","artifactRefs":["pg-races","production-audit"]},
+      {"id":"losing-upload","contractRef":"losing campaign upload serialization","scenario":"Repair deletes losing campaign before upload obtains lock.","expectedBehavior":"404/409 and no row/file residue.","verdict":"passed","artifactRefs":["pg-races"]}
+    ],
+    "blockers": []
+  },
+  "iteration": {
+    "status": "passed",
+    "evidence": "Comparator and upload-boundary blockers were fixed; the complete verification loop and joined review cohort reran cleanly.",
+    "fullRerun": true,
+    "rerunCommands": ["PG 25/25", "pnpm test", "pnpm typecheck", "pnpm build", "git diff --check", "docker compose up -d --build", "GET /health"],
+    "reviewCohort": {
+      "reviewGeneration": 3,
+      "sourceHash": "sha256:2d64ff4264501b89fed9c4f00937c62ebe733c1a",
+      "deltaOnly": true,
+      "priorGenerationSourceHash": "sha256:8ca7b68de230f8f15a24eb6b81f0628827db16c4",
+      "deltaPaths": ["apps/api/src/trade-log/campaign-image.service.ts", "apps/api/src/mt5-accounts/mt5-campaign-serialization.int.spec.ts"],
+      "joined": true,
+      "lanes": {
+        "cleaner": {"status":"passed","sourceHash":"sha256:2d64ff4264501b89fed9c4f00937c62ebe733c1a","evidence":"AI SLOP CLEANUP REPORT: no blocking fallback, duplication, dead code, boundary, UI, or test findings in the frozen delta.","blockers":[]},
+        "architect": {"status":"CLEAR","sourceHash":"sha256:2d64ff4264501b89fed9c4f00937c62ebe733c1a","evidence":"Architecture, product and code review approved the frozen generation.","blockers":[]},
+        "qa": {"status":"passed","sourceHash":"sha256:2d64ff4264501b89fed9c4f00937c62ebe733c1a","evidence":"E2E and adversarial PostgreSQL/API/live validation passed.","blockers":[]}
+      }
+    },
+    "blockers": []
+  },
+  "criticReview": {
+    "verdict": "OKAY",
+    "sourceHash": "sha256:2d64ff4264501b89fed9c4f00937c62ebe733c1a",
+    "evidence": "Terminal critic confirmed comparator and upload-domain blockers resolved with complete current evidence.",
+    "blockers": []
+  }
+}

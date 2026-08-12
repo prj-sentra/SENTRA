@@ -1,0 +1,99 @@
+{
+  "kind": "api-production-reclassification-audit",
+  "sourceHash": "2d64ff4264501b89fed9c4f00937c62ebe733c1a",
+  "backup": {
+    "path": "/home/hoya/trading-journal-backups/pre-campaign-reclassification-20260812.dump",
+    "sha256": "9f4d8b87887dd794403108becf27472ac41807c73694aece2f49d6aff7edc2f1",
+    "pgRestoreEntries": 212,
+    "isolatedRestore": "passed",
+    "counts": {
+      "campaigns": 63,
+      "memberships": 102,
+      "trades": 102,
+      "campaignAnalyses": 63,
+      "images": 3
+    }
+  },
+  "perAccountRepair": [
+    {
+      "nickname": "MAIN (low spread)",
+      "moved": 20,
+      "deletedCampaigns": 15,
+      "conflicts": 0
+    },
+    {
+      "nickname": "Jxhxxn10",
+      "moved": 3,
+      "deletedCampaigns": 3,
+      "conflicts": 0
+    },
+    {
+      "nickname": "MAIN",
+      "moved": 0,
+      "deletedCampaigns": 0,
+      "conflicts": 0
+    },
+    {
+      "nickname": "Demo",
+      "moved": 0,
+      "deletedCampaigns": 0,
+      "conflicts": 0
+    },
+    {
+      "nickname": "망치아빠",
+      "active": false,
+      "moved": 0,
+      "deletedCampaigns": 0,
+      "conflicts": 0,
+      "accounts": 2
+    },
+    {
+      "nickname": "망치뿅",
+      "moved": 0,
+      "deletedCampaigns": 0,
+      "conflicts": 0
+    }
+  ],
+  "before": {
+    "campaigns": 63,
+    "memberships": 102,
+    "misclassifiedComponents": 9,
+    "images": 3,
+    "manualMemberships": 0,
+    "tradeAnalysisHash": "4fcafba1eea84a3af8c1d5846ba8a837"
+  },
+  "after": {
+    "campaigns": 45,
+    "memberships": 102,
+    "misclassifiedComponents": 0,
+    "images": 3,
+    "manualMemberships": 0,
+    "tradeAnalysisHash": "4fcafba1eea84a3af8c1d5846ba8a837",
+    "campaignMergeArchives": 18,
+    "unresolvedConflicts": 0
+  },
+  "preservation": {
+    "all18DeletedCampaignPayloadsArchived": true,
+    "all3ImageFileNamesPreserved": true,
+    "all102MembershipsPreserved": true,
+    "tradeAnalysisDigestUnchanged": true
+  },
+  "secondPass": [
+    {
+      "nickname": "MAIN (low spread)",
+      "moved": 0,
+      "deletedCampaigns": 0
+    },
+    {
+      "nickname": "Jxhxxn10",
+      "moved": 0,
+      "deletedCampaigns": 0
+    },
+    {
+      "nickname": "all other accounts",
+      "moved": 0,
+      "deletedCampaigns": 0
+    }
+  ],
+  "remainingMisclassifiedComponents": 0
+}

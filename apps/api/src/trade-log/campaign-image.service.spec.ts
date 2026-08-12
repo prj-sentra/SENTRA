@@ -104,7 +104,7 @@ describe('CampaignImageService ownership and ordering', () => {
 
     await new CampaignImageService(prisma).reorder('owner-a', 'account-a', 'campaign-1', ['image-1']);
 
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
@@ -122,7 +122,7 @@ describe('CampaignImageService ownership and ordering', () => {
 
     await new CampaignImageService(prisma).remove('owner-a', 'account-a', 'campaign-1', 'image-1');
 
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(3);
     expect(tx.tradeCampaignImage.findFirst).toHaveBeenCalledWith({ where: { id: 'image-1', campaignId: 'campaign-1' } });
     expect(tx.tradeCampaignImage.delete).toHaveBeenCalledWith({ where: { id: 'image-1' } });
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);

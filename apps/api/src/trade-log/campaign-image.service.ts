@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import type sharpType from 'sharp';
+import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
 import { PrismaService } from '../prisma/prisma.service';
 const sharp: typeof sharpType = require('sharp');
 
@@ -62,7 +63,12 @@ export class CampaignImageService implements OnModuleInit {
     try {
       await writeFile(temporaryPath, output.data, { flag: 'wx' });
       row = await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE`;
+        if (!accountId) throw new BadRequestException('accountId is required');
+        await lockOwnedMt5Account(tx, ownerId, accountId);
+        const campaigns = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE
+        `;
+        if (campaigns.length !== 1) throw new NotFoundException(`Campaign ${campaignId} not found`);
         const existing = await tx.tradeCampaignImage.findFirst({ where: { campaignId, uploadId } });
         if (existing) return existing;
         const count = await tx.tradeCampaignImage.count({ where: { campaignId } });
@@ -226,6 +232,7 @@ export class CampaignImageService implements OnModuleInit {
     await unlink(this.safePath(fileName)).catch(() => undefined);
   }
   private async lockOwnedCampaign(tx: Prisma.TransactionClient, ownerId: string, accountId: string, campaignId: string): Promise<void> {
+    await lockOwnedMt5Account(tx, ownerId, accountId);
     const campaigns = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id"
       FROM "trade_campaigns"

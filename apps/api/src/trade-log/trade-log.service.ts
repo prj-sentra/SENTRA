@@ -120,6 +120,8 @@ export class TradeLogService {
   async patchCampaignAnalysis(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignAnalysisRequest): Promise<void> {
     validateTradeCampaignAnalysisPatchRequest(request);
     await this.prisma.$transaction(async (tx) => {
+      if (!accountId) throw new BadRequestException('accountId is required');
+      await lockOwnedMt5Account(tx, ownerId, accountId);
       const rows = await tx.$queryRaw<Array<{ id: string; updated_at: Date }>>(Prisma.sql`
         SELECT analysis.id, analysis.updated_at
         FROM "trade_campaign_analyses" analysis
@@ -154,6 +156,8 @@ export class TradeLogService {
   async patchCampaignReview(ownerId: string, accountId: string | undefined, id: string, request: PatchTradeCampaignReviewRequest): Promise<void> {
     validateTradeCampaignReviewPatchRequest(request);
     await this.prisma.$transaction(async (tx) => {
+      if (!accountId) throw new BadRequestException('accountId is required');
+      await lockOwnedMt5Account(tx, ownerId, accountId);
       const rows = await tx.$queryRaw<Array<{
         id: string; review_updated_at: Date; entry_reason: string | null; invalidation_condition: string | null;
         take_profit_condition: string | null; additional_entry_plan: string | null; trade_score: number | null;
@@ -190,6 +194,8 @@ export class TradeLogService {
       throw new BadRequestException('memo and expectedUpdatedAt are invalid');
     }
     await this.prisma.$transaction(async (tx) => {
+      if (!accountId) throw new BadRequestException('accountId is required');
+      await lockOwnedMt5Account(tx, ownerId, accountId);
       const rows = await tx.$queryRaw<Array<{ updated_at: Date }>>(Prisma.sql`
         SELECT updated_at FROM "trade_campaigns"
         WHERE id = ${id} AND owner_id = ${ownerId}

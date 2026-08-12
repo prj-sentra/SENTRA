@@ -59,6 +59,14 @@ export const seoulTradingDate = (value: Date): Date => {
   return new Date(`${part('year')}-${part('month')}-${part('day')}T00:00:00.000Z`);
 };
 
+export type CampaignOpeningKey = { timeMsc: bigint; ticket: bigint; positionId: bigint };
+export const compareCampaignOpeningKey = (left: CampaignOpeningKey, right: CampaignOpeningKey): number => {
+  if (left.timeMsc !== right.timeMsc) return left.timeMsc < right.timeMsc ? -1 : 1;
+  if (left.ticket !== right.ticket) return left.ticket < right.ticket ? -1 : 1;
+  if (left.positionId !== right.positionId) return left.positionId < right.positionId ? -1 : 1;
+  return 0;
+};
+
 @Injectable()
 export class Mt5SyncService {
   constructor(
@@ -423,7 +431,36 @@ export class Mt5SyncService {
     return { positionIds: [...byPosition.keys()], assertions, verified, calculatedBalance: balance };
   }
   private async projectTrades(tx: Prisma.TransactionClient, ownerId: string, accountId: string, exactServer: string, canonicalServer: string, accountLogin: bigint, positionIds: string[], assertions: Array<{ positionId: string; state: string; preEntryBalance?: string }>, incomingPlans: Mt5PositionEntryPlanFact[]): Promise<number> {
-    const uniquePositionIds = [...new Set(positionIds.filter((id) => BigInt(id) > 0n))];
+    const requestedPositionIds = [...new Set(positionIds.filter((id) => BigInt(id) > 0n))];
+    const openingDeals = await tx.mt5Deal.findMany({
+      where: {
+        server: canonicalServer,
+        accountLogin,
+        positionId: { in: requestedPositionIds.map(BigInt) },
+        entry: 0,
+        type: { in: [0, 1] },
+      },
+      orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: { positionId: true, timeMsc: true, ticket: true },
+    });
+    const openingByPosition = new Map<string, { timeMsc: bigint; ticket: bigint }>();
+    for (const deal of openingDeals) {
+      const id = deal.positionId.toString();
+      if (!openingByPosition.has(id)) openingByPosition.set(id, deal);
+    }
+    const uniquePositionIds = requestedPositionIds.sort((left, right) => {
+      const a = openingByPosition.get(left);
+      const b = openingByPosition.get(right);
+      if (a && b) return compareCampaignOpeningKey(
+        { ...a, positionId: BigInt(left) },
+        { ...b, positionId: BigInt(right) },
+      );
+      if (a) return -1;
+      else if (b) return 1;
+      const leftId = BigInt(left);
+      const rightId = BigInt(right);
+      return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+    });
     let projectedCount = 0;
     const balances = new Map(assertions.filter((row) => row.state === 'PROVEN').map((balance) => [balance.positionId, balance]));
     const plans = new Map(incomingPlans.map((plan) => [plan.positionId, plan]));
@@ -536,11 +573,50 @@ export class Mt5SyncService {
       const membership = await tx.campaignMembership.findUnique({ where: { tradeId: trade.id } });
       if (!membership) {
         const tradingDate = seoulTradingDate(opened.timeMscUtc);
-        const campaign = await tx.tradeCampaign.upsert({
-          where: { rootTradeId: trade.id },
-          create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId, analysis: { create: {} } },
-          update: {},
+        const overlapping = await tx.trade.findMany({
+          where: {
+            ownerId,
+            mt5AccountId: accountId,
+            id: { not: trade.id },
+            openedAt: { lte: opened.timeMscUtc },
+            OR: [{ closedAt: null }, { closedAt: { gte: opened.timeMscUtc } }],
+            campaignMembership: { isNot: null },
+          },
+          select: {
+            mt5PositionId: true,
+            campaignMembership: { select: { campaignId: true } },
+          },
         });
+        const overlappingIds = overlapping.map((row) => row.mt5PositionId).filter((id): id is bigint => id !== null);
+        const overlapOpenings = overlappingIds.length ? await tx.mt5Deal.findMany({
+          where: {
+            server: canonicalServer,
+            accountLogin,
+            positionId: { in: overlappingIds },
+            entry: 0,
+            type: { in: [0, 1] },
+          },
+          orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+          select: { positionId: true, timeMsc: true, ticket: true },
+        }) : [];
+        const overlapOpeningByPosition = new Map<string, CampaignOpeningKey>();
+        for (const deal of overlapOpenings) {
+          const key = deal.positionId.toString();
+          if (!overlapOpeningByPosition.has(key)) overlapOpeningByPosition.set(key, deal);
+        }
+        const earliestOverlap = overlapping
+          .filter((row) => row.mt5PositionId !== null && row.campaignMembership && overlapOpeningByPosition.has(row.mt5PositionId.toString()))
+          .sort((left, right) => compareCampaignOpeningKey(
+            overlapOpeningByPosition.get(left.mt5PositionId!.toString())!,
+            overlapOpeningByPosition.get(right.mt5PositionId!.toString())!,
+          ))[0];
+        const campaign = earliestOverlap?.campaignMembership
+          ? { id: earliestOverlap.campaignMembership.campaignId }
+          : await tx.tradeCampaign.upsert({
+            where: { rootTradeId: trade.id },
+            create: { rootTradeId: trade.id, tradingDate, ownerId, mt5AccountId: accountId, analysis: { create: {} } },
+            update: {},
+          });
         await tx.campaignMembership.create({
           data: { tradeId: trade.id, campaignId: campaign.id, source: 'AUTO' },
         });
@@ -549,6 +625,268 @@ export class Mt5SyncService {
     }
     return projectedCount;
   }
+
+  async reclassifyCampaigns(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    accountId: string,
+    mergeAuthored = false,
+  ): Promise<{ moved: number; deletedCampaigns: number; conflicts: number }> {
+    const trades = await tx.trade.findMany({
+      where: { ownerId, mt5AccountId: accountId, openedAt: { not: null } },
+      orderBy: [{ openedAt: 'asc' }, { mt5PositionId: 'asc' }, { id: 'asc' }],
+      include: {
+        mt5Account: { select: { canonicalServer: true, accountLogin: true } },
+        campaignMembership: {
+          include: {
+            campaign: {
+              include: {
+                rootTrade: { select: { openedAt: true, mt5PositionId: true } },
+                analysis: { include: { economicIndicators: true, archives: true } },
+                images: { select: { id: true } },
+                conflicts: { select: { id: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const firstOpeningRows = trades.length ? await tx.mt5Deal.findMany({
+      where: {
+        accountId,
+        positionId: { in: trades.map((trade) => trade.mt5PositionId).filter((id): id is bigint => id !== null) },
+        entry: 0,
+        type: { in: [0, 1] },
+      },
+      orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: { positionId: true, timeMsc: true, ticket: true },
+    }) : [];
+    const firstOpeningByPosition = new Map<string, CampaignOpeningKey>();
+    for (const deal of firstOpeningRows) {
+      const key = deal.positionId.toString();
+      if (!firstOpeningByPosition.has(key)) firstOpeningByPosition.set(key, deal);
+    }
+    const openingKeyForTrade = (trade: { openedAt: Date | null; mt5PositionId: bigint | null }): CampaignOpeningKey => {
+      const persisted = trade.mt5PositionId === null ? undefined : firstOpeningByPosition.get(trade.mt5PositionId.toString());
+      if (persisted) return persisted;
+      const positionId = trade.mt5PositionId ?? 0n;
+      return { timeMsc: BigInt(trade.openedAt?.getTime() ?? 0), ticket: positionId, positionId };
+    };
+    trades.sort((left, right) => {
+      const compared = compareCampaignOpeningKey(openingKeyForTrade(left), openingKeyForTrade(right));
+      return compared || left.id.localeCompare(right.id);
+    });
+    const components: typeof trades[] = [];
+    let component: typeof trades = [];
+    let componentEnd = Number.NEGATIVE_INFINITY;
+    for (const trade of trades) {
+      const openedAt = trade.openedAt!.getTime();
+      if (component.length && openedAt > componentEnd) {
+        components.push(component);
+        component = [];
+        componentEnd = Number.NEGATIVE_INFINITY;
+      }
+      component.push(trade);
+      componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+    }
+    if (component.length) components.push(component);
+
+    let moved = 0;
+    let deletedCampaigns = 0;
+    let conflicts = 0;
+    for (const members of components) {
+      const campaignRows = [...new Map(members
+        .map((trade) => trade.campaignMembership?.campaign)
+        .filter((campaign): campaign is NonNullable<typeof campaign> => Boolean(campaign))
+        .map((campaign) => [campaign.id, campaign])).values()]
+        .sort((left, right) => {
+          const compared = compareCampaignOpeningKey(openingKeyForTrade(left.rootTrade), openingKeyForTrade(right.rootTrade));
+          return compared || left.id.localeCompare(right.id);
+        });
+      const canonical = campaignRows[0];
+      if (!canonical) continue;
+      for (const trade of members) {
+        const membership = trade.campaignMembership;
+        if (!membership || membership.campaignId === canonical.id) continue;
+        if (membership.source === 'MANUAL' || !mergeAuthored && this.hasAuthoredCampaignData(membership.campaign)) {
+          await tx.campaignConflict.upsert({
+            where: { tradeId: trade.id },
+            create: { tradeId: trade.id, candidateCampaignIds: [canonical.id, membership.campaignId] },
+            update: { candidateCampaignIds: [canonical.id, membership.campaignId], status: 'UNRESOLVED', resolvedCampaignId: null, resolvedAt: null },
+          });
+          conflicts += 1;
+          continue;
+        }
+        await tx.campaignMembership.update({
+          where: { tradeId: trade.id },
+          data: { campaignId: canonical.id },
+        });
+        moved += 1;
+      }
+      for (const campaign of campaignRows.filter((row) => row.id !== canonical.id)) {
+        const remaining = await tx.campaignMembership.count({ where: { campaignId: campaign.id } });
+        if (remaining) continue;
+        await this.mergeEmptyCampaign(tx, canonical, campaign);
+        deletedCampaigns += 1;
+      }
+    }
+    return { moved, deletedCampaigns, conflicts };
+  }
+
+  async reclassifyOwnedAccount(
+    ownerId: string,
+    accountId: string,
+    mergeAuthored = false,
+  ): Promise<{ moved: number; deletedCampaigns: number; conflicts: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOwnedMt5Account(tx, ownerId, accountId);
+      return this.reclassifyCampaigns(tx, ownerId, accountId, mergeAuthored);
+    });
+  }
+
+  private hasAuthoredCampaignData(campaign: {
+    memo: string | null;
+    images: Array<{ id: string }>;
+    conflicts: Array<{ id: string }>;
+    analysis: {
+      primaryTrend: unknown;
+      maTimeframes: unknown;
+      marketZoneEnabled: boolean;
+      retailPositionEnabled: boolean;
+      fibonacciEnabled: boolean;
+      entryReason: string | null;
+      invalidationCondition: string | null;
+      takeProfitCondition: string | null;
+      additionalEntryPlan: string | null;
+      tradeScore: number | null;
+      strengths: string | null;
+      weaknesses: string | null;
+      economicIndicators: unknown[];
+      archives: unknown[];
+    } | null;
+  }): boolean {
+    const analysis = campaign.analysis;
+    return campaign.memo !== null
+      || campaign.images.length > 0
+      || campaign.conflicts.length > 0
+      || Boolean(analysis && (
+        analysis.primaryTrend !== null
+        || JSON.stringify(analysis.maTimeframes) !== '{}'
+        || analysis.marketZoneEnabled
+        || analysis.retailPositionEnabled
+        || analysis.fibonacciEnabled
+        || analysis.entryReason !== null
+        || analysis.invalidationCondition !== null
+        || analysis.takeProfitCondition !== null
+        || analysis.additionalEntryPlan !== null
+        || analysis.tradeScore !== null
+        || analysis.strengths !== null
+        || analysis.weaknesses !== null
+        || analysis.economicIndicators.length > 0
+        || analysis.archives.length > 0
+      ));
+  }
+
+  private async mergeEmptyCampaign(
+    tx: Prisma.TransactionClient,
+    canonical: {
+      id: string;
+      memo: string | null;
+      analysis: { id: string } | null;
+      images: Array<{ id: string }>;
+    },
+    losing: {
+      id: string;
+      memo: string | null;
+      analysis: {
+        id: string;
+        economicIndicators: unknown[];
+        archives: unknown[];
+        [key: string]: unknown;
+      } | null;
+      images: Array<{ id: string }>;
+    },
+  ): Promise<void> {
+    const canonicalAnalysis = canonical.analysis ?? await tx.tradeCampaignAnalysis.create({
+      data: { campaignId: canonical.id },
+      select: { id: true },
+    });
+    if (losing.memo !== null || losing.analysis) {
+      await tx.tradeCampaignAnalysisArchive.upsert({
+        where: {
+          campaignAnalysisId_source: {
+            campaignAnalysisId: canonicalAnalysis.id,
+            source: `campaign-merge:${losing.id}`,
+          },
+        },
+        create: {
+          campaignAnalysisId: canonicalAnalysis.id,
+          source: `campaign-merge:${losing.id}`,
+          content: this.campaignArchiveContent(losing),
+        },
+        update: {},
+      });
+    }
+    if (losing.memo) {
+      const mergedMemo = canonical.memo
+        ? `${canonical.memo}\n\n[병합된 캠페인 ${losing.id}]\n${losing.memo}`
+        : losing.memo;
+      await tx.tradeCampaign.update({ where: { id: canonical.id }, data: { memo: mergedMemo } });
+      canonical.memo = mergedMemo;
+    }
+    const imageCount = await tx.tradeCampaignImage.count({ where: { campaignId: canonical.id } });
+    const images = await tx.tradeCampaignImage.findMany({
+      where: { campaignId: losing.id },
+      orderBy: [{ position: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    for (const [offset, image] of images.entries()) {
+      await tx.tradeCampaignImage.update({
+        where: { id: image.id },
+        data: { campaignId: canonical.id, position: imageCount + offset },
+      });
+    }
+    const conflicts = await tx.campaignConflict.findMany({
+      where: {
+        OR: [
+          { resolvedCampaignId: losing.id },
+          { candidateCampaignIds: { array_contains: [losing.id] } },
+        ],
+      },
+      select: { id: true, resolvedCampaignId: true, candidateCampaignIds: true },
+    });
+    for (const conflict of conflicts) {
+      const candidates = Array.isArray(conflict.candidateCampaignIds)
+        ? [...new Set(conflict.candidateCampaignIds.map((id) => id === losing.id ? canonical.id : id))]
+        : [];
+      await tx.campaignConflict.update({
+        where: { id: conflict.id },
+        data: {
+          candidateCampaignIds: candidates,
+          ...(conflict.resolvedCampaignId === losing.id && { resolvedCampaignId: canonical.id }),
+        },
+      });
+    }
+    await tx.tradeCampaignAnalysis.deleteMany({ where: { campaignId: losing.id } });
+    await tx.tradeCampaign.delete({ where: { id: losing.id } });
+  }
+
+  private campaignArchiveContent(campaign: {
+    id: string;
+    memo: string | null;
+    analysis: {
+      economicIndicators: unknown[];
+      archives: unknown[];
+      [key: string]: unknown;
+    } | null;
+  }): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify({
+      campaignId: campaign.id,
+      memo: campaign.memo,
+      analysis: campaign.analysis,
+    })) as Prisma.InputJsonValue;
+  }
+
 
   private sameEntryPlan(plan: {
     side: TradeSide;

@@ -72,7 +72,17 @@ function statefulDb() {
         else state.deals.push(normalized);
         return normalized;
       }),
-      findMany: jest.fn(async ({ where }: any) => state.deals.filter((row) => (where.accountId === undefined || row.accountId === where.accountId) && (where.positionId === undefined || row.positionId === where.positionId))),
+      findMany: jest.fn(async ({ where }: any) => state.deals.filter((row) => {
+        const positionMatches = where.positionId === undefined
+          ? true
+          : typeof where.positionId === 'object' && Array.isArray(where.positionId.in)
+            ? where.positionId.in.includes(row.positionId)
+            : row.positionId === where.positionId;
+        return (where.accountId === undefined || row.accountId === where.accountId)
+          && positionMatches
+          && (where.entry === undefined || row.entry === where.entry)
+          && (where.type === undefined || where.type.in.includes(row.type));
+      })),
     },
     mt5Order: {
       findUnique: jest.fn(async ({ where }: any) => state.orders.find((row) => row.ticket === where.server_accountLogin_ticket.ticket) ?? null),
@@ -127,6 +137,7 @@ function statefulDb() {
     },
     trade: {
       findMany: jest.fn(async () => []),
+      findFirst: jest.fn(async () => null),
       findUnique: jest.fn(async () => state.trade ?? null),
       upsert: jest.fn(async ({ create, update }: any) => {
         const normalize = (data: any) => data.seedBalance === undefined ? data : {
