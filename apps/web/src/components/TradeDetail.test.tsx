@@ -21,11 +21,11 @@ describe('TradeDetail split execution ownership', () => {
     const desktop = container.querySelector('.desktop-trade-detail')!;
     expect(within(desktop).getByDisplayValue('1m')).toBeInTheDocument();
     expect(within(desktop).getByText('볼린저밴드')).toBeInTheDocument();
-    expect(screen.queryByText('거래 공통 분석')).toBeNull();
-    expect(screen.getByText('매매별 분석')).toBeInTheDocument();
+    expect(screen.queryByText('매매 공통 분석')).toBeNull();
+    expect(screen.getByText('진입별 분석')).toBeInTheDocument();
     expect(screen.queryByText(/추세와 기술적 근거/)).toBeNull();
 
-    const secondDesktopTrade = within(desktop.parentElement!).getByRole('button', { name: /2.*번째 분할 매매/ });
+    const secondDesktopTrade = within(desktop.parentElement!).getByRole('button', { name: /2.*번째 분할 진입/ });
     fireEvent.click(secondDesktopTrade);
     expect(within(desktop).getByDisplayValue('5m')).toBeInTheDocument();
     expect(secondDesktopTrade).toHaveAttribute('aria-current', 'step');
@@ -52,6 +52,6 @@ describe('TradeDetail split execution ownership', () => {
     const { container, rerender } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
     rerender(<TradeDetail campaign={{ ...campaign, members: [...campaign.members] }} selectedTradeId="trade-2" onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
     expect(within(container.querySelector('.desktop-trade-detail')!).getByDisplayValue('5m')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /2.*번째 분할 매매/ })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: /2.*번째 분할 진입/ })).toHaveAttribute('aria-current', 'step');
   });
 });

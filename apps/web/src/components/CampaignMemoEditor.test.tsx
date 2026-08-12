@@ -11,10 +11,10 @@ describe('CampaignMemoEditor', () => {
       analysis: { updatedAt: '2026-08-10T11:00:00.000Z', reviewUpdatedAt: '2026-08-10T10:00:00.000Z' },
     } as any} onSave={onSave} onSaveReview={onSaveReview} />);
 
-    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '새 메모' } });
+    fireEvent.change(screen.getByLabelText('매매 메모'), { target: { value: '새 메모' } });
     fireEvent.change(screen.getByLabelText('진입 근거'), { target: { value: '추세 눌림 진입' } });
-    fireEvent.change(screen.getByLabelText('거래 점수'), { target: { value: '8' } });
-    fireEvent.submit(screen.getByLabelText('거래 메모').closest('form')!);
+    fireEvent.change(screen.getByLabelText('매매 점수'), { target: { value: '8' } });
+    fireEvent.submit(screen.getByLabelText('매매 메모').closest('form')!);
 
     expect(onSave).toHaveBeenCalledWith('campaign-1', {
       memo: '새 메모', expectedUpdatedAt: '2026-08-10T12:00:00.000Z',

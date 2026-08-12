@@ -60,18 +60,18 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
   return <article className="trade-record-card">
     <div className="trade-card-summary">
       {firstImage
-        ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 거래 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 거래 차트`} /></button>
+        ? <button className="trade-cover" type="button" onClick={() => setPreviewImageId(firstImage.id)} aria-label={`${campaign.symbol} 매매 이미지 전체 보기`}><img src={props.imageUrl(campaign.id, firstImage.id)} alt={`${campaign.symbol} 매매 차트`} /></button>
         : <div className="trade-cover"><span>차트 이미지 없음</span></div>}
       <div className="trade-summary-body">
-        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{signedMetric(campaign.realizedPnl)}</strong></div><div className="trade-header-meta"><strong>{campaign.members.length}건 분할 매매</strong><p className="trade-time">{time(campaign.openedAt)} - {time(campaign.closedAt)}</p></div></header>
+        <header><div className="trade-header-main"><h2>{campaign.symbol}</h2><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={`trade-header-pnl pnl ${campaign.realizedPnl >= 0 ? 'positive' : 'negative'}`}>{signedMetric(campaign.realizedPnl)}</strong></div><div className="trade-header-meta"><strong>{campaign.members.length}건 분할 진입</strong><p className="trade-time">{time(campaign.openedAt)} - {time(campaign.closedAt)}</p></div></header>
         <div className="trade-summary-metrics">
           <dl>
             <div><dt>평균 진입가 / 평균 청산가</dt><dd>{metric(campaign.entryPrice)} / {metric(campaign.exitPrice)}</dd></div>
             <div><dt>총 수량</dt><dd>{metric(campaign.quantityLots, ' lot')}</dd></div>
-            <div><dt>거래 전후 시드 변화 / 비율</dt><dd>{metric(campaign.seedBalance)} → {metric(postSeed)} / {seedChangeRatio === undefined ? '—' : `${seedChangeRatio >= 0 ? '+' : ''}${seedChangeRatio.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`}</dd></div>
+            <div><dt>매매 전후 시드 변화 / 비율</dt><dd>{metric(campaign.seedBalance)} → {metric(postSeed)} / {seedChangeRatio === undefined ? '—' : `${seedChangeRatio >= 0 ? '+' : ''}${seedChangeRatio.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`}</dd></div>
             <div><dt>포인트 (PnL / 수량; 1랏 기준 PnL)</dt><dd title={points === undefined ? '수량이 없어 포인트를 계산할 수 없습니다.' : undefined}>{metric(points)}</dd></div>
           </dl>
-          <div className="memo-preview-metric"><span>거래 메모</span><p>{memoPreview}</p></div>
+          <div className="memo-preview-metric"><span>매매 메모</span><p>{memoPreview}</p></div>
         </div>
         <div className="trade-mobile-summary"><div className="mobile-summary-first"><strong>{campaign.symbol}</strong><span className={`direction ${campaign.side}`}>{sideLabel(campaign.side)}</span><strong className={campaign.realizedPnl >= 0 ? 'pnl positive' : 'pnl negative'}>{signedMetric(campaign.realizedPnl)}</strong></div><div className="mobile-summary-second"><span><b>성과</b> 포인트 {metric(points)}</span><span className="regret-preview"><b>메모</b> {memoPreview}</span><span className={campaign.analysisComplete ? 'complete' : 'incomplete'}><b>작성</b> {campaign.analysisComplete ? '완료' : '필요'}</span></div></div>
         <div className="detail-actions">
@@ -96,7 +96,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
     {expanded ? <div className="expanded-content" onChangeCapture={() => setDirty(true)}><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><div className="campaign-detail-layout"><CampaignMemoEditor ref={memoForm} campaign={campaign} onSave={props.onPatchMemo} onSaveReview={props.onPatchCampaignReview} /><TradeDetail ref={tradeDetail} campaign={campaign} selectedTradeId={props.targetTradeId} onPatchAnalysis={props.onPatchAnalysis} onPatchCampaignAnalysis={props.onPatchCampaignAnalysis} onChangeCampaignHead={props.onChangeCampaignHead} campaignHeadBusy={props.campaignHeadBusy} /></div></div> : null}
     {previewImage ? <ImageLightbox
       src={props.imageUrl(campaign.id, previewImage.id)}
-      alt={`${campaign.symbol} 거래 차트 ${previewIndex + 1}`}
+      alt={`${campaign.symbol} 매매 차트 ${previewIndex + 1}`}
       onClose={() => setPreviewImageId(null)}
       onPrevious={previewIndex > 0 ? () => setPreviewImageId(orderedImages[previewIndex - 1].id) : undefined}
       onNext={previewIndex < orderedImages.length - 1 ? () => setPreviewImageId(orderedImages[previewIndex + 1].id) : undefined}

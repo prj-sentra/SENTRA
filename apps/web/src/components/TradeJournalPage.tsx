@@ -29,7 +29,7 @@ export interface TradeJournalPageProps {
 }
 
 function koreanDate(value?: string): string {
-  if (!value) return '최근 거래일';
+  if (!value) return '최근 매매일';
   return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'full' }).format(new Date(`${value}T00:00:00`));
 }
 function koreanDateShort(value?: string): string {
@@ -47,16 +47,16 @@ export function TradeJournalPage({ campaigns, calendarDays, date, previousDate, 
   }, [campaigns, loading, onTargetFocused, targetId]);
   return <section className="trade-journal-page" aria-busy={loading}>
     <header className="journal-page-heading">
-      <nav className="date-navigation" aria-label="거래일 탐색">
-        <button type="button" className="secondary-button compact" aria-label="이전 거래일" title="이전 거래일" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>◀</button>
+      <nav className="date-navigation" aria-label="매매일 탐색">
+        <button type="button" className="secondary-button compact" aria-label="이전 매매일" title="이전 매매일" disabled={!previousDate || loading} onClick={() => previousDate && onSelectDate(previousDate)}>◀</button>
         <TradeCalendarPicker days={calendarDays} selectedDate={date} disabled={loading} onSelectDate={onSelectDate} />
         <time dateTime={date}><span className="date-long">{koreanDate(date)}</span><span className="date-short">{koreanDateShort(date)}</span></time>
-        <button type="button" className="secondary-button compact" aria-label="다음 거래일" title="다음 거래일" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>▶</button>
+        <button type="button" className="secondary-button compact" aria-label="다음 매매일" title="다음 매매일" disabled={!nextDate || loading} onClick={() => nextDate && onSelectDate(nextDate)}>▶</button>
       </nav>
       {toolbar ? <div className="journal-page-toolbar">{toolbar}</div> : null}
     </header>
     {error ? <p className="error" role="alert">{error}</p> : null}
-    {loading && campaigns.length === 0 ? <p className="journal-state" role="status">거래 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 거래 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => {
+    {loading && campaigns.length === 0 ? <p className="journal-state" role="status">매매 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 매매 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => {
       const targeted = targetId === campaign.id || campaign.members.some((trade) => trade.id === targetId);
       return <article key={campaign.id} ref={targeted ? targetRef : undefined} tabIndex={targeted ? -1 : undefined} className={targeted ? 'trade-journal-target' : undefined}><TradeRecordCard campaign={campaign} targetTradeId={campaign.members.some((trade) => trade.id === targetId) ? targetId : undefined} {...actions} /></article>;
     })}</div>}

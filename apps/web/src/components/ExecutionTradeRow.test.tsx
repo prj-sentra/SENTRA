@@ -59,11 +59,11 @@ describe('ExecutionTradeRow summary metrics', () => {
 
   it('renders automatic heads as non-actionable and manual heads with an unset action', () => {
     const { rerender } = render(<ExecutionTradeRow trade={trade()} campaign={campaign('AUTO')} />);
-    expect(screen.getByText('첫 매매 · 자동 지정')).toBeInTheDocument();
+    expect(screen.getByText('첫 진입 · 자동 지정')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '지정 해제' })).toBeNull();
 
     rerender(<ExecutionTradeRow trade={trade()} campaign={campaign('MANUAL')} />);
-    expect(screen.getByText('첫 매매 · 수동 지정')).toBeInTheDocument();
+    expect(screen.getByText('첫 진입 · 수동 지정')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '지정 해제' })).toBeEnabled();
   });
 
@@ -72,9 +72,9 @@ describe('ExecutionTradeRow summary metrics', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const nonHead = trade({ id: 'trade-2' });
     const { rerender } = render(<ExecutionTradeRow trade={nonHead} campaign={campaign('AUTO')} onChangeCampaignHead={onChangeCampaignHead} />);
-    const action = screen.getByRole('button', { name: '첫 매매로 지정' });
+    const action = screen.getByRole('button', { name: '첫 진입으로 지정' });
     fireEvent.click(action);
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('별도 캠페인으로 분할'));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('별도 매매로 분할'));
     expect(onChangeCampaignHead).not.toHaveBeenCalled();
 
     confirm.mockReturnValue(true);
@@ -82,7 +82,7 @@ describe('ExecutionTradeRow summary metrics', () => {
     expect(onChangeCampaignHead).toHaveBeenCalledWith(expect.objectContaining({ id: 'campaign-1', campaignVersion: 4 }), 'trade-2');
 
     rerender(<ExecutionTradeRow trade={nonHead} campaign={campaign('AUTO')} busy onChangeCampaignHead={onChangeCampaignHead} />);
-    expect(screen.getByRole('button', { name: '첫 매매로 지정' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '첫 진입으로 지정' })).toBeDisabled();
     confirm.mockRestore();
   });
 });

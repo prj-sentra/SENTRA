@@ -14,7 +14,7 @@ describe('TradeCalendarPicker', () => {
     const onSelectDate = vi.fn();
     render(<TradeCalendarPicker days={days} selectedDate="2026-08-03" onSelectDate={onSelectDate} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '거래일 달력 열기' }));
+    fireEvent.click(screen.getByRole('button', { name: '매매일 달력 열기' }));
 
     expect(screen.getByRole('button', { name: /2026-08-03, 매매 2개, 진입 3개, 손익 \+125.5/ })).toHaveFocus();
     expect(screen.getByText('매매 2, 진입 3')).toBeInTheDocument();
@@ -25,12 +25,12 @@ describe('TradeCalendarPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: /2026-08-05/ }));
     expect(onSelectDate).toHaveBeenCalledWith('2026-08-05');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '거래일 달력 열기' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '매매일 달력 열기' })).toHaveFocus();
   });
 
   it('closes with Escape and supports month navigation', () => {
     render(<TradeCalendarPicker days={days} selectedDate="2026-08-03" onSelectDate={vi.fn()} />);
-    const trigger = screen.getByRole('button', { name: '거래일 달력 열기' });
+    const trigger = screen.getByRole('button', { name: '매매일 달력 열기' });
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole('button', { name: '다음 달' }));
     expect(screen.getByText('2026년 9월')).toBeInTheDocument();

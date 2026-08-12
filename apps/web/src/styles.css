@@ -1096,7 +1096,7 @@ button.trade-cover { cursor: pointer; }
 .execution-time-row { display: flex; align-items: center; gap: 8px; }
 .execution-time-row .execution-period { margin-right: auto; }
 .campaign-head-status { color: var(--text-muted); font-size: 12px; font-weight: 650; white-space: nowrap; }
-.campaign-head-action { white-space: nowrap; }
+.campaign-head-action { min-height: 24px !important; border-color: var(--border); padding: 0 7px !important; color: var(--text-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .trade-editor-grid { width: 100%; margin-top: 20px; }
 .detail-editor { display: grid; gap: 20px; width: 100%; }
 .detail-editor h4 { display: none; }

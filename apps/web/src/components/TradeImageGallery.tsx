@@ -75,14 +75,14 @@ export function TradeImageGallery({ campaignId, symbol, images, imageUrl, onUplo
     try { await onReorder(campaignId, ids); } finally { setBusy(false); }
   }
 
-  return <section className="trade-gallery" aria-label={`${symbol} 거래 이미지`} onPaste={paste} tabIndex={0}>
-    <div className="gallery-heading"><strong>거래 이미지</strong><label className={`gallery-upload${busy || images.length >= 10 ? ' disabled' : ''}`}><span>{busy ? '업로드 중…' : images.length >= 10 ? '최대 10장' : '이미지 추가'}</span><input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={busy || images.length >= 10} onChange={(event) => void upload(event)} /></label><span>{images.length}/10</span></div>
+  return <section className="trade-gallery" aria-label={`${symbol} 매매 이미지`} onPaste={paste} tabIndex={0}>
+    <div className="gallery-heading"><strong>매매 이미지</strong><label className={`gallery-upload${busy || images.length >= 10 ? ' disabled' : ''}`}><span>{busy ? '업로드 중…' : images.length >= 10 ? '최대 10장' : '이미지 추가'}</span><input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={busy || images.length >= 10} onChange={(event) => void upload(event)} /></label><span>{images.length}/10</span></div>
     <p className="gallery-help">파일을 여러 개 선택하거나 이 영역에 이미지를 붙여넣으세요.</p>
     <ul className="gallery-grid">{ordered.map((image, index) => <li key={image.id} draggable={!busy} onDragStart={() => setDraggedId(image.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void drop(event, image.id)}>
-      <button className="gallery-preview" type="button" onClick={() => setPreview(image)}><img src={imageUrl(campaignId, image.id)} alt={`${symbol} 거래 차트 ${index + 1}`} /></button>
+      <button className="gallery-preview" type="button" onClick={() => setPreview(image)}><img src={imageUrl(campaignId, image.id)} alt={`${symbol} 매매 차트 ${index + 1}`} /></button>
       <div className="gallery-actions"><button className="gallery-order-button gallery-order-left" type="button" disabled={busy || index === 0} onClick={() => void move(image.id, -1)} aria-label={`이미지 ${index + 1} 왼쪽으로 이동`} title="왼쪽으로 이동">‹</button><button className="gallery-order-button gallery-order-right" type="button" disabled={busy || index === ordered.length - 1} onClick={() => void move(image.id, 1)} aria-label={`이미지 ${index + 1} 오른쪽으로 이동`} title="오른쪽으로 이동">›</button><button className="gallery-delete-button" type="button" disabled={busy} onClick={() => void remove(image.id)} aria-label={`이미지 ${index + 1} 삭제`} title="삭제">×</button></div>
     </li>)}</ul>
     {failedUpload ? <div className="gallery-upload-error" role="alert"><img src={failedUpload.previewUrl} alt="업로드에 실패한 이미지 미리보기" /><p>{failedUpload.message}</p><button type="button" className="secondary-button compact" disabled={busy} onClick={() => void send(failedUpload.file, failedUpload.uploadId, true)}>다시 시도</button></div> : null}
-    {preview ? <ImageLightbox src={imageUrl(campaignId, preview.id)} alt={`${symbol} 거래 차트 ${previewIndex + 1}`} onClose={() => setPreview(null)} onPrevious={previewIndex > 0 ? () => setPreview(ordered[previewIndex - 1]) : undefined} onNext={previewIndex < ordered.length - 1 ? () => setPreview(ordered[previewIndex + 1]) : undefined} /> : null}
+    {preview ? <ImageLightbox src={imageUrl(campaignId, preview.id)} alt={`${symbol} 매매 차트 ${previewIndex + 1}`} onClose={() => setPreview(null)} onPrevious={previewIndex > 0 ? () => setPreview(ordered[previewIndex - 1]) : undefined} onNext={previewIndex < ordered.length - 1 ? () => setPreview(ordered[previewIndex + 1]) : undefined} /> : null}
   </section>;
 }

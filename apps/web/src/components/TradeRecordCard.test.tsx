@@ -39,7 +39,7 @@ describe('TradeRecordCard memo preview', () => {
     expect(screen.getAllByText('+125')).toHaveLength(2);
     expect(screen.getByText('평균 진입가 / 평균 청산가')).toBeInTheDocument();
     expect(screen.getByText('총 수량')).toBeInTheDocument();
-    expect(screen.getByText('거래 전후 시드 변화 / 비율')).toBeInTheDocument();
+    expect(screen.getByText('매매 전후 시드 변화 / 비율')).toBeInTheDocument();
     expect(screen.getByText('포인트 (PnL / 수량; 1랏 기준 PnL)')).toBeInTheDocument();
     expect(screen.queryByText('PnL')).toBeNull();
   });
@@ -61,7 +61,7 @@ describe('TradeRecordCard memo preview', () => {
     />);
 
     const meta = container.querySelector('.trade-header-meta')!;
-    expect(meta.firstElementChild).toHaveTextContent('2건 분할 매매');
+    expect(meta.firstElementChild).toHaveTextContent('2건 분할 진입');
     expect(meta.lastElementChild).toHaveTextContent(/26\. 8\. 10\..* - 26\. 8\. 10\./);
     expect(meta).not.toHaveTextContent('→');
   });
@@ -78,7 +78,7 @@ describe('TradeRecordCard memo preview', () => {
     />);
 
     fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
-    const memo = screen.getByLabelText('거래 메모') as HTMLTextAreaElement;
+    const memo = screen.getByLabelText('매매 메모') as HTMLTextAreaElement;
     expect(memo.value).toBe('첫 번째 줄\n두 번째 줄');
   });
 
@@ -98,15 +98,15 @@ describe('TradeRecordCard memo preview', () => {
     />);
 
     fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
-    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '변경 메모' } });
+    fireEvent.change(screen.getByLabelText('매매 메모'), { target: { value: '변경 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => expect(onPatchMemo).toHaveBeenCalled());
     expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '취소할 메모' } });
+    fireEvent.change(screen.getByLabelText('매매 메모'), { target: { value: '취소할 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '변경사항 취소' }));
     await waitFor(() => expect(onRefresh).toHaveBeenCalled());
-    expect(screen.getByLabelText('거래 메모')).toHaveValue('기존 메모');
+    expect(screen.getByLabelText('매매 메모')).toHaveValue('기존 메모');
     expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
     expect(confirm).toHaveBeenCalledTimes(2);
     confirm.mockRestore();
@@ -126,7 +126,7 @@ describe('TradeRecordCard memo preview', () => {
     />);
 
     fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
-    fireEvent.change(screen.getByLabelText('거래 메모'), { target: { value: '저장할 메모' } });
+    fireEvent.change(screen.getByLabelText('매매 메모'), { target: { value: '저장할 메모' } });
     fireEvent.click(screen.getByRole('button', { name: '간단하게 ▲' }));
     expect(screen.getByRole('button', { name: '간단하게 ▲' })).toBeInTheDocument();
     expect(onPatchMemo).not.toHaveBeenCalled();
@@ -149,11 +149,11 @@ describe('TradeRecordCard memo preview', () => {
       onDeleteImage={vi.fn()}
     />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'XAUUSD 거래 이미지 전체 보기' }));
+    fireEvent.click(screen.getByRole('button', { name: 'XAUUSD 매매 이미지 전체 보기' }));
     expect(screen.getByRole('dialog', { name: 'Trade image preview' })).toBeInTheDocument();
-    expect(screen.getByAltText('XAUUSD 거래 차트 1')).toHaveAttribute('src', '/first.webp');
+    expect(screen.getByAltText('XAUUSD 매매 차트 1')).toHaveAttribute('src', '/first.webp');
 
     fireEvent.click(screen.getByRole('button', { name: 'Next image' }));
-    expect(screen.getByAltText('XAUUSD 거래 차트 2')).toHaveAttribute('src', '/second.webp');
+    expect(screen.getByAltText('XAUUSD 매매 차트 2')).toHaveAttribute('src', '/second.webp');
   });
 });

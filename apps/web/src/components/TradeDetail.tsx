@@ -50,9 +50,9 @@ export const TradeDetail = forwardRef<TradeDetailHandle, TradeDetailProps>(({ ca
     <section className="campaign-analysis-section">
       <TradeAnalysisEditor ref={campaignForm} trade={rootTrade} campaign={campaign} scope="campaign" onSave={onPatchAnalysis} onSaveCampaign={onPatchCampaignAnalysis} />
     </section>
-    <h2 className="execution-analysis-heading">매매별 분석</h2>
-    <nav className="split-trade-navigation desktop-trade-navigation" aria-label="분할 매매 선택">
-      {campaign.members.map((member, index) => <button key={member.id} type="button" className={`${index === selectedIndex ? 'active ' : ''}${member.analysisComplete ? 'complete' : 'incomplete'}`} aria-current={index === selectedIndex ? 'step' : undefined} onClick={() => setSelectedIndex(index)}>{index + 1}<span className="sr-only">번째 분할 매매 {stateLabel(member.analysisComplete)}</span></button>)}
+    <h2 className="execution-analysis-heading">진입별 분석</h2>
+    <nav className="split-trade-navigation desktop-trade-navigation" aria-label="분할 진입 선택">
+      {campaign.members.map((member, index) => <button key={member.id} type="button" className={`${index === selectedIndex ? 'active ' : ''}${member.analysisComplete ? 'complete' : 'incomplete'}`} aria-current={index === selectedIndex ? 'step' : undefined} onClick={() => setSelectedIndex(index)}>{index + 1}<span className="sr-only">번째 분할 진입 {stateLabel(member.analysisComplete)}</span></button>)}
     </nav>
     <div className="desktop-trade-detail"><section><ExecutionTradeRow trade={selectedTrade} campaign={campaign} busy={campaignHeadBusy} onChangeCampaignHead={onChangeCampaignHead} /></section><div className="trade-editor-grid"><TradeAnalysisEditor ref={desktopForm} key={selectedTrade.id} trade={selectedTrade} onSave={onPatchAnalysis} /></div></div>
     <div className="mobile-trade-detail">

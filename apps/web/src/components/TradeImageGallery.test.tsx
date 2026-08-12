@@ -40,7 +40,7 @@ describe('TradeImageGallery upload recovery', () => {
     const onReorder = vi.fn().mockResolvedValue(undefined);
     render(<TradeImageGallery campaignId="campaign-1" symbol="EURUSD" images={[image('two', 1), image('one', 0)] as any} imageUrl={(_, id) => `/${id}`} onUpload={async () => undefined} onReorder={onReorder} onDelete={async () => undefined} />);
 
-    expect(screen.getByAltText('EURUSD 거래 차트 1')).toHaveAttribute('src', '/one');
+    expect(screen.getByAltText('EURUSD 매매 차트 1')).toHaveAttribute('src', '/one');
     expect(screen.getByRole('button', { name: '이미지 1 왼쪽으로 이동' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '이미지 2 오른쪽으로 이동' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '이미지 1 오른쪽으로 이동' }));
@@ -63,12 +63,12 @@ describe('TradeImageGallery upload recovery', () => {
     const onUpload = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(<TradeImageGallery campaignId="campaign-1" symbol="EURUSD" images={[]} imageUrl={() => '/image'} onUpload={onUpload} onReorder={async () => undefined} onDelete={async () => undefined} />);
     const file = new File(['chart'], 'pasted.png', { type: 'image/png' });
-    fireEvent.paste(screen.getByLabelText('EURUSD 거래 이미지'), { clipboardData: { files: [file] } });
+    fireEvent.paste(screen.getByLabelText('EURUSD 매매 이미지'), { clipboardData: { files: [file] } });
     await waitFor(() => expect(onUpload).toHaveBeenCalledWith('campaign-1', file, expect.any(String)));
 
     rerender(<TradeImageGallery campaignId="campaign-1" symbol="EURUSD" images={Array.from({ length: 10 }, (_, index) => image(String(index), index)) as any} imageUrl={() => '/image'} onUpload={onUpload} onReorder={async () => undefined} onDelete={async () => undefined} />);
     expect(screen.getByText('최대 10장').parentElement?.querySelector('input')).toBeDisabled();
-    fireEvent.paste(screen.getByLabelText('EURUSD 거래 이미지'), { clipboardData: { files: [file] } });
+    fireEvent.paste(screen.getByLabelText('EURUSD 매매 이미지'), { clipboardData: { files: [file] } });
     expect(onUpload).toHaveBeenCalledTimes(1);
   });
 
