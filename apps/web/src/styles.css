@@ -835,6 +835,7 @@ h3 {
 .account-switcher { display: grid; gap: 8px; color: var(--text-muted); font-size: .75rem; text-transform: uppercase; }
 .account-switcher select { width: 100%; height: 40px; border: 1px solid var(--border); padding: 0 10px; background: var(--surface); }
 .sidebar-footer { align-self: end; display: grid; gap: 10px; color: var(--text-secondary); }
+.sidebar > .sidebar-footer { grid-row: -2 / -1; }
 .app-content { min-width: 0; padding: 24px 16px; }
 .workspace-header { display: flex; justify-content: flex-end; min-height: 48px; margin-bottom: 16px; }
 .sync-control { display: grid; gap: 8px; min-width: 0; }
@@ -857,6 +858,8 @@ h3 {
 .account-list article span { color: var(--text-secondary); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .78rem; }
 .stats-page { display: grid; width: 100%; min-width: 0; gap: 24px; overflow-x: clip; }
 .metric-grid { display: grid; min-width: 0; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.dashboard-section { scroll-margin-top: 20px; }
+.dashboard-section-title { grid-column: 1 / -1; margin: 0 10px 2px; color: var(--text-secondary); font-size: .9rem; font-weight: 700; }
 .performance-card { display: grid; align-content: start; min-height: 124px; gap: 18px; padding: 12px 10px; border: 0; border-top: 1px solid var(--border); background: transparent; }
 .performance-formulas { grid-column: 1 / -1; grid-row: 1; display: grid; min-width: 0; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: center; gap: 32px; padding: 22px 10px; border-block: 1px solid var(--border); }
 .pnl-equation { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; }

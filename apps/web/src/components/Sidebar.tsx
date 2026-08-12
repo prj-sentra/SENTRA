@@ -23,7 +23,6 @@ const dashboardItems = [
   ['dashboard-overview', '핵심 성과'],
   ['dashboard-charts', '성과 변화'],
   ['dashboard-advanced', '성과 지표'],
-  ['dashboard-analysis', '상세 분석'],
 ] as const;
 
 export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccountChange, isAdmin = false, syncControl, footer }: SidebarProps) {
@@ -37,7 +36,7 @@ export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccount
     {syncControl ? <div className="sidebar-sync">{syncControl}</div> : null}
     {activeView === 'stats' ? <nav className="sidebar-toc" aria-label="대시보드 목차">
       <span>목차</span>
-      {dashboardItems.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+      {dashboardItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{label}</a>)}
     </nav> : null}
     {footer ? <div className="sidebar-footer">{footer}</div> : null}
   </aside>;
