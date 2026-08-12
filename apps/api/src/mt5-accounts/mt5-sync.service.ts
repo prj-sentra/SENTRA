@@ -584,15 +584,19 @@ export class Mt5SyncService {
           },
           select: {
             mt5PositionId: true,
-            campaignMembership: { select: { campaignId: true } },
+            campaignMembership: { select: { campaignId: true, headSource: true } },
           },
         });
-        const overlappingIds = overlapping.map((row) => row.mt5PositionId).filter((id): id is bigint => id !== null);
-        const overlapOpenings = overlappingIds.length ? await tx.mt5Deal.findMany({
+        const manualHeads = await tx.trade.findMany({
+          where: { ownerId, mt5AccountId: accountId, openedAt: { not: null }, campaignMembership: { headSource: 'MANUAL' } },
+          select: { mt5PositionId: true, campaignMembership: { select: { campaignId: true } } },
+        });
+        const openingIds = [...overlapping, ...manualHeads].map((row) => row.mt5PositionId).filter((id): id is bigint => id !== null);
+        const overlapOpenings = openingIds.length ? await tx.mt5Deal.findMany({
           where: {
             server: canonicalServer,
             accountLogin,
-            positionId: { in: overlappingIds },
+            positionId: { in: openingIds },
             entry: 0,
             type: { in: [0, 1] },
           },
@@ -604,8 +608,15 @@ export class Mt5SyncService {
           const key = deal.positionId.toString();
           if (!overlapOpeningByPosition.has(key)) overlapOpeningByPosition.set(key, deal);
         }
+        const newOpening: CampaignOpeningKey = { timeMsc: opened.timeMsc, ticket: opened.ticket, positionId: opened.positionId };
+        const boundary = manualHeads
+          .filter((row) => row.mt5PositionId !== null && overlapOpeningByPosition.has(row.mt5PositionId.toString()))
+          .map((row) => ({ row, key: overlapOpeningByPosition.get(row.mt5PositionId!.toString())! }))
+          .filter(({ key }) => compareCampaignOpeningKey(key, newOpening) <= 0)
+          .sort((left, right) => compareCampaignOpeningKey(right.key, left.key))[0];
         const earliestOverlap = overlapping
           .filter((row) => row.mt5PositionId !== null && row.campaignMembership && overlapOpeningByPosition.has(row.mt5PositionId.toString()))
+          .filter((row) => !boundary || compareCampaignOpeningKey(overlapOpeningByPosition.get(row.mt5PositionId!.toString())!, boundary.key) >= 0)
           .sort((left, right) => compareCampaignOpeningKey(
             overlapOpeningByPosition.get(left.mt5PositionId!.toString())!,
             overlapOpeningByPosition.get(right.mt5PositionId!.toString())!,
@@ -620,6 +631,8 @@ export class Mt5SyncService {
         await tx.campaignMembership.create({
           data: { tradeId: trade.id, campaignId: campaign.id, source: 'AUTO' },
         });
+        // Campaign membership is aggregate state exposed to optimistic clients.
+        await tx.tradeCampaign.update({ where: { id: campaign.id }, data: { version: { increment: 1 } } });
       }
       projectedCount += 1;
     }
@@ -681,7 +694,8 @@ export class Mt5SyncService {
     let componentEnd = Number.NEGATIVE_INFINITY;
     for (const trade of trades) {
       const openedAt = trade.openedAt!.getTime();
-      if (component.length && openedAt > componentEnd) {
+      // A manual head is a durable boundary, even where intervals overlap.
+      if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
         components.push(component);
         component = [];
         componentEnd = Number.NEGATIVE_INFINITY;
@@ -721,6 +735,9 @@ export class Mt5SyncService {
           where: { tradeId: trade.id },
           data: { campaignId: canonical.id },
         });
+        await tx.tradeCampaign.update({ where: { id: canonical.id }, data: { version: { increment: 1 } } });
+        const sourceRemaining = await tx.campaignMembership.count({ where: { campaignId: membership.campaignId } });
+        if (sourceRemaining) await tx.tradeCampaign.update({ where: { id: membership.campaignId }, data: { version: { increment: 1 } } });
         moved += 1;
       }
       for (const campaign of campaignRows.filter((row) => row.id !== canonical.id)) {

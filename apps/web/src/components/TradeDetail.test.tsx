@@ -47,4 +47,11 @@ describe('TradeDetail split execution ownership', () => {
     expect(document.getElementById('trade-detail-trade-1')).toBeNull();
     expect(within(document.getElementById('trade-detail-trade-2')!).getByDisplayValue('5m')).toBeInTheDocument();
   });
+
+  it('reselects the affected trade after campaigns reload', () => {
+    const { container, rerender } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
+    rerender(<TradeDetail campaign={{ ...campaign, members: [...campaign.members] }} selectedTradeId="trade-2" onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
+    expect(within(container.querySelector('.desktop-trade-detail')!).getByDisplayValue('5m')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /2.*번째 분할 매매/ })).toHaveAttribute('aria-current', 'step');
+  });
 });

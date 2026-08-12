@@ -1,4 +1,4 @@
-import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse } from '@trading-journal/shared';
+import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, RelinkTradeCampaignRequest, ResolveCampaignConflictRequest, SetTradeCampaignHeadRequest, TradeCampaignDateResponse, TradeRecord, TradeStatsResponse, UnsetTradeCampaignHeadRequest } from '@trading-journal/shared';
 import { TradeLogController } from './trade-log.controller';
 
 function createController(service: object, chartImageService: object = {}): TradeLogController { return new TradeLogController(service as never, chartImageService as never); }
@@ -44,5 +44,17 @@ describe('TradeLogController', () => {
     const query = { accountId: 'account-1', unit: 'trade' } as const;
     await expect(controller.stats(user, query)).resolves.toBe(tradeStats); await expect(controller.uploadImage(user, 'campaign-1', 'account-1', file, '75442448-0d9f-4f4b-a3e6-1ed53118a7ec')).resolves.toBe(image); await expect(controller.removeImage(user, 'campaign-1', 'image-1', 'account-1')).resolves.toBeUndefined();
     expect(service.getStats).toHaveBeenCalledWith('owner-1', query); expect(gallery.upload).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-1', '75442448-0d9f-4f4b-a3e6-1ed53118a7ec', file); expect(gallery.remove).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-1', 'image-1');
+  });
+  it('forwards singular campaign-head mutations with versioned contracts', async () => {
+    const result = { campaign: { id: 'campaign-2' } };
+    const service = { setCampaignHead: jest.fn().mockResolvedValue(result), unsetCampaignHead: jest.fn().mockResolvedValue(result) };
+    const controller = createController(service);
+    const set: SetTradeCampaignHeadRequest = { tradeId: 'trade-2', campaignVersion: 4 };
+    const unset: UnsetTradeCampaignHeadRequest = { campaignVersion: 5 };
+
+    await expect(controller.setCampaignHead(user, 'campaign-1', 'account-1', set)).resolves.toBe(result);
+    await expect(controller.unsetCampaignHead(user, 'campaign-2', 'account-1', unset)).resolves.toBe(result);
+    expect(service.setCampaignHead).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-1', set);
+    expect(service.unsetCampaignHead).toHaveBeenCalledWith('owner-1', 'account-1', 'campaign-2', unset);
   });
 });

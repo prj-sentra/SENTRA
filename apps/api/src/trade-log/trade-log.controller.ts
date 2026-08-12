@@ -9,6 +9,9 @@ import type {
   PatchTradeStatsPreferencesRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
+  SetTradeCampaignHeadRequest,
+  UnsetTradeCampaignHeadRequest,
+  CampaignHeadMutationResponse,
   TradeCampaignDateResponse,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
@@ -91,6 +94,26 @@ export class TradeLogController {
   @Post('campaigns/relink')
   relinkCampaign(@CurrentUser() user: AuthenticatedUser, @Body() request: RelinkTradeCampaignRequest): Promise<void> {
     return this.tradeLogService.relinkCampaign(user.id, request);
+  }
+
+  @Post('campaigns/:id/head')
+  setCampaignHead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query('accountId') accountId: string | undefined,
+    @Body() request: SetTradeCampaignHeadRequest,
+  ): Promise<CampaignHeadMutationResponse> {
+    return this.tradeLogService.setCampaignHead(user.id, accountId, id, request);
+  }
+
+  @Delete('campaigns/:id/head')
+  unsetCampaignHead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query('accountId') accountId: string | undefined,
+    @Body() request: UnsetTradeCampaignHeadRequest,
+  ): Promise<CampaignHeadMutationResponse> {
+    return this.tradeLogService.unsetCampaignHead(user.id, accountId, id, request);
   }
 
   @Post('campaign-conflicts/:id/resolve')

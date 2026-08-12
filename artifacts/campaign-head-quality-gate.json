@@ -1,0 +1,44 @@
+{
+  "architectReview": {
+    "architectureStatus": "CLEAR", "productStatus": "CLEAR", "codeStatus": "CLEAR", "recommendation": "APPROVE",
+    "evidence": "Architect final review approved manual boundary projection, lossless merges, aggregate versioning, canonical ordering, migration, UI lifecycle and tests.",
+    "commands": ["architect receipt 21-CampaignHeadReview"], "blockers": []
+  },
+  "executorQa": {
+    "status": "passed", "e2eStatus": "passed", "redTeamStatus": "passed",
+    "evidence": "Focused API/PostgreSQL 90 tests, API 179, web 68, typecheck/build/diff, deployed health and authenticated Chromium feature screenshot passed.",
+    "e2eCommands": ["TEST_DATABASE_URL=<campaign_head_test> focused API/PG suites", "pnpm test", "pnpm typecheck", "pnpm build", "docker compose up -d --build", "Chromium /journal automation"],
+    "redTeamCommands": ["manual-boundary cross-projection", "concurrent stale split", "cross-date reversed refresh", "lossless connected unset"],
+    "artifactRefs": [
+      {"id":"head-report","kind":"api-package-test-report","path":"artifacts/campaign-head-test-report.json","description":"Hash-bound tests, deployment and contract report."},
+      {"id":"head-gui","kind":"browser-automation-screenshot","path":"artifacts/campaign-head-live.png","description":"Authenticated live journal head status/action screenshot."},
+      {"id":"head-automation","kind":"browser-automation-transcript","path":"artifacts/campaign-head-browser-automation.json","description":"Authenticated Chromium action transcript."}
+    ],
+    "contractCoverage": [
+      {"id":"head-domain","contractRef":"manual campaign-head domain","obligation":"AUTO gaps, MANUAL split/unset, ordering, sync survival and preservation.","status":"covered","surfaceEvidenceRefs":["api-head"],"adversarialCaseRefs":["boundary-projection","lossless-unset"]},
+      {"id":"head-ui","contractRef":"campaign-head journal UI","obligation":"Right-aligned status/action, confirmation, busy and cross-date reselection.","status":"covered","surfaceEvidenceRefs":["gui-head"],"adversarialCaseRefs":["refresh-race"]}
+    ],
+    "surfaceEvidence": [
+      {"id":"api-head","contractRef":"manual campaign-head domain","surface":"api","invocation":"Unit, stateful and disposable PostgreSQL suites","verdict":"passed","artifactRefs":["head-report"]},
+      {"id":"gui-head","contractRef":"campaign-head journal UI","surface":"web","invocation":"Authenticated Chromium opened a real campaign detail","verdict":"passed","artifactRefs":["head-automation","head-gui"]}
+    ],
+    "adversarialCases": [
+      {"id":"boundary-projection","contractRef":"manual campaign-head domain","scenario":"Unseen trade overlaps both sides of a MANUAL boundary.","expectedBehavior":"Joins post-head segment only.","verdict":"passed","artifactRefs":["head-report"]},
+      {"id":"lossless-unset","contractRef":"manual campaign-head domain","scenario":"Connected unset has nested authored data, images and conflict refs.","expectedBehavior":"Everything preserved and refs rewritten.","verdict":"passed","artifactRefs":["head-report"]},
+      {"id":"refresh-race","contractRef":"campaign-head journal UI","scenario":"Cross-date explicit/effect refreshes resolve stale-first.","expectedBehavior":"Only winning response publishes affected trade target.","verdict":"passed","artifactRefs":["head-report","head-gui"]}
+    ], "blockers": []
+  },
+  "iteration": {
+    "status":"passed", "evidence":"All architect, QA and terminal critic blockers resolved; full verification reran cleanly.", "fullRerun":true,
+    "rerunCommands":["focused API/PG 90", "pnpm test", "pnpm typecheck", "pnpm build", "git diff --check", "docker compose up -d --build", "Chromium live validation"],
+    "reviewCohort": {
+      "reviewGeneration": 1, "sourceHash":"sha256:d7364750077af8620747223853381c38378464e3", "joined":true,
+      "lanes": {
+        "cleaner":{"status":"passed","sourceHash":"sha256:d7364750077af8620747223853381c38378464e3","evidence":"AI SLOP CLEANUP REPORT: zero blocking findings in final staged manifest.","blockers":[]},
+        "architect":{"status":"CLEAR","sourceHash":"sha256:d7364750077af8620747223853381c38378464e3","evidence":"Architecture/product/code final review approved.","blockers":[]},
+        "qa":{"status":"passed","sourceHash":"sha256:d7364750077af8620747223853381c38378464e3","evidence":"API/PostgreSQL/web/deployment/live GUI red-team passed.","blockers":[]}
+      }
+    }, "blockers":[]
+  },
+  "criticReview":{"verdict":"OKAY","sourceHash":"sha256:d7364750077af8620747223853381c38378464e3","evidence":"Terminal critic approved exact evidence-bound staged manifest for commit and push.","blockers":[]}
+}

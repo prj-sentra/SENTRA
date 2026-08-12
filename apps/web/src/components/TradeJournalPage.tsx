@@ -19,6 +19,8 @@ export interface TradeJournalPageProps {
   onPatchCampaignAnalysis: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
   onPatchCampaignReview: (campaignId: string, patch: PatchTradeCampaignReviewRequest) => Promise<void>;
   onPatchMemo: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
+  onChangeCampaignHead?: (campaign: TradeCampaign, tradeId: string) => Promise<void>;
+  campaignHeadBusy?: boolean;
   onRefresh?: () => Promise<void>;
   onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
   onReorderImages: (campaignId: string, imageIds: string[]) => Promise<void>;
@@ -56,7 +58,7 @@ export function TradeJournalPage({ campaigns, calendarDays, date, previousDate, 
     {error ? <p className="error" role="alert">{error}</p> : null}
     {loading && campaigns.length === 0 ? <p className="journal-state" role="status">거래 기록을 불러오는 중입니다…</p> : campaigns.length === 0 ? <p className="journal-state">선택한 날짜에 거래 기록이 없습니다.</p> : <div className="trade-card-list">{campaigns.map((campaign) => {
       const targeted = targetId === campaign.id || campaign.members.some((trade) => trade.id === targetId);
-      return <article key={campaign.id} ref={targeted ? targetRef : undefined} tabIndex={targeted ? -1 : undefined} className={targeted ? 'trade-journal-target' : undefined}><TradeRecordCard campaign={campaign} {...actions} /></article>;
+      return <article key={campaign.id} ref={targeted ? targetRef : undefined} tabIndex={targeted ? -1 : undefined} className={targeted ? 'trade-journal-target' : undefined}><TradeRecordCard campaign={campaign} targetTradeId={campaign.members.some((trade) => trade.id === targetId) ? targetId : undefined} {...actions} /></article>;
     })}</div>}
   </section>;
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, TradeCampaign, TradeCampaignImage } from '@trading-journal/shared';
 import { ImageLightbox } from './ImageLightbox';
 import { CampaignMemoEditor } from './CampaignMemoEditor';
@@ -7,11 +7,14 @@ import { TradeImageGallery } from './TradeImageGallery';
 
 export interface TradeRecordCardProps {
   campaign: TradeCampaign;
+  targetTradeId?: string;
   imageUrl: (campaignId: string, imageId: string) => string;
   onPatchAnalysis: (tradeId: string, patch: PatchTradeAnalysisRequest) => Promise<void>;
   onPatchCampaignAnalysis: (campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => Promise<void>;
   onPatchCampaignReview: (campaignId: string, patch: PatchTradeCampaignReviewRequest) => Promise<void>;
   onPatchMemo: (campaignId: string, patch: PatchTradeCampaignMemoRequest) => Promise<void>;
+  onChangeCampaignHead?: (campaign: TradeCampaign, tradeId: string) => Promise<void>;
+  campaignHeadBusy?: boolean;
   onRefresh?: () => Promise<void>;
   onUploadImage: (campaignId: string, file: File, uploadId: string) => Promise<TradeCampaignImage>;
   onReorderImages: (campaignId: string, imageIds: string[]) => Promise<void>;
@@ -38,6 +41,9 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
   const postSeed = campaign.seedBalance === undefined ? undefined : campaign.seedBalance + campaign.realizedPnl;
   const seedChangeRatio = campaign.seedBalance ? campaign.realizedPnl / campaign.seedBalance * 100 : undefined;
   const memoPreview = campaign.memo?.trim() || '작성 필요';
+  useEffect(() => {
+    if (props.targetTradeId && campaign.members.some((trade) => trade.id === props.targetTradeId)) setExpanded(true);
+  }, [campaign.members, props.targetTradeId]);
   function saveAll() {
     memoForm.current?.requestSubmit();
     tradeDetail.current?.save();
@@ -87,7 +93,7 @@ export function TradeRecordCard(props: TradeRecordCardProps) {
         </div>
       </div>
     </div>
-    {expanded ? <div className="expanded-content" onChangeCapture={() => setDirty(true)}><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><div className="campaign-detail-layout"><CampaignMemoEditor ref={memoForm} campaign={campaign} onSave={props.onPatchMemo} onSaveReview={props.onPatchCampaignReview} /><TradeDetail ref={tradeDetail} campaign={campaign} onPatchAnalysis={props.onPatchAnalysis} onPatchCampaignAnalysis={props.onPatchCampaignAnalysis} /></div></div> : null}
+    {expanded ? <div className="expanded-content" onChangeCapture={() => setDirty(true)}><TradeImageGallery campaignId={campaign.id} symbol={campaign.symbol} images={campaign.images} imageUrl={props.imageUrl} onUpload={props.onUploadImage} onReorder={props.onReorderImages} onDelete={props.onDeleteImage} /><div className="campaign-detail-layout"><CampaignMemoEditor ref={memoForm} campaign={campaign} onSave={props.onPatchMemo} onSaveReview={props.onPatchCampaignReview} /><TradeDetail ref={tradeDetail} campaign={campaign} selectedTradeId={props.targetTradeId} onPatchAnalysis={props.onPatchAnalysis} onPatchCampaignAnalysis={props.onPatchCampaignAnalysis} onChangeCampaignHead={props.onChangeCampaignHead} campaignHeadBusy={props.campaignHeadBusy} /></div></div> : null}
     {previewImage ? <ImageLightbox
       src={props.imageUrl(campaign.id, previewImage.id)}
       alt={`${campaign.symbol} 거래 차트 ${previewIndex + 1}`}

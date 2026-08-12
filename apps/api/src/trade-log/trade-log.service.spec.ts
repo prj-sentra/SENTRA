@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { TradeLogService } from './trade-log.service';
 
 const rawTrade = {
@@ -49,6 +49,240 @@ describe('TradeLogService owner boundary', () => {
     db.mt5Account.findFirst.mockResolvedValue(null);
     await expect(service.getStats('owner-1', { accountId: 'foreign' })).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.mt5Account.findFirst).toHaveBeenCalledWith({ where: { id: 'foreign', ownerId: 'owner-1' }, select: { id: true } });
+  });
+});
+
+describe('TradeLogService campaign-head boundaries', () => {
+  const opened = new Date('2026-08-01T00:00:00.000Z');
+  const member = (tradeId: string, position: bigint, closedAt: Date | null = null, headSource: 'AUTO' | 'MANUAL' = 'AUTO') => ({
+    tradeId, campaignId: 'campaign-1', source: 'AUTO', headSource,
+    trade: { id: tradeId, openedAt: opened, closedAt, mt5PositionId: position },
+  });
+
+  it('orders equal executions by opening ticket and then position ID', async () => {
+    const tx = {
+      mt5Deal: { findMany: jest.fn().mockResolvedValue([
+        { positionId: 9n, timeMsc: 1n, ticket: 10n },
+        { positionId: 2n, timeMsc: 1n, ticket: 10n },
+        { positionId: 1n, timeMsc: 1n, ticket: 20n },
+      ]) },
+    };
+    const service = new TradeLogService({} as never);
+    const ordered = await (service as any).orderMemberships(tx, 'account-1', [
+      member('late-ticket', 1n), member('high-position', 9n), member('low-position', 2n),
+    ]);
+    expect(ordered.map((row: { tradeId: string }) => row.tradeId)).toEqual(['low-position', 'high-position', 'late-ticket']);
+  });
+
+  it('normalizes campaign roots with persisted opening ticket before position ID', async () => {
+    const openedAt = new Date('2026-08-01T00:00:00.000Z');
+    const tx: any = {
+      campaignMembership: { findMany: jest.fn().mockResolvedValue([
+        { ...member('position-first', 1n), trade: { id: 'position-first', openedAt, mt5PositionId: 1n, mt5AccountId: 'account-1' } },
+        { ...member('ticket-first', 99n), trade: { id: 'ticket-first', openedAt, mt5PositionId: 99n, mt5AccountId: 'account-1' } },
+      ]) },
+      mt5Deal: { findMany: jest.fn().mockResolvedValue([
+        { positionId: 99n, timeMsc: 1n, ticket: 10n },
+        { positionId: 1n, timeMsc: 1n, ticket: 20n },
+      ]) },
+      tradeCampaign: { findUnique: jest.fn().mockResolvedValue({ mt5AccountId: 'account-1' }), update: jest.fn(), delete: jest.fn() },
+    };
+    const service = new TradeLogService({} as never);
+    await (service as any).normalizeCampaign(tx, 'campaign-1');
+    expect(tx.tradeCampaign.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'campaign-1' }, data: expect.objectContaining({ rootTradeId: 'ticket-first' }),
+    }));
+  });
+
+  it('orders serialized campaign members by persisted opening ticket before position ID', async () => {
+    const openedAt = new Date('2026-08-01T00:00:00.000Z');
+    const tx: any = {
+      mt5Deal: { findMany: jest.fn().mockResolvedValue([
+        { positionId: 99n, timeMsc: 1n, ticket: 10n },
+        { positionId: 1n, timeMsc: 1n, ticket: 20n },
+      ]) },
+    };
+    const service = new TradeLogService({} as never);
+    const campaign: any = {
+      mt5AccountId: 'account-1',
+      memberships: [
+        { ...member('position-first', 1n), trade: { id: 'position-first', openedAt, mt5PositionId: 1n } },
+        { ...member('ticket-first', 99n), trade: { id: 'ticket-first', openedAt, mt5PositionId: 99n } },
+      ],
+    };
+    const ordered = await (service as any).orderCampaignForSerialization(tx, campaign);
+    expect(ordered.memberships.map((membership: { tradeId: string }) => membership.tradeId)).toEqual(['ticket-first', 'position-first']);
+  });
+
+  it('detects authored campaign analysis including review fields, while empty analysis is disposable', () => {
+    const service = new TradeLogService({} as never);
+    const empty = {
+      primaryTrend: null, maTimeframes: {}, marketZoneEnabled: false, marketZoneHigh: null, marketZoneLow: null,
+      retailPositionEnabled: false, retailBuyAveragePrice: null, retailSellAveragePrice: null, retailBuyRatio: null,
+      fibonacciEnabled: false, fibonacciStartPrice: null, fibonacciEndPrice: null, entryReason: null,
+      invalidationCondition: null, takeProfitCondition: null, additionalEntryPlan: null, tradeScore: null,
+      strengths: null, weaknesses: null, economicIndicators: [],
+    };
+    expect((service as any).hasCampaignAnalysisContent(empty)).toBe(false);
+    expect((service as any).hasCampaignAnalysisContent({ ...empty, strengths: 'kept review' })).toBe(true);
+  });
+
+  it('splits the selected and later members into a new manual-head campaign with empty analysis', async () => {
+    const tx: any = {
+      $queryRaw: jest.fn()
+        .mockResolvedValueOnce([{ id: 'account-1', canonicalServer: 'broker', accountLogin: 1n }])
+        .mockResolvedValueOnce([]),
+      tradeCampaign: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner-1', mt5AccountId: 'account-1', version: 3 }),
+        create: jest.fn().mockResolvedValue({ id: 'campaign-2' }),
+        update: jest.fn(),
+      },
+      campaignMembership: { updateMany: jest.fn(), update: jest.fn() },
+    };
+    const db: any = {
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner-1', mt5AccountId: 'account-1' }) },
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    };
+    const service = new TradeLogService(db);
+    jest.spyOn(service as any, 'lockCampaignRows').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'orderedCampaignMembers').mockResolvedValue([
+      member('first', 1n), member('chosen', 2n), member('later', 3n),
+    ]);
+    jest.spyOn(service as any, 'normalizeCampaign').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'serializedCampaign').mockImplementation(async (...args: unknown[]) => ({ id: args[1] }));
+
+    await expect(service.setCampaignHead('owner-1', 'account-1', 'campaign-1', { tradeId: 'chosen', campaignVersion: 3 })).resolves.toEqual({
+      previousCampaign: { id: 'campaign-1' }, campaign: { id: 'campaign-2' },
+    });
+    expect(tx.tradeCampaign.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ rootTradeId: 'chosen', analysis: { create: {} } }),
+    }));
+    expect(tx.campaignMembership.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tradeId: { in: ['chosen', 'later'] } }, data: { campaignId: 'campaign-2', headSource: 'AUTO' },
+    }));
+    expect(tx.campaignMembership.update).toHaveBeenCalledWith({ where: { tradeId: 'chosen' }, data: { headSource: 'MANUAL', source: 'MANUAL' } });
+  });
+
+  it('rejects stale campaign versions before changing membership', async () => {
+    const tx: any = {
+      $queryRaw: jest.fn().mockResolvedValueOnce([{ id: 'account-1', canonicalServer: 'broker', accountLogin: 1n }]).mockResolvedValueOnce([]),
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner', mt5AccountId: 'account-1', version: 2 }) },
+    };
+    const db: any = {
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner', mt5AccountId: 'account-1' }) },
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    };
+    const service = new TradeLogService(db);
+    jest.spyOn(service as any, 'lockCampaignRows').mockResolvedValue(undefined);
+    await expect(service.setCampaignHead('owner', 'account-1', 'campaign-1', { tradeId: 'trade', campaignVersion: 1 })).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.campaignMembership).toBeUndefined();
+  });
+
+  it('rejects AUTO and account-first heads, and turns a gapped manual head back into AUTO', async () => {
+    const tx: any = {
+      $queryRaw: jest.fn((query: any) => Promise.resolve((query.strings?.join('') ?? '').includes('FROM mt5_accounts')
+        ? [{ id: 'account-1', canonicalServer: 'broker', accountLogin: 1n }] : [])),
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner', mt5AccountId: 'account-1', version: 1 }), update: jest.fn() },
+      campaignMembership: { update: jest.fn() },
+    };
+    const db: any = {
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-1', ownerId: 'owner', mt5AccountId: 'account-1' }) },
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    };
+    const service = new TradeLogService(db);
+    jest.spyOn(service as any, 'lockCampaignRows').mockResolvedValue(undefined);
+    const orderedCampaign = jest.spyOn(service as any, 'orderedCampaignMembers');
+    orderedCampaign.mockResolvedValueOnce([member('head', 2n, null, 'AUTO')]);
+    await expect(service.unsetCampaignHead('owner', 'account-1', 'campaign-1', { campaignVersion: 1 })).rejects.toBeInstanceOf(BadRequestException);
+
+    orderedCampaign.mockResolvedValueOnce([member('head', 2n, null, 'MANUAL')]);
+    jest.spyOn(service as any, 'orderedAccountMembers').mockResolvedValue([member('head', 2n, null, 'MANUAL')]);
+    await expect(service.unsetCampaignHead('owner', 'account-1', 'campaign-1', { campaignVersion: 1 })).rejects.toBeInstanceOf(BadRequestException);
+
+    orderedCampaign.mockResolvedValueOnce([member('head', 2n, null, 'MANUAL')]);
+    jest.spyOn(service as any, 'orderedAccountMembers').mockResolvedValue([
+      { ...member('previous', 1n, new Date('2026-07-31T23:00:00.000Z')), campaignId: 'campaign-0' },
+      member('head', 2n, null, 'MANUAL'),
+    ]);
+    orderedCampaign.mockResolvedValueOnce([{ ...member('previous', 1n, new Date('2026-07-31T23:00:00.000Z')), campaignId: 'campaign-0' }]);
+    jest.spyOn(service as any, 'serializedCampaign').mockResolvedValue({ id: 'campaign-1' });
+    await expect(service.unsetCampaignHead('owner', 'account-1', 'campaign-1', { campaignVersion: 1 })).resolves.toEqual({ campaign: { id: 'campaign-1' } });
+    expect(tx.campaignMembership.update).toHaveBeenLastCalledWith({ where: { tradeId: 'head' }, data: { headSource: 'AUTO', source: 'AUTO' } });
+    expect(tx.tradeCampaign.update).toHaveBeenCalledWith({ where: { id: 'campaign-1' }, data: { version: { increment: 1 } } });
+  });
+
+  it('preserves authored split content during a connected merge', async () => {
+    let memo: string | null = 'preserve this';
+    const tx: any = {
+      $queryRaw: jest.fn((query: any) => Promise.resolve((query.strings?.join('') ?? '').includes('FROM mt5_accounts')
+        ? [{ id: 'account-1', canonicalServer: 'broker', accountLogin: 1n }] : [])),
+      tradeCampaign: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'campaign-2', ownerId: 'owner', mt5AccountId: 'account-1', version: 1 }),
+        findUniqueOrThrow: jest.fn(() => ({ memo, images: [], conflicts: [], analysis: null })),
+        delete: jest.fn(), update: jest.fn(),
+      },
+      campaignMembership: { update: jest.fn(), updateMany: jest.fn() },
+    };
+    const db: any = {
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-2', ownerId: 'owner', mt5AccountId: 'account-1' }) },
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    };
+    const service = new TradeLogService(db);
+    jest.spyOn(service as any, 'lockCampaignRows').mockResolvedValue(undefined);
+    const preserve = jest.spyOn(service as any, 'preserveCampaignMerge').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'orderedCampaignMembers').mockImplementation(async (...args: unknown[]) => args[1] === 'campaign-2'
+      ? [member('head', 2n, null, 'MANUAL')]
+      : [{ ...member('previous', 1n, new Date('2026-08-02T00:00:00.000Z')), campaignId: 'campaign-1' }]);
+    jest.spyOn(service as any, 'orderedAccountMembers').mockResolvedValue([
+      { ...member('previous', 1n, new Date('2026-08-02T00:00:00.000Z')), campaignId: 'campaign-1' },
+      { ...member('head', 2n, null, 'MANUAL'), campaignId: 'campaign-2' },
+    ]);
+    jest.spyOn(service as any, 'normalizeCampaign').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'serializedCampaign').mockResolvedValue({ id: 'campaign-1' });
+    await expect(service.unsetCampaignHead('owner', 'account-1', 'campaign-2', { campaignVersion: 1 })).resolves.toEqual({
+      previousCampaign: undefined, campaign: { id: 'campaign-1' },
+    });
+    expect(preserve).toHaveBeenCalledWith(tx, 'campaign-1', 'campaign-2');
+    expect(tx.campaignMembership.updateMany).toHaveBeenCalledWith({ where: { campaignId: 'campaign-2' }, data: { campaignId: 'campaign-1', headSource: 'AUTO' } });
+    expect(tx.tradeCampaign.delete).toHaveBeenCalledWith({ where: { id: 'campaign-2' } });
+  });
+
+  it('merges through an earlier predecessor interval that overlaps the manual head', async () => {
+    const tx: any = {
+      $queryRaw: jest.fn((query: any) => Promise.resolve((query.strings?.join('') ?? '').includes('FROM mt5_accounts')
+        ? [{ id: 'account-1', canonicalServer: 'broker', accountLogin: 1n }] : [])),
+      tradeCampaign: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'campaign-2', ownerId: 'owner', mt5AccountId: 'account-1', version: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ memo: null, images: [], conflicts: [], analysis: null }),
+        delete: jest.fn(), update: jest.fn(),
+      },
+      campaignMembership: { update: jest.fn(), updateMany: jest.fn() },
+    };
+    const db: any = {
+      tradeCampaign: { findFirst: jest.fn().mockResolvedValue({ id: 'campaign-2', ownerId: 'owner', mt5AccountId: 'account-1' }) },
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    };
+    const service = new TradeLogService(db);
+    jest.spyOn(service as any, 'lockCampaignRows').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'preserveCampaignMerge').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'orderedCampaignMembers').mockImplementation(async (...args: unknown[]) => args[1] === 'campaign-2'
+      ? [member('head', 3n, null, 'MANUAL')]
+      : [
+        { ...member('long-lived', 1n, new Date('2026-08-03T00:00:00.000Z')), campaignId: 'campaign-1' },
+        { ...member('short-immediate', 2n, new Date('2026-08-01T01:00:00.000Z')), campaignId: 'campaign-1' },
+      ]);
+    jest.spyOn(service as any, 'orderedAccountMembers').mockResolvedValue([
+      { ...member('long-lived', 1n, new Date('2026-08-03T00:00:00.000Z')), campaignId: 'campaign-1' },
+      { ...member('short-immediate', 2n, new Date('2026-08-01T01:00:00.000Z')), campaignId: 'campaign-1' },
+      { ...member('head', 3n, null, 'MANUAL'), campaignId: 'campaign-2' },
+    ]);
+    jest.spyOn(service as any, 'normalizeCampaign').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'serializedCampaign').mockResolvedValue({ id: 'campaign-1' });
+
+    await expect(service.unsetCampaignHead('owner', 'account-1', 'campaign-2', { campaignVersion: 1 })).resolves.toEqual({
+      previousCampaign: undefined, campaign: { id: 'campaign-1' },
+    });
+    expect(tx.tradeCampaign.delete).toHaveBeenCalledWith({ where: { id: 'campaign-2' } });
   });
 });
 describe('TradeLogService calendar summaries', () => {
@@ -115,6 +349,7 @@ describe('TradeLogService historical MT5 campaign operations', () => {
           : [];
       }),
       trade: { findFirst: jest.fn().mockResolvedValue(trade) },
+      mt5Deal: { findMany: jest.fn().mockResolvedValue([]) },
       campaignMembership: {
         findUnique: jest.fn().mockResolvedValue({ tradeId: trade.id, campaignId: 'campaign-1', source: 'AUTO' }),
         upsert: jest.fn(),

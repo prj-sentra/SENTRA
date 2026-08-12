@@ -150,10 +150,19 @@ function statefulDb() {
         return state.trade;
       }),
     },
-    tradeCampaign: { upsert: jest.fn(async ({ create }: any) => state.campaign ??= { id: 'campaign-1', ...create }) },
+    tradeCampaign: {
+      upsert: jest.fn(async ({ create }: any) => state.campaign ??= { id: 'campaign-1', version: 1, ...create }),
+      update: jest.fn(async ({ where, data }: any) => {
+        if (!state.campaign || state.campaign.id !== where.id) throw new Error('campaign not found');
+        const version = data.version?.increment;
+        const { version: _version, ...rest } = data;
+        state.campaign = { ...state.campaign, ...rest, ...(version !== undefined && { version: state.campaign.version + version }) };
+        return state.campaign;
+      }),
+    },
     campaignMembership: {
       findUnique: jest.fn(async ({ where }: any) => state.membership?.tradeId === where.tradeId ? state.membership : null),
-      create: jest.fn(async ({ data }: any) => state.membership ??= data),
+      create: jest.fn(async ({ data }: any) => state.membership ??= { headSource: 'AUTO', ...data }),
     },
   };
   return { db, state };

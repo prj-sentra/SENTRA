@@ -8,14 +8,14 @@ const emptyAnalysis = () => ({
 });
 
 function fixture(rows: Array<{
-  id: string; open: number; close?: number; campaign: string; source?: 'AUTO' | 'MANUAL'; authored?: boolean;
+  id: string; open: number; close?: number; campaign: string; source?: 'AUTO' | 'MANUAL'; headSource?: 'AUTO' | 'MANUAL'; authored?: boolean;
   ticket?: number; positionId?: number;
 }>) {
   const campaigns = new Map(rows.map((row) => [row.campaign, {
     id: row.campaign, memo: null, rootTrade: { openedAt: new Date(row.open), mt5PositionId: BigInt(row.positionId ?? row.open) },
     analysis: row.authored ? { id: `analysis-${row.campaign}`, ...emptyAnalysis(), entryReason: 'authored' } : { id: `analysis-${row.campaign}`, ...emptyAnalysis() }, images: [], conflicts: [],
   }]));
-  const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO' }]));
+  const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO', headSource: row.headSource ?? 'AUTO' }]));
   const trades = rows.map((row) => ({
     id: row.id, openedAt: new Date(row.open), closedAt: row.close === undefined ? null : new Date(row.close),
     mt5PositionId: BigInt(row.positionId ?? row.open),
@@ -79,6 +79,17 @@ describe('MT5 interval-overlap campaign classification', () => {
     await expect(service.reclassifyCampaigns(state.tx, 'owner', 'account')).resolves.toEqual({ moved: 0, deletedCampaigns: 0, conflicts: 2 });
     expect(state.conflicts).toEqual(['b', 'c']);
     expect([...state.memberships.values()].map((row) => row.campaignId)).toEqual(['ca', 'cb', 'cc']);
+  });
+
+  it('partitions an overlapping component at a manual head without movement or conflict', async () => {
+    const state = fixture([
+      { id: 'a', open: 100, close: 400, campaign: 'ca' },
+      { id: 'b', open: 200, close: 300, campaign: 'ca' },
+      { id: 'head', open: 250, close: 350, campaign: 'cb', headSource: 'MANUAL', source: 'MANUAL' },
+      { id: 'later', open: 260, close: 360, campaign: 'cb' },
+    ]);
+    await expect(service.reclassifyCampaigns(state.tx, 'owner', 'account')).resolves.toEqual({ moved: 0, deletedCampaigns: 0, conflicts: 0 });
+    expect([...state.memberships.values()].map((membership) => membership.campaignId)).toEqual(['ca', 'ca', 'cb', 'cb']);
   });
 
   it('protects authored automatic campaigns during sync but archives them during an explicit repair', async () => {

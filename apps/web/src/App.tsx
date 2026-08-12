@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, TradeCalendarDay, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, UpdateMt5AccountRequest } from '@trading-journal/shared';
+import type { CampaignHeadMutationResponse, CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, SetTradeCampaignHeadRequest, TradeCalendarDay, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, UnsetTradeCampaignHeadRequest, UpdateMt5AccountRequest } from '@trading-journal/shared';
 import { UserManagement } from './admin/UserManagement';
 import { apiBaseUrl, apiRequest, setUnauthorizedHandler } from './api/client';
 import { AuthScreen, type CurrentUser } from './auth/AuthScreen';
@@ -22,6 +22,15 @@ export function appViewFromPath(pathname: string): AppView {
   return (Object.entries(appViewPaths).find(([, path]) => path === normalized)?.[0] as AppView | undefined) ?? 'trade-log';
 }
 
+export function campaignHeadMutationRequest(campaign: TradeCampaign, tradeId: string): { path: string; init: RequestInit } {
+  if (campaign.rootTradeId === tradeId) {
+    const request: UnsetTradeCampaignHeadRequest = { campaignVersion: campaign.campaignVersion };
+    return { path: `/trade-log/campaigns/${encodeURIComponent(campaign.id)}/head`, init: { method: 'DELETE', body: JSON.stringify(request) } };
+  }
+  const request: SetTradeCampaignHeadRequest = { tradeId, campaignVersion: campaign.campaignVersion };
+  return { path: `/trade-log/campaigns/${encodeURIComponent(campaign.id)}/head`, init: { method: 'POST', body: JSON.stringify(request) } };
+}
+
 export function App() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -35,6 +44,9 @@ export function App() {
   const [editingAccount, setEditingAccount] = useState<SafeMt5AccountRef>(); const [accountBusy, setAccountBusy] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(); const generation = useRef(0);
   const [journalTargetId, setJournalTargetId] = useState<string>();
+  const [campaignHeadBusy, setCampaignHeadBusy] = useState(false);
+  const pendingCampaignHeadTarget = useRef<{ tradeId: string; date: string } | undefined>(undefined);
+  const activeAccountLoad = useRef<Promise<boolean> | undefined>(undefined);
 
   const navigateView = useCallback((next: AppView, replace = false) => {
     const path = appViewPaths[next];
@@ -55,17 +67,49 @@ export function App() {
   const loadCurrentUser = useCallback(async () => { try { setUser(await apiRequest<CurrentUser>('/auth/me')); } catch { setUser(null); } finally { setCheckingSession(false); } }, []);
   useEffect(() => setUnauthorizedHandler(() => setUser(null)), []); useEffect(() => { void loadCurrentUser(); }, [loadCurrentUser]);
   const loadAccounts = useCallback(async () => { if (!user) return; const next = await apiRequest<SafeMt5AccountRef[]>('/mt5-accounts'); setAccounts(next); setAccountId((current) => current && next.some((account) => account.id === current) ? current : next.find((account) => account.active)?.id ?? next[0]?.id); }, [user]);
-  const loadAccountData = useCallback(async () => {
-    if (!user || !accountId) { setCampaigns([]); setCalendarDays([]); return; }
+  const loadAccountData = useCallback(async (dateOverride?: string): Promise<boolean> => {
+    if (!user || !accountId) { setCampaigns([]); setCalendarDays([]); return false; }
     const current = ++generation.current; setLoading(true); setError(null);
-    const query = new URLSearchParams({ accountId }); if (selectedDate) query.set('date', selectedDate);
-    try { const campaignResponse = await apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`); if (current !== generation.current) return; setCampaigns(campaignResponse.campaigns); setCalendarDays(campaignResponse.calendarDays); setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate }); }
+    const requestedDate = dateOverride ?? selectedDate;
+    const query = new URLSearchParams({ accountId }); if (requestedDate) query.set('date', requestedDate);
+    try {
+      const campaignResponse = await apiRequest<TradeCampaignDateResponse>(`/trade-log/campaigns?${query}`);
+      if (current !== generation.current) return false;
+      setCampaigns(campaignResponse.campaigns); setCalendarDays(campaignResponse.calendarDays); setCampaignDate({ date: campaignResponse.date, previousDate: campaignResponse.previousDate, nextDate: campaignResponse.nextDate });
+      const target = pendingCampaignHeadTarget.current;
+      if (target && target.date === requestedDate && campaignResponse.campaigns.some((entry) => entry.members.some((trade) => trade.id === target.tradeId))) {
+        pendingCampaignHeadTarget.current = undefined;
+        setJournalTargetId(target.tradeId);
+      }
+      return true;
+    }
     catch { if (current === generation.current) setError('거래 기록을 불러올 수 없습니다.'); }
     finally { if (current === generation.current) setLoading(false); }
+    return false;
   }, [accountId, selectedDate, user]);
-  useEffect(() => { void loadAccounts(); }, [loadAccounts]); useEffect(() => { void loadAccountData(); }, [loadAccountData]);
+  const refreshAccountData = useCallback((dateOverride?: string) => {
+    const refresh = loadAccountData(dateOverride);
+    activeAccountLoad.current = refresh;
+    return refresh;
+  }, [loadAccountData]);
+  useEffect(() => { void loadAccounts(); }, [loadAccounts]); useEffect(() => { void refreshAccountData(); }, [refreshAccountData]);
   const selectedAccount = useMemo(() => accounts.find((account) => account.id === accountId) ?? null, [accounts, accountId]);
   async function mutate(path: string, init: RequestInit): Promise<void> { await apiRequest(path, init); await loadAccountData(); }
+  async function changeCampaignHead(campaign: TradeCampaign, tradeId: string): Promise<void> {
+    setCampaignHeadBusy(true);
+    try {
+      const request = campaignHeadMutationRequest(campaign, tradeId);
+      const response = await apiRequest<CampaignHeadMutationResponse>(request.path, request.init);
+      pendingCampaignHeadTarget.current = { tradeId, date: response.campaign.tradingDate };
+      setSelectedDate(response.campaign.tradingDate);
+      let latestRefresh = refreshAccountData(response.campaign.tradingDate);
+      let committed = await latestRefresh;
+      while (!committed && activeAccountLoad.current && activeAccountLoad.current !== latestRefresh) {
+        latestRefresh = activeAccountLoad.current;
+        committed = await latestRefresh;
+      }
+    } finally { setCampaignHeadBusy(false); }
+  }
   function clearAuthenticatedState() { generation.current += 1; setUser(null); setAccounts([]); setCampaigns([]); setCalendarDays([]); setAccountId(undefined); }
   async function logout() { try { await apiRequest('/auth/logout', { method: 'POST' }); } finally { clearAuthenticatedState(); } }
   async function createAccount(request: CreateMt5AccountRequest) { setAccountBusy(true); try { await apiRequest('/mt5-accounts', { method: 'POST', body: JSON.stringify(request) }); await loadAccounts(); } finally { setAccountBusy(false); } }
@@ -118,7 +162,7 @@ export function App() {
   if (checkingSession) return <main className="shell"><p className="muted" role="status">세션을 불러오는 중입니다…</p></main>;
   if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
   const noAccount = !accountId;
-  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={navigateView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
+  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={navigateView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={() => { void loadAccountData(); }} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
     {view === 'trade-log' && (noAccount
       ? <p className="journal-state">사이드바에서 MT5 계정을 선택하세요.</p>
       : <TradeJournalPage
@@ -137,7 +181,9 @@ export function App() {
           onPatchCampaignAnalysis={(campaignId: string, patch: PatchTradeCampaignAnalysisRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/analysis?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onPatchCampaignReview={(campaignId: string, patch: PatchTradeCampaignReviewRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/review?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
           onPatchMemo={(campaignId: string, patch: PatchTradeCampaignMemoRequest) => mutate(`/trade-log/campaigns/${encodeURIComponent(campaignId)}/memo?accountId=${encodeURIComponent(accountId!)}`, { method: 'PATCH', body: JSON.stringify(patch) })}
-          onRefresh={loadAccountData}
+          onChangeCampaignHead={changeCampaignHead}
+          campaignHeadBusy={campaignHeadBusy}
+          onRefresh={async () => { await refreshAccountData(); }}
           onUploadImage={uploadImage}
           onReorderImages={reorderImages}
           onDeleteImage={deleteImage}

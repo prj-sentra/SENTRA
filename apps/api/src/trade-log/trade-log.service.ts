@@ -8,7 +8,9 @@ import type {
   PatchTradeStatsPreferencesRequest,
   RelinkTradeCampaignRequest,
   ResolveCampaignConflictRequest,
+  SetTradeCampaignHeadRequest,
   TradeCampaign,
+  CampaignHeadMutationResponse,
   TradeCampaignDateResponse,
   TradeLogAssistantActionsRequest,
   TradeLogAssistantActionsResponse,
@@ -20,6 +22,7 @@ import type {
   TradeStatsQuery,
   TradeStatsResponse,
   TradeStatsSession,
+  UnsetTradeCampaignHeadRequest,
 } from '@trading-journal/shared';
 import {
   Prisma,
@@ -258,13 +261,13 @@ export class TradeLogService {
       date: selectedDate,
       previousDate: index > 0 ? actualDates[index - 1] : undefined,
       nextDate: index >= 0 && index < actualDates.length - 1 ? actualDates[index + 1] : undefined,
-      campaigns: campaigns.map((campaign) => this.serializeCampaign({
+      campaigns: await Promise.all(campaigns.map(async (campaign) => this.serializeCampaign(await this.orderCampaignForSerialization(this.prisma, {
         ...campaign,
         conflicts: [
           ...campaign.conflicts,
           ...unresolvedConflicts.filter((conflict) => Array.isArray(conflict.candidateCampaignIds) && conflict.candidateCampaignIds.includes(campaign.id)),
         ],
-      }, provenBalances)),
+      }), provenBalances))),
       calendarDays,
       diagnostics: { missingOpenedAtTradeIds },
     };
@@ -287,6 +290,81 @@ export class TradeLogService {
       if (!target || target.mt5AccountId !== trade.mt5AccountId) throw new BadRequestException('Campaign and trade account scope must match');
       await this.relinkCampaignInTransaction(tx, trade.id, campaignId, false);
       await this.normalizeCampaign(tx, campaignId);
+    });
+  }
+
+  async setCampaignHead(ownerId: string, accountId: string | undefined, campaignId: string, request: SetTradeCampaignHeadRequest): Promise<CampaignHeadMutationResponse> {
+    if (!request || typeof request.tradeId !== 'string' || !request.tradeId || !Number.isInteger(request.campaignVersion)) throw new BadRequestException('tradeId and campaignVersion are required');
+    return this.mutateCampaignHead(ownerId, accountId, campaignId, request.campaignVersion, request.tradeId);
+  }
+
+  async unsetCampaignHead(ownerId: string, accountId: string | undefined, campaignId: string, request: UnsetTradeCampaignHeadRequest): Promise<CampaignHeadMutationResponse> {
+    if (!request || !Number.isInteger(request.campaignVersion)) throw new BadRequestException('campaignVersion is required');
+    const initial = await this.prisma.tradeCampaign.findFirst({ where: { id: campaignId, ownerId, ...(accountId ? { mt5AccountId: accountId } : {}) } });
+    if (!initial?.mt5AccountId) throw new NotFoundException(`Campaign ${campaignId} not found`);
+    const lockedAccountId = initial.mt5AccountId;
+    return this.prisma.$transaction(async (tx) => {
+      await lockOwnedMt5Account(tx, ownerId, lockedAccountId);
+      await this.lockCampaignRows(tx, campaignId);
+      const campaign = await tx.tradeCampaign.findFirst({ where: { id: campaignId, ownerId, mt5AccountId: lockedAccountId } });
+      if (!campaign) throw new NotFoundException(`Campaign ${campaignId} not found`);
+      if (campaign.version !== request.campaignVersion) throw new ConflictException('Campaign was updated by another request');
+      const members = await this.orderedCampaignMembers(tx, campaignId, lockedAccountId);
+      const head = members[0];
+      if (!head || head.headSource !== 'MANUAL') throw new BadRequestException('Only MANUAL campaign heads can be unset');
+      const accountMembers = await this.orderedAccountMembers(tx, ownerId, lockedAccountId);
+      const index = accountMembers.findIndex((member) => member.tradeId === head.tradeId);
+      if (index <= 0) throw new BadRequestException('Account-first campaign head cannot be unset');
+      const predecessor = accountMembers[index - 1];
+      const previousCampaignId = predecessor.campaignId;
+      if (previousCampaignId === campaignId) throw new BadRequestException('Campaign head has no predecessor campaign');
+      await this.lockCampaignRows(tx, previousCampaignId);
+      const predecessorMembers = await this.orderedCampaignMembers(tx, previousCampaignId, lockedAccountId);
+      const connected = predecessorMembers.some((member) => member.trade.closedAt === null || member.trade.closedAt >= head.trade.openedAt!);
+      if (!connected) {
+        await tx.campaignMembership.update({ where: { tradeId: head.tradeId }, data: { headSource: 'AUTO', source: 'AUTO' } });
+        await tx.tradeCampaign.update({ where: { id: campaignId }, data: { version: { increment: 1 } } });
+        return { campaign: await this.serializedCampaign(tx, campaignId) } as CampaignHeadMutationResponse;
+      }
+      await this.preserveCampaignMerge(tx, previousCampaignId, campaignId);
+      await tx.campaignMembership.update({ where: { tradeId: head.tradeId }, data: { headSource: 'AUTO', source: 'AUTO' } });
+      await tx.campaignMembership.updateMany({ where: { campaignId }, data: { campaignId: previousCampaignId, headSource: 'AUTO' } });
+      await tx.tradeCampaign.delete({ where: { id: campaignId } });
+      await tx.tradeCampaign.update({ where: { id: previousCampaignId }, data: { version: { increment: 1 } } });
+      await this.normalizeCampaign(tx, previousCampaignId);
+      return {
+        previousCampaign: undefined,
+        campaign: await this.serializedCampaign(tx, previousCampaignId),
+      } as CampaignHeadMutationResponse;
+    });
+  }
+
+  private async mutateCampaignHead(ownerId: string, accountId: string | undefined, campaignId: string, version: number, tradeId: string): Promise<CampaignHeadMutationResponse> {
+    const initial = await this.prisma.tradeCampaign.findFirst({ where: { id: campaignId, ownerId, ...(accountId ? { mt5AccountId: accountId } : {}) } });
+    if (!initial?.mt5AccountId) throw new NotFoundException(`Campaign ${campaignId} not found`);
+    const lockedAccountId = initial.mt5AccountId;
+    return this.prisma.$transaction(async (tx) => {
+      await lockOwnedMt5Account(tx, ownerId, lockedAccountId);
+      await this.lockCampaignRows(tx, campaignId);
+      const campaign = await tx.tradeCampaign.findFirst({ where: { id: campaignId, ownerId, mt5AccountId: lockedAccountId } });
+      if (!campaign) throw new NotFoundException(`Campaign ${campaignId} not found`);
+      if (campaign.version !== version) throw new ConflictException('Campaign was updated by another request');
+      const members = await this.orderedCampaignMembers(tx, campaignId, lockedAccountId);
+      const start = members.findIndex((member) => member.tradeId === tradeId);
+      if (start < 0) throw new BadRequestException('Trade does not belong to campaign');
+      if (start === 0) throw new BadRequestException('Campaign head is already set');
+      const selected = members[start];
+      const created = await tx.tradeCampaign.create({
+        data: { rootTradeId: selected.tradeId, tradingDate: this.seoulMidnight(selected.trade.openedAt!), ownerId, mt5AccountId: lockedAccountId, analysis: { create: {} } },
+      });
+      await tx.campaignMembership.updateMany({ where: { tradeId: { in: members.slice(start).map((member) => member.tradeId) } }, data: { campaignId: created.id, headSource: 'AUTO' } });
+      await tx.campaignMembership.update({ where: { tradeId }, data: { headSource: 'MANUAL', source: 'MANUAL' } });
+      await tx.tradeCampaign.update({ where: { id: campaign.id }, data: { version: { increment: 1 } } });
+      await this.normalizeCampaign(tx, campaign.id);
+      return {
+        previousCampaign: await this.serializedCampaign(tx, campaign.id),
+        campaign: await this.serializedCampaign(tx, created.id),
+      } as CampaignHeadMutationResponse;
     });
   }
 
@@ -707,6 +785,100 @@ export class TradeLogService {
     return { ...(samples.length ? { money } : {}), ...(percent !== undefined ? { percent } : {}), ...(rs.length ? { r: drawdownR } : {}) };
   }
 
+  private async lockCampaignRows(tx: Tx, campaignId: string): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "trade_campaigns" WHERE "id" = ${campaignId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT "id" FROM "campaign_memberships" WHERE "campaign_id" = ${campaignId} FOR UPDATE`;
+  }
+
+  private async orderedCampaignMembers(tx: Tx, campaignId: string, accountId: string) {
+    const members = await tx.campaignMembership.findMany({
+      where: { campaignId },
+      include: { trade: { select: { id: true, openedAt: true, closedAt: true, mt5PositionId: true } } },
+    });
+    return this.orderMemberships(tx, accountId, members);
+  }
+
+  private async orderedAccountMembers(tx: Tx, ownerId: string, accountId: string) {
+    const members = await tx.campaignMembership.findMany({
+      where: { trade: { ownerId, mt5AccountId: accountId, openedAt: { not: null } } },
+      include: { trade: { select: { id: true, openedAt: true, closedAt: true, mt5PositionId: true } } },
+    });
+    return this.orderMemberships(tx, accountId, members);
+  }
+
+  private async orderMemberships<T extends { tradeId: string; trade: { openedAt: Date | null; mt5PositionId: bigint | null } }>(tx: Tx, accountId: string, members: T[]): Promise<T[]> {
+    const positionIds = members.map((member) => member.trade.mt5PositionId).filter((id): id is bigint => id !== null);
+    const deals = positionIds.length ? await tx.mt5Deal.findMany({
+      where: { accountId, positionId: { in: positionIds }, entry: 0, type: { in: [0, 1] } },
+      orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: { positionId: true, timeMsc: true, ticket: true },
+    }) : [];
+    const opening = new Map<string, { timeMsc: bigint; ticket: bigint }>();
+    for (const deal of deals) if (!opening.has(deal.positionId.toString())) opening.set(deal.positionId.toString(), deal);
+    return [...members].sort((left, right) => {
+      const leftKey = left.trade.mt5PositionId === null ? undefined : opening.get(left.trade.mt5PositionId.toString());
+      const rightKey = right.trade.mt5PositionId === null ? undefined : opening.get(right.trade.mt5PositionId.toString());
+      const leftTime = leftKey?.timeMsc ?? BigInt(left.trade.openedAt?.getTime() ?? 0);
+      const rightTime = rightKey?.timeMsc ?? BigInt(right.trade.openedAt?.getTime() ?? 0);
+      if (leftTime !== rightTime) return leftTime < rightTime ? -1 : 1;
+      const leftTicket = leftKey?.ticket ?? left.trade.mt5PositionId ?? 0n;
+      const rightTicket = rightKey?.ticket ?? right.trade.mt5PositionId ?? 0n;
+      if (leftTicket !== rightTicket) return leftTicket < rightTicket ? -1 : 1;
+      const leftPosition = left.trade.mt5PositionId ?? 0n;
+      const rightPosition = right.trade.mt5PositionId ?? 0n;
+      if (leftPosition !== rightPosition) return leftPosition < rightPosition ? -1 : 1;
+      return left.tradeId.localeCompare(right.tradeId);
+    });
+  }
+
+  private hasCampaignAnalysisContent(analysis: CampaignWithRelations['analysis'] | null): boolean {
+    if (!analysis) return false;
+    return analysis.economicIndicators.length > 0
+      || analysis.primaryTrend !== null
+      || JSON.stringify(analysis.maTimeframes) !== '{}'
+      || analysis.marketZoneEnabled || analysis.marketZoneHigh !== null || analysis.marketZoneLow !== null
+      || analysis.retailPositionEnabled || analysis.retailBuyAveragePrice !== null || analysis.retailSellAveragePrice !== null || analysis.retailBuyRatio !== null
+      || analysis.fibonacciEnabled || analysis.fibonacciStartPrice !== null || analysis.fibonacciEndPrice !== null
+      || analysis.entryReason !== null || analysis.invalidationCondition !== null || analysis.takeProfitCondition !== null || analysis.additionalEntryPlan !== null
+      || analysis.tradeScore !== null || analysis.strengths !== null || analysis.weaknesses !== null;
+  }
+
+  private async preserveCampaignMerge(tx: Tx, winnerId: string, loserId: string): Promise<void> {
+    const [winner, loser] = await Promise.all([
+      tx.tradeCampaign.findUniqueOrThrow({ where: { id: winnerId }, include: { analysis: true } }),
+      tx.tradeCampaign.findUniqueOrThrow({ where: { id: loserId }, include: { analysis: { include: { economicIndicators: true, archives: true } } } }),
+    ]);
+    const winnerAnalysis = winner.analysis ?? await tx.tradeCampaignAnalysis.create({ data: { campaignId: winnerId } });
+    if (loser.memo || loser.analysis) {
+      await tx.tradeCampaignAnalysisArchive.upsert({
+        where: { campaignAnalysisId_source: { campaignAnalysisId: winnerAnalysis.id, source: `campaign-merge:${loserId}` } },
+        create: { campaignAnalysisId: winnerAnalysis.id, source: `campaign-merge:${loserId}`, content: JSON.parse(JSON.stringify({ campaignId: loserId, memo: loser.memo, analysis: loser.analysis })) },
+        update: {},
+      });
+    }
+    if (loser.memo) await tx.tradeCampaign.update({ where: { id: winnerId }, data: { memo: winner.memo ? `${winner.memo}\n\n[병합된 캠페인 ${loserId}]\n${loser.memo}` : loser.memo } });
+    const offset = await tx.tradeCampaignImage.count({ where: { campaignId: winnerId } });
+    const images = await tx.tradeCampaignImage.findMany({ where: { campaignId: loserId }, orderBy: [{ position: 'asc' }, { id: 'asc' }], select: { id: true } });
+    for (const [index, image] of images.entries()) await tx.tradeCampaignImage.update({ where: { id: image.id }, data: { campaignId: winnerId, position: offset + index } });
+    const conflicts = await tx.campaignConflict.findMany({ where: { OR: [{ resolvedCampaignId: loserId }, { candidateCampaignIds: { array_contains: [loserId] } }] } });
+    for (const conflict of conflicts) {
+      const candidateCampaignIds = Array.isArray(conflict.candidateCampaignIds) ? [...new Set(conflict.candidateCampaignIds.map((id) => id === loserId ? winnerId : id))] : [];
+      await tx.campaignConflict.update({ where: { id: conflict.id }, data: { candidateCampaignIds, ...(conflict.resolvedCampaignId === loserId ? { resolvedCampaignId: winnerId } : {}) } });
+    }
+    await tx.tradeCampaignAnalysis.deleteMany({ where: { campaignId: loserId } });
+  }
+
+  private async serializedCampaign(tx: Tx, campaignId: string): Promise<TradeCampaign> {
+    const campaign = await tx.tradeCampaign.findUniqueOrThrow({ where: { id: campaignId }, include: campaignWithRelations.include });
+    const ordered = await this.orderCampaignForSerialization(tx, campaign);
+    return this.serializeCampaign(ordered, await this.loadProvenEntryBalanceMap([campaign.rootTrade, ...campaign.memberships.map((member) => member.trade)]));
+  }
+
+  private async orderCampaignForSerialization(client: Tx | PrismaService, campaign: CampaignWithRelations): Promise<CampaignWithRelations> {
+    if (!campaign.mt5AccountId) return campaign;
+    return { ...campaign, memberships: await this.orderMemberships(client as Tx, campaign.mt5AccountId, campaign.memberships) };
+  }
+
   private async prepareCampaignForMemberMove(tx: Tx, campaignId: string, tradeId: string): Promise<void> {
     await tx.campaignMembership.updateMany({ where: { campaignId }, data: { source: 'MANUAL' } });
     const remaining = await tx.campaignMembership.findMany({
@@ -722,7 +894,7 @@ export class TradeLogService {
     }
     const root = remaining.find((member) => member.trade.openedAt);
     if (!root) throw new BadRequestException('Campaign members require openedAt');
-    await tx.tradeCampaign.update({ where: { id: campaignId }, data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!) } });
+    await tx.tradeCampaign.update({ where: { id: campaignId }, data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!), version: { increment: 1 } } });
   }
 
   private async relinkCampaignInTransaction(tx: Tx, tradeId: string, campaignId: string, prepareSource = true): Promise<void> {
@@ -733,23 +905,25 @@ export class TradeLogService {
     const previous = await tx.campaignMembership.findUnique({ where: { tradeId } });
     if (prepareSource && previous && previous.campaignId !== campaignId) await this.prepareCampaignForMemberMove(tx, previous.campaignId, tradeId);
     await tx.campaignMembership.upsert({ where: { tradeId }, create: { tradeId, campaignId, source: 'MANUAL' }, update: { campaignId, source: 'MANUAL' } });
+    await tx.tradeCampaign.update({ where: { id: campaignId }, data: { version: { increment: 1 } } });
     await this.normalizeCampaign(tx, campaignId);
   }
 
   private async normalizeCampaign(tx: Tx, campaignId: string): Promise<void> {
+    const campaign = await tx.tradeCampaign.findUnique({ where: { id: campaignId }, select: { mt5AccountId: true } });
+    if (!campaign?.mt5AccountId) throw new BadRequestException('Campaign requires an MT5 account');
     const members = await tx.campaignMembership.findMany({
       where: { campaignId },
-      include: { trade: { select: { id: true, openedAt: true, mt5PositionId: true } } },
-      orderBy: [{ trade: { openedAt: 'asc' } }, { trade: { mt5PositionId: 'asc' } }, { tradeId: 'asc' }],
+      include: { trade: { select: { id: true, openedAt: true, mt5PositionId: true, mt5AccountId: true } } },
     });
     if (!members.length) {
       await tx.tradeCampaign.delete({ where: { id: campaignId } });
       await this.pruneCampaignConflictCandidates(tx, campaignId);
       return;
     }
-    const root = members.find((member) => member.trade.openedAt);
+    const root = (await this.orderMemberships(tx, campaign.mt5AccountId, members)).find((member) => member.trade.openedAt);
     if (!root) return;
-    await tx.tradeCampaign.update({ where: { id: campaignId }, data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!) } });
+    await tx.tradeCampaign.update({ where: { id: campaignId }, data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!), version: { increment: 1 } } });
   }
 
   private async pruneCampaignConflictCandidates(tx: Tx, campaignId: string): Promise<void> {
@@ -818,6 +992,7 @@ export class TradeLogService {
   }
   private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeCampaign {
     if (!campaign.analysis) throw new Error(`Campaign ${campaign.id} lacks analysis`);
+    const headSource = campaign.memberships.find((membership) => membership.tradeId === campaign.rootTradeId)?.headSource ?? 'AUTO';
     const root = this.serialize(campaign.rootTrade, provenBalances);
     const members = campaign.memberships.map((membership) => this.serialize(membership.trade, provenBalances));
     const firstOpened = [...members]
@@ -844,6 +1019,8 @@ export class TradeLogService {
     return {
       id: campaign.id,
       rootTradeId: campaign.rootTradeId,
+      campaignVersion: campaign.version,
+      headSource,
       tradingDate: this.seoulDate(campaign.tradingDate),
       accountId: campaign.mt5AccountId!,
       symbol: root.symbol,

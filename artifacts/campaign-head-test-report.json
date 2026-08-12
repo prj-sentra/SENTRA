@@ -1,0 +1,11 @@
+{
+  "kind": "api-package-test-report",
+  "sourceCodeHash": "659b0ca1f6207ad59a152a09200d1e8578b5e0ce",
+  "reviewedManifestBase": "e36dda2ad69c9ed777404188e28d17b2fe6f7441",
+  "evidenceBoundManifest": "self-referential manifest excludes this field; final staged hash is reported in the Ultragoal ledger",
+  "focused": {"status":"passed","tests":90,"commands":["focused API unit/stateful and disposable PostgreSQL campaign-head suites"]},
+  "root": {"status":"passed","apiTests":179,"webTests":68,"typecheck":"passed","build":"passed","diffCheck":"passed"},
+  "deployment": {"status":"passed","healthTimestamp":"2026-08-12T17:03:08.034Z"},
+  "gui": {"status":"passed","automation":"Authenticated Chromium opened a real production-local campaign detail and observed the right-aligned manual head status/action in the entry-time row.","screenshot":"artifacts/campaign-head-live.png"},
+  "contracts": ["AUTO gap heads", "MANUAL suffix split", "connected unset merge", "gapped unset AUTO retention", "time-ticket-position ordering", "manual-boundary sync survival", "aggregate optimistic versions", "lossless authored graph/image/conflict merge", "confirmation/busy/reload/reselection UI"]
+}

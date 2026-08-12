@@ -1093,6 +1093,10 @@ button.trade-cover { cursor: pointer; }
 }
 .trade-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto 1fr; gap: 0 24px; padding: 4px 0; }
 .execution-row { display: grid; gap: 14px; padding: 0; border: 0; background: var(--surface); }
+.execution-time-row { display: flex; align-items: center; gap: 8px; }
+.execution-time-row .execution-period { margin-right: auto; }
+.campaign-head-status { color: var(--text-muted); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.campaign-head-action { white-space: nowrap; }
 .trade-editor-grid { width: 100%; margin-top: 20px; }
 .detail-editor { display: grid; gap: 20px; width: 100%; }
 .detail-editor h4 { display: none; }
@@ -1190,6 +1194,9 @@ button.trade-cover { cursor: pointer; }
 @media (max-width: 800px) {
   .desktop-trade-navigation, .desktop-trade-detail { display: none; }
   .mobile-trade-detail { display: block; }
+  .execution-time-row { flex-wrap: wrap; align-items: flex-start; }
+  .execution-time-row .execution-period { width: 100%; }
+  .campaign-head-action { margin-left: auto; }
 }
 @media (max-width: 800px) {
   .analysis-editor-columns, .analysis-editor-groups { grid-template-columns: minmax(0, 1fr); }

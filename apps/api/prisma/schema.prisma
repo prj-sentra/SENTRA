@@ -24,6 +24,11 @@ enum CampaignMembershipSource {
   MANUAL @map("manual")
 }
 
+enum CampaignHeadSource {
+  AUTO   @map("auto")
+  MANUAL @map("manual")
+}
+
 enum CampaignConflictStatus {
   UNRESOLVED @map("unresolved")
   RESOLVED   @map("resolved")
@@ -174,6 +179,7 @@ model TradeCampaign {
   ownerId      String               @map("owner_id")
   mt5AccountId String?              @map("mt5_account_id")
   memo         String?
+  version      Int                  @default(1)
   owner        AppUser              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   mt5Account   Mt5Account?          @relation(fields: [mt5AccountId], references: [id], onDelete: Restrict)
   images       TradeCampaignImage[]
@@ -194,6 +200,7 @@ model CampaignMembership {
   campaignId String                   @map("campaign_id")
   tradeId    String                   @unique @map("trade_id")
   source     CampaignMembershipSource
+  headSource CampaignHeadSource     @default(AUTO) @map("head_source")
   campaign   TradeCampaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   trade      Trade                    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   createdAt  DateTime                 @default(now()) @map("created_at")

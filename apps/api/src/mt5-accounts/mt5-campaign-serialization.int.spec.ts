@@ -329,7 +329,12 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
         : repair.reclassifyOwnedAccount(fixture.ownerId, fixture.accountId, true);
       await waitForPending(second);
       lockGate.release();
-      await Promise.all([first, second]);
+      const results = await Promise.allSettled([first, second]);
+      if (winner === 'repair' && writer === 'memo') {
+        expect(results[1]).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: 'Campaign memo was updated by another request' }) });
+      } else {
+        expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+      }
       const canonical = await database.tradeCampaign.findUniqueOrThrow({
         where: { id: fixture.targetId }, include: { analysis: { include: { archives: true } }, images: { orderBy: { position: 'asc' } } },
       });
@@ -359,7 +364,7 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
       expect(memberships.every((membership) => membership.campaignId === fixture.targetId && membership.source === 'AUTO')).toBe(true);
       if (writer === 'analysis') expect(canonical.analysis!.primaryTrend).toBe('UP_SIDEWAYS');
       if (writer === 'review') expect(canonical.analysis!.entryReason).toBe('writer review');
-      if (writer === 'memo') expect(canonical.memo).toContain('writer memo');
+      if (writer === 'memo' && winner === 'writer') expect(canonical.memo).toContain('writer memo');
       if (writer === 'upload') expect(canonical.images).toHaveLength(3);
       if (writer === 'reorder') expect(canonical.images.slice(0, 2).map((image) => image.id)).toEqual([...fixture.targetImageIds].reverse());
       if (writer === 'remove') expect(canonical.images.map((image) => image.id)).not.toContain(fixture.targetImageIds[0]);
@@ -585,6 +590,251 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
     expect(memberships.map((membership) => membership.campaignId)).toEqual([
       fixtureId('ticket-campaign'), fixtureId('ticket-campaign'),
     ]);
+  });
+
+  run('persists manual head splits and safely unsets connected or gapped boundaries without losing authored data', async () => {
+    const ownerId = fixtureId('head-owner');
+    const accountId = fixtureId('head-account');
+    const campaignId = fixtureId('head-campaign');
+    const openedAt = new Date('2026-08-01T00:00:00.000Z');
+    const laterAt = new Date('2026-08-02T00:00:00.000Z');
+    const accountLogin = 7301n;
+    await database.appUser.create({ data: { id: ownerId, username: ownerId, normalizedUsername: ownerId, passwordHash: 'fixture', status: 'ACTIVE' } });
+    await database.mt5Account.create({
+      data: {
+        id: accountId, ownerId, nickname: 'fixture', server: 'Broker Server', canonicalServer: 'broker server', accountLogin,
+        credentialCiphertext: Buffer.from('ciphertext'), credentialIv: Buffer.from('iv'), credentialTag: Buffer.from('tag'), credentialVersion: 1,
+      },
+    });
+    const rows = [
+      { id: fixtureId('head-long-lived'), positionId: 3n, ticket: 5n, openedAt, closedAt: new Date('2026-08-02T00:00:00.000Z') },
+      { id: fixtureId('head-short-immediate'), positionId: 2n, ticket: 10n, openedAt, closedAt: new Date('2026-08-01T01:00:00.000Z') },
+      { id: fixtureId('head-selected'), positionId: 99n, ticket: 15n, openedAt },
+      { id: fixtureId('head-later'), positionId: 1n, ticket: 20n, openedAt },
+    ];
+    for (const [index, row] of rows.entries()) {
+      await database.trade.create({
+        data: {
+          id: row.id, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: row.closedAt ? 'CLOSED' : 'OPEN', openedAt: row.openedAt, closedAt: row.closedAt,
+          mt5Server: 'Broker Server', mt5ServerCanonical: 'broker server', mt5AccountLogin: accountLogin, mt5PositionId: row.positionId,
+          analysis: { create: {} },
+          ...(index === 0 ? { campaignRoot: { create: {
+            id: campaignId, ownerId, mt5AccountId: accountId, tradingDate: openedAt, memo: 'earlier authored memo',
+            analysis: { create: {} },
+          } } } : {}),
+          campaignMembership: { create: { campaignId, source: 'AUTO' } },
+        },
+      });
+      await database.mt5Deal.create({
+        data: {
+          accountId, server: 'Broker Server', accountLogin, ticket: row.ticket, order: row.ticket, positionId: row.positionId,
+          time: BigInt(1_754_006_400 + index), timeMsc: 1_754_006_400_000n, timeUtc: row.openedAt, timeMscUtc: row.openedAt,
+          type: 0, entry: 0, magic: 0n, reason: 0, volume: 1, price: 1, commission: 0, swap: 0, profit: 0, fee: 0,
+          symbol: 'EURUSD', comment: '', externalId: `${row.id}-open`, fetchedAt: row.openedAt, rawJson: {},
+        },
+      });
+    }
+    const service = new TradeLogService(database as never);
+    const split = await service.setCampaignHead(ownerId, accountId, campaignId, { tradeId: rows[2].id, campaignVersion: 1 });
+    const splitId = split.campaign.id;
+    expect(split.previousCampaign?.id).toBe(campaignId);
+    expect((await database.tradeCampaign.findUniqueOrThrow({ where: { id: campaignId } })).memo).toBe('earlier authored memo');
+    expect(await database.campaignMembership.findMany({ where: { campaignId: splitId }, orderBy: { tradeId: 'asc' } })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tradeId: rows[2].id, source: 'MANUAL', headSource: 'MANUAL' }),
+      expect.objectContaining({ tradeId: rows[3].id, source: 'AUTO', headSource: 'AUTO' }),
+    ]));
+    const newAnalysis = await database.tradeCampaignAnalysis.findUniqueOrThrow({ where: { campaignId: splitId }, include: { economicIndicators: true } });
+    expect(newAnalysis).toMatchObject({ primaryTrend: null, marketZoneEnabled: false, retailPositionEnabled: false, fibonacciEnabled: false, economicIndicators: [] });
+
+    await service.unsetCampaignHead(ownerId, accountId, splitId, { campaignVersion: 1 });
+    expect(await database.tradeCampaign.findUnique({ where: { id: splitId } })).toBeNull();
+    expect(await database.campaignMembership.count({ where: { campaignId, tradeId: { in: rows.map((row) => row.id) } } })).toBe(4);
+    expect((await database.tradeCampaign.findUniqueOrThrow({ where: { id: campaignId } })).memo).toBe('earlier authored memo');
+
+    await database.trade.update({ where: { id: rows[2].id }, data: { openedAt: laterAt } });
+    await database.trade.update({ where: { id: rows[3].id }, data: { openedAt: laterAt } });
+    await database.trade.update({ where: { id: rows[0].id }, data: { closedAt: new Date('2026-08-01T01:00:00.000Z') } });
+    const currentCampaign = await database.tradeCampaign.findUniqueOrThrow({ where: { id: campaignId } });
+    const gapSplit = await service.setCampaignHead(ownerId, accountId, campaignId, {
+      tradeId: rows[2].id,
+      campaignVersion: currentCampaign.version,
+    });
+    const gapId = gapSplit.campaign.id;
+    await service.unsetCampaignHead(ownerId, accountId, gapId, { campaignVersion: 1 });
+    expect(await database.campaignMembership.findUniqueOrThrow({ where: { tradeId: rows[2].id } })).toMatchObject({ campaignId: gapId, source: 'AUTO', headSource: 'AUTO' });
+    await expect(service.unsetCampaignHead(ownerId, accountId, gapId, { campaignVersion: 2 })).rejects.toThrow('Only MANUAL campaign heads can be unset');
+
+    const authoredTradeId = fixtureId('head-authored');
+    await database.trade.create({
+      data: {
+        id: authoredTradeId, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: 'OPEN', openedAt: new Date('2026-08-03T00:00:00.000Z'),
+        mt5Server: 'Broker Server', mt5ServerCanonical: 'broker server', mt5AccountLogin: accountLogin, mt5PositionId: 100n,
+        analysis: { create: {} }, campaignMembership: { create: { campaignId: gapId, source: 'AUTO' } },
+      },
+    });
+    await database.mt5Deal.create({
+      data: {
+        accountId, server: 'Broker Server', accountLogin, ticket: 30n, order: 30n, positionId: 100n, time: 1_754_179_200n, timeMsc: 1_754_179_200_000n,
+        timeUtc: new Date('2026-08-03T00:00:00.000Z'), timeMscUtc: new Date('2026-08-03T00:00:00.000Z'), type: 0, entry: 0, magic: 0n, reason: 0,
+        volume: 1, price: 1, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'EURUSD', comment: '', externalId: `${authoredTradeId}-open`, fetchedAt: new Date('2026-08-03T00:00:00.000Z'), rawJson: {},
+      },
+    });
+    const authoredSplit = await service.setCampaignHead(ownerId, accountId, gapId, { tradeId: authoredTradeId, campaignVersion: 2 });
+    const authoredCampaignId = authoredSplit.campaign.id;
+    const authoredAnalysis = await database.tradeCampaignAnalysis.findUniqueOrThrow({ where: { campaignId: authoredCampaignId } });
+    await database.tradeCampaign.update({ where: { id: authoredCampaignId }, data: { memo: 'must survive refusal' } });
+    await database.tradeCampaignAnalysis.update({
+      where: { id: authoredAnalysis.id },
+      data: {
+        entryReason: 'preserved review',
+        economicIndicators: { create: { type: 'CPI', impact: 'POSITIVE', position: 0 } },
+        archives: { create: { source: 'pre-existing-archive', content: { note: 'preserved prior archive' } } },
+      },
+    });
+    const authoredImageId = fixtureId('head-authored-image');
+    await database.tradeCampaignImage.create({
+      data: {
+        id: authoredImageId, campaignId: authoredCampaignId, position: 0, uploadId: randomUUID(), fileName: 'authored.webp',
+        mimeType: 'image/webp', byteSize: 1, contentSha256: '1'.repeat(64), width: 1, height: 1, publishedAt: new Date(),
+      },
+    });
+    const candidateConflictId = fixtureId('head-authored-candidate');
+    const resolvedConflictId = fixtureId('head-authored-resolved');
+    await database.campaignConflict.create({
+      data: { id: candidateConflictId, tradeId: authoredTradeId, candidateCampaignIds: [authoredCampaignId, gapId] },
+    });
+    await database.campaignConflict.create({
+      data: {
+        id: resolvedConflictId, tradeId: rows[2].id, candidateCampaignIds: [authoredCampaignId],
+        status: 'RESOLVED', resolvedCampaignId: authoredCampaignId, resolvedAt: new Date(),
+      },
+    });
+    await expect(service.unsetCampaignHead(ownerId, accountId, authoredSplit.campaign.id, { campaignVersion: 1 })).resolves.toMatchObject({ campaign: { id: gapId } });
+    const preserved = await database.tradeCampaign.findUniqueOrThrow({
+      where: { id: gapId },
+      include: { analysis: { include: { archives: true } }, images: { orderBy: { position: 'asc' } } },
+    });
+    expect(preserved).toMatchObject({ memo: expect.stringContaining('must survive refusal') });
+    expect(preserved.images).toEqual(expect.arrayContaining([expect.objectContaining({ id: authoredImageId })]));
+    expect(preserved.analysis!.archives.find((archive) => archive.source === `campaign-merge:${authoredCampaignId}`)?.content).toEqual(
+      expect.objectContaining({
+        campaignId: authoredCampaignId,
+        memo: 'must survive refusal',
+        analysis: expect.objectContaining({
+          entryReason: 'preserved review',
+          economicIndicators: [expect.objectContaining({ type: 'CPI', impact: 'POSITIVE', position: 0 })],
+          archives: [expect.objectContaining({ source: 'pre-existing-archive', content: { note: 'preserved prior archive' } })],
+        }),
+      }),
+    );
+    expect(await database.campaignConflict.findUniqueOrThrow({ where: { id: candidateConflictId } })).toMatchObject({ candidateCampaignIds: [gapId] });
+    expect(await database.campaignConflict.findUniqueOrThrow({ where: { id: resolvedConflictId } })).toMatchObject({ candidateCampaignIds: [gapId], resolvedCampaignId: gapId });
+    expect(await database.tradeCampaign.findUnique({ where: { id: authoredCampaignId } })).toBeNull();
+    expect(await database.campaignMembership.findUniqueOrThrow({ where: { tradeId: authoredTradeId } })).toMatchObject({ campaignId: gapId, headSource: 'AUTO' });
+  });
+
+  run('serializes concurrent manual-head splits and preserves one valid boundary', async () => {
+    const ownerId = fixtureId('head-race-owner');
+    const accountId = fixtureId('head-race-account');
+    const campaignId = fixtureId('head-race-campaign');
+    const openedAt = new Date('2026-08-01T00:00:00.000Z');
+    const accountLogin = 7401n;
+    await database.appUser.create({ data: { id: ownerId, username: ownerId, normalizedUsername: ownerId, passwordHash: 'fixture', status: 'ACTIVE' } });
+    await database.mt5Account.create({
+      data: {
+        id: accountId, ownerId, nickname: 'fixture', server: 'Broker Server', canonicalServer: 'broker server', accountLogin,
+        credentialCiphertext: Buffer.from('ciphertext'), credentialIv: Buffer.from('iv'), credentialTag: Buffer.from('tag'), credentialVersion: 1,
+      },
+    });
+    const trades = [
+      { id: fixtureId('head-race-root'), positionId: 1n, ticket: 1n },
+      { id: fixtureId('head-race-first'), positionId: 2n, ticket: 2n },
+      { id: fixtureId('head-race-second'), positionId: 3n, ticket: 3n },
+    ];
+    for (const [index, trade] of trades.entries()) {
+      await database.trade.create({
+        data: {
+          id: trade.id, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: 'OPEN', openedAt,
+          mt5Server: 'Broker Server', mt5ServerCanonical: 'broker server', mt5AccountLogin: accountLogin, mt5PositionId: trade.positionId,
+          analysis: { create: {} },
+          ...(index === 0 ? { campaignRoot: { create: { id: campaignId, ownerId, mt5AccountId: accountId, tradingDate: openedAt, analysis: { create: {} } } } } : {}),
+          campaignMembership: { create: { campaignId, source: 'AUTO' } },
+        },
+      });
+      await database.mt5Deal.create({
+        data: {
+          accountId, server: 'Broker Server', accountLogin, ticket: trade.ticket, order: trade.ticket, positionId: trade.positionId,
+          time: 1_754_006_400n, timeMsc: 1_754_006_400_000n, timeUtc: openedAt, timeMscUtc: openedAt, type: 0, entry: 0,
+          magic: 0n, reason: 0, volume: 1, price: 1, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'EURUSD', comment: '',
+          externalId: `${trade.id}-open`, fetchedAt: openedAt, rawJson: {},
+        },
+      });
+    }
+    const winnerClient = new PrismaClient({ datasources: { db: { url: url! } } });
+    const contenderClient = new PrismaClient({ datasources: { db: { url: url! } } });
+    const lockGate = gate();
+    const winner = new TradeLogService(transactionAwarePrisma(winnerClient, lockGate) as never);
+    const contender = new TradeLogService(transactionAwarePrisma(contenderClient) as never);
+    try {
+      const winning = winner.setCampaignHead(ownerId, accountId, campaignId, { tradeId: trades[1].id, campaignVersion: 1 });
+      await lockGate.acquired;
+      const losing = contender.setCampaignHead(ownerId, accountId, campaignId, { tradeId: trades[2].id, campaignVersion: 1 });
+      await waitForPending(losing);
+      lockGate.release();
+      await expect(winning).resolves.toMatchObject({ previousCampaign: { id: campaignId } });
+      await expect(losing).rejects.toThrow('Campaign was updated by another request');
+      const memberships = await database.campaignMembership.findMany({ where: { trade: { ownerId } } });
+      expect(memberships).toHaveLength(3);
+      expect(memberships.filter((membership) => membership.headSource === 'MANUAL')).toEqual([
+        expect.objectContaining({ tradeId: trades[1].id, source: 'MANUAL' }),
+      ]);
+      expect(new Set(memberships.map((membership) => membership.tradeId)).size).toBe(3);
+      expect(await database.tradeCampaign.count({ where: { ownerId } })).toBe(2);
+    } finally {
+      lockGate.release();
+      await Promise.allSettled([winnerClient.$disconnect(), contenderClient.$disconnect()]);
+    }
+  });
+
+  run('projects an unseen overlap into the post-manual-head segment and remains idempotent', async () => {
+    const ownerId = fixtureId('projection-head-owner');
+    const accountId = fixtureId('projection-head-account');
+    const accountLogin = 7501n;
+    const openedAt = new Date('2026-08-01T00:00:00.000Z');
+    await database.appUser.create({ data: { id: ownerId, username: ownerId, normalizedUsername: ownerId, passwordHash: 'fixture', status: 'ACTIVE' } });
+    await database.mt5Account.create({ data: {
+      id: accountId, ownerId, nickname: 'fixture', server: 'Broker', canonicalServer: 'broker', accountLogin,
+      credentialCiphertext: Buffer.from('ciphertext'), credentialIv: Buffer.from('iv'), credentialTag: Buffer.from('tag'), credentialVersion: 1,
+    } });
+    const rows = [
+      { id: fixtureId('projection-pre'), campaignId: fixtureId('projection-a'), positionId: 1n, ticket: 10n, timeMsc: 1_000n, manual: false },
+      { id: fixtureId('projection-head'), campaignId: fixtureId('projection-b'), positionId: 2n, ticket: 20n, timeMsc: 2_000n, manual: true },
+    ];
+    for (const row of rows) {
+      await database.trade.create({ data: {
+        id: row.id, ownerId, mt5AccountId: accountId, symbol: 'EURUSD', side: 'LONG', status: 'OPEN', openedAt,
+        mt5Server: 'Broker', mt5ServerCanonical: 'broker', mt5AccountLogin: accountLogin, mt5PositionId: row.positionId, analysis: { create: {} },
+        campaignRoot: { create: { id: row.campaignId, ownerId, mt5AccountId: accountId, tradingDate: openedAt, analysis: { create: {} } } },
+        campaignMembership: { create: { campaignId: row.campaignId, source: row.manual ? 'MANUAL' : 'AUTO', headSource: row.manual ? 'MANUAL' : 'AUTO' } },
+      } });
+      await database.mt5Deal.create({ data: {
+        accountId, server: 'broker', accountLogin, ticket: row.ticket, order: row.ticket, positionId: row.positionId, time: row.timeMsc / 1000n, timeMsc: row.timeMsc,
+        timeUtc: openedAt, timeMscUtc: openedAt, type: 0, entry: 0, magic: 0n, reason: 0, volume: 1, price: 1, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'EURUSD', comment: '', externalId: `${row.id}-open`, fetchedAt: openedAt, rawJson: {},
+      } });
+    }
+    await database.mt5Deal.create({ data: {
+      accountId, server: 'broker', accountLogin, ticket: 30n, order: 30n, positionId: 3n, time: 3n, timeMsc: 3_000n,
+      timeUtc: openedAt, timeMscUtc: openedAt, type: 0, entry: 0, magic: 0n, reason: 0, volume: 1, price: 1, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'EURUSD', comment: '', externalId: 'projection-new-open', fetchedAt: openedAt, rawJson: {},
+    } });
+    const service = new Mt5SyncService(database as never, {} as never, {} as never);
+    await expect((service as any).projectTrades(database, ownerId, accountId, 'Broker', 'broker', accountLogin, ['3'], [], [])).resolves.toBe(1);
+    const projected = await database.trade.findFirstOrThrow({ where: { mt5AccountId: accountId, mt5PositionId: 3n }, include: { campaignMembership: true } });
+    expect(projected.campaignMembership).toMatchObject({ campaignId: rows[1].campaignId, source: 'AUTO', headSource: 'AUTO' });
+    expect(await database.campaignConflict.count({ where: { trade: { ownerId } } })).toBe(0);
+    const version = (await database.tradeCampaign.findUniqueOrThrow({ where: { id: rows[1].campaignId } })).version;
+    await expect((service as any).projectTrades(database, ownerId, accountId, 'Broker', 'broker', accountLogin, ['3'], [], [])).resolves.toBe(1);
+    expect(await database.campaignMembership.count({ where: { trade: { ownerId } } })).toBe(3);
+    expect((await database.tradeCampaign.findUniqueOrThrow({ where: { id: rows[1].campaignId } })).version).toBe(version);
   });
 
   for (const writer of ['analysis', 'review', 'memo', 'upload', 'reorder', 'remove'] as const) {

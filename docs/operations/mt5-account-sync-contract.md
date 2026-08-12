@@ -48,6 +48,31 @@ Ledger reconstruction is independent of that request window: every page rebuilds
 
 Campaign classification is account-scoped and based only on holding-time connectivity. Each projected MT5 position is the closed interval `[openedAt, closedAt]`; an open position ends at positive infinity. Positions are processed by first opening execution time, opening ticket, then position ID. A new position joins the earliest campaign containing a position that is open at its opening instant; touching endpoints overlap, and overlap is transitive. If no position is open, a new campaign starts. Normal synchronization never moves an existing MANUAL membership and never rewrites an already-authored automatic campaign as historical cleanup. Operator reclassification may merge historical AUTO campaigns under an account lock after a restore-tested backup: it retains the earliest root, moves images, combines memo text, archives every losing campaign analysis/review payload under `campaign-merge:<campaignId>`, rewrites conflict references, and deletes only emptied campaigns. MANUAL memberships remain fixed and produce an explicit conflict instead of an automatic move.
 
+### Manual campaign heads
+
+Campaign boundaries have an explicit source. `AUTO` heads come from interval
+connectivity, so a real time gap starts a campaign. `MANUAL` heads are
+user-defined boundaries that synchronization and reclassification must not
+cross. Projection, display, and head mutations use first opening execution
+time, opening ticket, then position ID as their deterministic order.
+
+Marking a non-head trade as a manual head atomically moves that trade and every
+later member into a new campaign with an empty analysis. Only a
+non-account-first `MANUAL` head can be unset. Removing it reapplies automatic
+interval rules: connected intervals merge into the preceding campaign, while a
+real gap retains an `AUTO` head. Connected merges archive the complete analysis
+and review graph including indicators and prior archives, append memo content,
+move images, and rewrite conflict references before deleting the losing
+campaign.
+
+Head mutations acquire the shared account lock, lock campaign and membership
+rows, and require `campaignVersion`. Every membership or root change advances
+all affected surviving campaign versions, so stale confirmations fail with
+HTTP 409. Deployment applies the additive campaign-head migration before API
+startup. Verify the `head_source` and campaign `version` columns, run the
+disposable PostgreSQL campaign serialization suite, and validate split/unset
+controls in the deployed journal.
+
 Concurrent calls return `{ state: 'in_progress', accountId, progress? }`. `progress` contains the durable mode, snapshot, and current page cursor when available. The UI may poll the same authenticated sync route while this state is returned; it must cancel polling on account changes and unmount.
 
 ## Limits and operations
