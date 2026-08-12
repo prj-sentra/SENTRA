@@ -20,9 +20,8 @@ const primaryItems: Array<{ view: AppView; label: string }> = [
 ];
 
 const dashboardItems = [
-  ['dashboard-overview', '핵심 성과'],
-  ['dashboard-charts', '성과 변화'],
-  ['dashboard-advanced', '성과 지표'],
+  ['dashboard-period', '기간별 성과'],
+  ['dashboard-analysis', '통합 성과'],
 ] as const;
 
 export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccountChange, isAdmin = false, syncControl, footer }: SidebarProps) {
