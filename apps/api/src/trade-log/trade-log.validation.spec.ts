@@ -42,6 +42,7 @@ describe('trade analysis validation', () => {
     ['primaryTrend', 'down_sideways'],
     ['bollingerBandCount', 'one_band'],
     ['bollingerBandCount', 'two_band'],
+    ['bollingerBandCount', 'no_touch'],
     ['bollingerDirection', 'normal'],
     ['bollingerDirection', 'reverse'],
     ['bollingerDirection', 'chase'],

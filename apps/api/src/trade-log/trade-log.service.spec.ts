@@ -324,7 +324,7 @@ describe('TradeLogService statistics preference display', () => {
   });
 });
 describe('TradeLogService expanded statistics', () => {
-  it('uses canonical sequence order, classified expectancy, configured crosstab cells, and numeric distributions', () => {
+  it('uses canonical sequence order, classified expectancy, and configured crosstab cells', () => {
     const service = new TradeLogService(prisma() as never) as any;
     const sample = (id: string, pnl: number, risk: number, closedAt: string, seedBalance = 1000) => ({ id, realizedPnl: pnl, riskAmount: risk, lots: 1, seedBalance, closedAt, openedAt: closedAt, sessions: [id === 'z' ? 'london' : 'asia'], trades: [{ id, symbol: id === 'a' ? 'XAUUSD' : 'EURUSD', side: 'long', analysisComplete: true, analysis: { baseTimeframe: '1h' } }] });
     const samples = [{ ...sample('z', -10, 10, '2026-08-03T00:00:00.000Z'), lots: 2 }, sample('a', 10, 10, '2026-08-01T00:00:00.000Z'), sample('b', 20, 10, '2026-08-01T00:00:00.000Z'), { ...sample('unclassified', 900, 10, '2026-08-02T00:00:00.000Z'), seedBalance: undefined }];
@@ -335,7 +335,6 @@ describe('TradeLogService expanded statistics', () => {
     expect(crosstab.columns.map((column: any) => column.key)).toEqual(['asia', 'london']);
     expect(crosstab.rows).toHaveLength(2);
     expect(crosstab.rows.find((row: any) => row.key === 'XAUUSD').cells).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'london', count: 0, predicates: [{ dimension: 'symbol', key: 'XAUUSD' }, { dimension: 'session', key: 'london' }] })]));
-    expect(service.statsDistributions(samples).map((item: any) => item.metric)).toEqual(['realizedPnl', 'oneLotPnl', 'r']);
   });
   it('returns all empty granular series with zero averages', () => {
     const series = (new TradeLogService(prisma() as never) as any).statsSeriesByGranularity([], { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 }, { accountId: 'account-1' });
@@ -352,7 +351,7 @@ describe('TradeLogService expanded statistics', () => {
         { analysis: { bollingerBandCount: undefined, bollingerDirection: undefined } },
       ],
     };
-    expect(service.statsDimension(sample, 'bollingerSetup')).toEqual(['one_band:normal', 'no_touch']);
+    expect(service.statsDimension(sample, 'bollingerSetup')).toEqual(['one_band:normal', 'unevaluated']);
     expect(service.statsDimensionLabel('bollingerSetup', 'one_band:normal')).toBe('원볼 정볼');
     expect(service.statsDimensionLabel('bollingerSetup', 'two_band:chase')).toBe('투볼 추볼');
     expect(service.statsDimensionLabel('bollingerSetup', 'no_touch')).toBe('터치 안함');
@@ -374,9 +373,6 @@ describe('TradeLogService stats range and risk coverage', () => {
     const day = service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1', from: '2026-08-10', to: '2026-08-12' }).day;
     expect(day).toMatchObject({ activeBucketAverage: 30, calendarBucketAverage: 20 });
     expect(day.points.map((point: any) => point.count)).toEqual([1, 0, 1]);
-    const bins = service.statsDistributions(samples)[0].bins;
-    expect(bins[1]).toMatchObject({ min: -100, max: -10 });
-    expect(bins[0]).not.toHaveProperty('min');
   });
   it('uses configured local trading-day keys for inclusive date-only endpoints and averages proven risk percentages', () => {
     const service = new TradeLogService(prisma() as never) as any;

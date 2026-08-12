@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignReviewRequest, TradeAnalysisEconomicIndicatorInput } from '@trading-journal/shared';
 const enumValues = {
   primaryTrend: ['up', 'up_sideways', 'down', 'down_sideways'],
-  bollingerBandCount: ['one_band', 'two_band'],
+  bollingerBandCount: ['no_touch', 'one_band', 'two_band'],
   bollingerDirection: ['normal', 'reverse', 'chase'],
   maArrangement: ['bullish', 'bearish', 'congested'],
   crossDirection: ['none', 'golden', 'dead'],

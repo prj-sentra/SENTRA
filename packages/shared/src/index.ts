@@ -1,7 +1,7 @@
 export type TradeSide = 'long' | 'short';
 export type TradeStatus = 'planned' | 'open' | 'closed' | 'cancelled';
 export type TradeAnalysisPrimaryTrend = 'up' | 'up_sideways' | 'down' | 'down_sideways';
-export type TradeAnalysisBollingerBandCount = 'one_band' | 'two_band';
+export type TradeAnalysisBollingerBandCount = 'no_touch' | 'one_band' | 'two_band';
 export type TradeAnalysisBollingerDirection = 'normal' | 'reverse' | 'chase';
 export type TradeAnalysisMaArrangement = 'bullish' | 'bearish' | 'congested';
 export type TradeAnalysisCrossDirection = 'none' | 'golden' | 'dead';
@@ -92,7 +92,7 @@ export interface TradeStatsDistributionBin { key: string; min?: number; max?: nu
 export interface TradeStatsDistribution { metric: 'realizedPnl' | 'oneLotPnl' | 'r'; bins: TradeStatsDistributionBin[]; }
 export interface TradeStatsDiagnostics { missingSeedCount: number; missingSeedIds: string[]; unclassifiedCount: number; missingLotsCount: number; missingLotsIds: string[]; missingRiskCount: number; missingRiskIds: string[]; incompleteCampaignCount: number; incompleteCampaignIds: string[]; }
 export interface TradeStatsDrilldownRecord { id: string; targetId: string; type: 'campaign' | 'trade'; tradeIds: string[]; campaignId?: string; journalDate: string; accountId: string; symbol: string; side: TradeSide; openedAt: string; closedAt: string; realizedPnl: number; lots: number; outcome: TradeStatsOutcome; }
-export interface TradeStatsResponse { preferences: TradeStatsPreferences; query: TradeStatsQuery; overview: TradeStatsOverview; comparison: TradeStatsComparison; timeSeries: Record<TradeStatsGranularity, TradeStatsSeries>; breakdowns: Partial<Record<TradeStatsDimension, TradeStatsBucket[]>>; filterOptions?: Partial<Record<TradeStatsDimension, TradeStatsFilterOption[]>>; performanceGroups: TradeStatsPerformanceGroup[]; crosstab: TradeStatsCrosstab; drawdown: TradeStatsDrawdown; distributions: TradeStatsDistribution[]; diagnostics: TradeStatsDiagnostics; drilldown: TradeStatsDrilldownRecord[]; }
+export interface TradeStatsResponse { preferences: TradeStatsPreferences; query: TradeStatsQuery; overview: TradeStatsOverview; comparison: TradeStatsComparison; timeSeries: Record<TradeStatsGranularity, TradeStatsSeries>; breakdowns: Partial<Record<TradeStatsDimension, TradeStatsBucket[]>>; filterOptions?: Partial<Record<TradeStatsDimension, TradeStatsFilterOption[]>>; performanceGroups: TradeStatsPerformanceGroup[]; crosstab: TradeStatsCrosstab; drawdown: TradeStatsDrawdown; diagnostics: TradeStatsDiagnostics; drilldown: TradeStatsDrilldownRecord[]; }
 export interface TradeLogAssistantActionPatchAnalysis { type: 'patch_trade_analysis'; tradeId: string; payload: PatchTradeAnalysisRequest; }
 export type TradeLogAssistantAction = TradeLogAssistantActionPatchAnalysis;
 export interface TradeLogAssistantActionsRequest { accountId: string; rawText: string; source: 'telegram' | 'manual' | 'api'; actions: TradeLogAssistantAction[]; }

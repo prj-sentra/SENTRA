@@ -37,6 +37,7 @@ enum TradeAnalysisPrimaryTrend {
 }
 
 enum TradeAnalysisBollingerBandCount {
+  NO_TOUCH @map("no_touch")
   ONE_BAND @map("one_band")
   TWO_BAND @map("two_band")
 }
