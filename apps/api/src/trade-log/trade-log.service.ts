@@ -540,7 +540,6 @@ export class TradeLogService {
     const sequenceGroups = new Map<string, StatsSample[]>();
     const sequenceLabels = new Map<string, string>();
     const sequenceTimestamps = new Map<string, number>();
-    const unitLabel = (query.unit ?? 'campaign') === 'campaign' ? '매매' : '진입';
     for (const sample of ordered) {
       const closedMinute = new Date(Math.floor(Date.parse(sample.closedAt) / 60000) * 60000);
       const key = closedMinute.toISOString();
@@ -551,7 +550,7 @@ export class TradeLogService {
     sequenceKeys.forEach((key, index) => {
       const closedAt = new Date(sequenceTimestamps.get(key)!);
       const closedLabel = new Intl.DateTimeFormat('ko-KR', { timeZone: preferences.timeZone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(closedAt);
-      sequenceLabels.set(key, `${unitLabel} ${index + 1} · ${closedLabel}`);
+      sequenceLabels.set(key, `${index + 1} · ${closedLabel}`);
     });
     return { sequence: toSeries('sequence', sequenceGroups, sequenceKeys, sequenceLabels, sequenceTimestamps), day: calendarSeries('day'), week: calendarSeries('week'), month: calendarSeries('month'), year: calendarSeries('year') };
   }

@@ -7,9 +7,20 @@ interface StatsTradingViewChartProps {
   value: (point: TradeStatsSeriesPoint) => number;
   label: string;
   percent?: boolean;
+  proportionalTime?: boolean;
 }
 
-export function StatsTradingViewChart({ points, value, label, percent = false }: StatsTradingViewChartProps) {
+function shortTimeLabel(timestamp: number): string {
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(timestamp));
+}
+
+export function StatsTradingViewChart({ points, value, label, percent = false, proportionalTime = false }: StatsTradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [hovered, setHovered] = useState<{ label: string; value: number }>();
@@ -18,18 +29,34 @@ export function StatsTradingViewChart({ points, value, label, percent = false }:
     const container = containerRef.current;
     if (!container || navigator.userAgent.includes('jsdom')) return;
     const labels = new Map<number, string>();
-    const data = points.map((point) => {
+    const actualData = points.map((point) => {
       const time = Math.floor(point.timestamp / 1000) as UTCTimestamp;
       labels.set(time, point.label);
       return { time, value: value(point) };
     });
+    const data: Array<{ time: UTCTimestamp; value?: number }> = [...actualData];
+    if (proportionalTime && actualData.length > 1) {
+      const first = Number(actualData[0].time);
+      const last = Number(actualData.at(-1)!.time);
+      const interval = Math.max(60, Math.ceil((last - first) / 300 / 60) * 60);
+      const occupied = new Set(actualData.map((point) => Number(point.time)));
+      for (let time = first; time <= last; time += interval) {
+        if (!occupied.has(time)) data.push({ time: time as UTCTimestamp });
+      }
+      data.sort((left, right) => Number(left.time) - Number(right.time));
+    }
     const chart = createChart(container, {
       autoSize: true,
       height: 270,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#697386', fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: 11 },
       grid: { vertLines: { color: '#e8eaed' }, horzLines: { color: '#e8eaed' } },
       rightPriceScale: { borderColor: '#d7dadd', scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#d7dadd', timeVisible: false, secondsVisible: false, tickMarkFormatter: (time: Time) => labels.get(Number(time)) ?? '' },
+      timeScale: {
+        borderColor: '#d7dadd',
+        timeVisible: proportionalTime,
+        secondsVisible: false,
+        tickMarkFormatter: (time: Time) => shortTimeLabel(Number(time) * 1000),
+      },
       crosshair: { vertLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' }, horzLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' } },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
