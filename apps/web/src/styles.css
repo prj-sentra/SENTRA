@@ -1347,7 +1347,8 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .stats-table th, .stats-table td { padding: 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
-.integrated-performance { display: grid; gap: 14px; }
+.integrated-performance { display: grid; gap: 14px; padding-top: 24px; border-top: 1px solid var(--border); background: transparent; }
+.integrated-performance > .dashboard-section-title { margin: 0; }
 .performance-dimension-picker { display: flex; flex-wrap: wrap; gap: 7px; }
 .performance-dimension-picker label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--layer-01); cursor: pointer; font-size: .74rem; }
 .performance-dimension-picker label:has(input:checked) { border-color: #8bbce8; color: var(--blue); background: #edf5ff; font-weight: 650; }

@@ -32,9 +32,8 @@ function AveragePerformance({ overview }: { overview: TradeStatsOverview }) { re
 function IntegratedPerformanceViewer({ unit, selected, groups, onChange }: { unit: TradeStatsUnit; selected: TradeStatsDimension[]; groups: TradeStatsResponse['performanceGroups']; onChange: (next: TradeStatsDimension[]) => void }) {
   const visible = dimensions.filter(([dimension]) => unit === 'trade' || !entryOnlyDimensions.has(dimension));
   const toggle = (dimension: TradeStatsDimension) => onChange(selected.includes(dimension) ? selected.filter((value) => value !== dimension) : [...selected, dimension]);
-  return <section id="dashboard-analysis" className="stats-breakdown integrated-performance dashboard-section">
-    <h2>통합 성과</h2>
-    <p className="muted">기준을 여러 개 선택하면 각 값의 조합별 성과를 한 표에서 비교합니다.</p>
+  return <section id="dashboard-analysis" className="integrated-performance dashboard-section">
+    <h2 className="dashboard-section-title">통합 성과</h2>
     <div className="performance-dimension-picker" aria-label="성과 분류 기준">{visible.map(([dimension, label]) => <label key={dimension}><input type="checkbox" checked={selected.includes(dimension)} onChange={() => toggle(dimension)} />{label}</label>)}</div>
     {selected.length ? <div className="stats-table-wrap"><table className="stats-table integrated-performance-table"><thead><tr>{selected.map((dimension) => <th key={dimension}>{dimensions.find(([value]) => value === dimension)?.[1]}</th>)}<th>건수</th><th>총 PnL</th><th>평균 PnL</th><th>승률</th><th>평균 포인트</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key}>{group.labels.map((label, index) => <th key={`${group.key}-${selected[index]}`}>{label}</th>)}<td>{group.count}</td><td>{format(group.totalPnl)}</td><td>{format(group.averagePnl)}</td><td>{format(group.winRate, '%')}</td><td>{format(group.averagePoint)}</td></tr>)}</tbody></table></div> : <p className="integrated-performance-empty">비교할 기준을 하나 이상 선택하세요.</p>}
   </section>;

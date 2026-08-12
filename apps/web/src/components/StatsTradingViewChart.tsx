@@ -55,7 +55,12 @@ export function StatsTradingViewChart({ points, value, label, percent = false, p
         borderColor: '#d7dadd',
         timeVisible: proportionalTime,
         secondsVisible: false,
-        tickMarkFormatter: (time: Time) => shortTimeLabel(Number(time) * 1000),
+        tickMarkFormatter: (time: Time) => {
+          const timestamp = Number(time) * 1000;
+          if (proportionalTime) return shortTimeLabel(timestamp);
+          return new Intl.DateTimeFormat('ko-KR', { month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
+        },
+        minBarSpacing: proportionalTime ? 8 : 12,
       },
       crosshair: { vertLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' }, horzLine: { color: '#8ba6c1', width: 1, labelBackgroundColor: '#25364a' } },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
