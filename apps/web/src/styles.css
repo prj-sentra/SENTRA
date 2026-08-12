@@ -1364,10 +1364,9 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .dimension-order-actions button:disabled { color: var(--text-muted); cursor: default; opacity: .45; }
 .integrated-performance-table th, .integrated-performance-table td { text-align: right; }
 .integrated-performance-table th:first-child { text-align: left; }
-.integrated-performance-table { width: max-content; min-width: 100%; table-layout: auto; }
-.integrated-performance-table .condition-column { width: auto; }
-.integrated-performance-table .metric-count-column { width: 76px; }
-.integrated-performance-table .metric-value-column { width: 124px; }
+.integrated-performance-table { width: 100%; min-width: max-content; table-layout: auto; }
+.integrated-performance-table .condition-cell { width: 1%; max-width: none; padding-inline: 8px; white-space: nowrap; }
+.integrated-performance-table th:not(.condition-cell), .integrated-performance-table td { width: auto; min-width: 100px; }
 .integrated-performance-table .condition-divider { border-right: 3px solid var(--border-strong); }
 .integrated-performance-empty { margin: 0; padding: 24px; color: var(--text-muted); background: var(--layer-01); text-align: center; }
 .stats-table tbody tr:hover { background: var(--layer-01); }
