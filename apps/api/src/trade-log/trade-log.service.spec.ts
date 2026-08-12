@@ -334,8 +334,8 @@ describe('TradeLogService expanded statistics', () => {
     expect(service.statsDistributions(samples).map((item: any) => item.metric)).toEqual(['realizedPnl', 'oneLotPnl', 'r']);
   });
   it('returns all empty granular series with zero averages', () => {
-    const series = (new TradeLogService(prisma() as never) as any).statsSeriesByGranularity([], { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120 }, { accountId: 'account-1' });
-    expect(series).toEqual(expect.objectContaining({ day: expect.objectContaining({ points: [], activeBucketAverage: 0, calendarBucketAverage: 0 }), week: expect.any(Object), month: expect.any(Object), year: expect.any(Object) }));
+    const series = (new TradeLogService(prisma() as never) as any).statsSeriesByGranularity([], { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 }, { accountId: 'account-1' });
+    expect(series).toEqual(expect.objectContaining({ sequence: expect.objectContaining({ points: [] }), day: expect.objectContaining({ points: [], activeBucketAverage: 0, calendarBucketAverage: 0 }), week: expect.any(Object), month: expect.any(Object), year: expect.any(Object) }));
   });
 });
 describe('TradeLogService stats range and risk coverage', () => {

@@ -80,8 +80,8 @@ export interface TradeStatsBucket { key: string; label: string; count: number; c
 export interface TradeStatsFilterOption { key: string; label: string; }
 export interface TradeStatsOverview { totalTrades: number; totalRealizedPnl: number; totalProfitPnl?: number; totalLossPnl?: number; averageRealizedPnl: number; oneLotPnl?: number; winRate?: number; breakevenRate?: number; profitFactor?: number; payoff?: number; expectancy?: number; wins: number; losses: number; breakevens: number; classifiedCount: number; averageWin?: number; averageLoss?: number; maxWinStreak: number; currentWinStreak: number; maxLossStreak: number; currentLossStreak: number; totalRiskAmount: number; riskAmountCount: number; averageRiskPercent?: number; riskPercentCount: number; r: TradeStatsMetric & { total?: number; expectancy?: number }; }
 export interface TradeStatsComparison { from?: string; to?: string; priorFrom?: string; priorTo?: string; current: TradeStatsOverview; prior: TradeStatsOverview; }
-export type TradeStatsGranularity = 'day' | 'week' | 'month' | 'year';
-export interface TradeStatsSeriesPoint { key: string; label: string; count: number; realizedPnl: number; equity: number; }
+export type TradeStatsGranularity = 'sequence' | 'day' | 'week' | 'month' | 'year';
+export interface TradeStatsSeriesPoint { key: string; label: string; count: number; realizedPnl: number; equity: number; winRate?: number; }
 export interface TradeStatsSeries { granularity: TradeStatsGranularity; points: TradeStatsSeriesPoint[]; activeBucketAverage: number; calendarBucketAverage: number; }
 export interface TradeStatsPredicate { dimension: TradeStatsDimension; key: string; }
 export interface TradeStatsCrosstabCell extends TradeStatsBucket { predicates: TradeStatsPredicate[]; }

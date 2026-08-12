@@ -15,6 +15,7 @@ import type {
   TradeRecord,
   TradeStatsDimension,
   TradeStatsBucket,
+  TradeStatsGranularity,
   TradeStatsPreferences,
   TradeStatsQuery,
   TradeStatsResponse,
@@ -509,7 +510,41 @@ export class TradeLogService {
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, items]) => { const classified = items.filter((item) => this.statsOutcome(item, threshold) !== 'unclassified'), wins = classified.filter((item) => this.statsOutcome(item, threshold) === 'win'), pnl = items.reduce((sum, item) => sum + item.realizedPnl, 0), oneLotPnls = items.filter((item) => item.lots > 0).map((item) => item.realizedPnl / item.lots); return { key, label: key, count: items.length, classifiedCount: classified.length, ...(classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length ? { winRate: wins.length / classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length * 100 } : {}), realizedPnl: pnl, ...(oneLotPnls.length ? { oneLotPnl: oneLotPnls.reduce((sum, value) => sum + value, 0) / oneLotPnls.length } : {}), sufficiency: items.length < 10 ? '1-9' : items.length < 30 ? '10-29' : '30+' }; });
   }
   private statsSeriesByGranularity(samples: StatsSample[], preferences: TradeStatsPreferences, query: TradeStatsQuery): TradeStatsResponse['timeSeries'] {
-    const series = (granularity: 'day' | 'week' | 'month' | 'year') => { const groups = new Map<string, StatsSample[]>(); for (const sample of samples) { const key = this.statsPeriodKey(sample.closedAt, preferences, granularity); groups.set(key, [...(groups.get(key) ?? []), sample]); } const sampleKeys = [...groups.keys()].sort(); const keys = this.statsRangeKeys(query, preferences, granularity, sampleKeys); let equity = 0; const points = keys.map((key) => { const items = groups.get(key) ?? []; const realizedPnl = items.reduce((sum, item) => sum + item.realizedPnl, 0); equity += realizedPnl; return { key, label: key, count: items.length, realizedPnl, equity }; }); const active = points.filter((point) => point.count > 0); return { granularity, points, activeBucketAverage: active.length ? active.reduce((sum, point) => sum + point.realizedPnl, 0) / active.length : 0, calendarBucketAverage: points.length ? points.reduce((sum, point) => sum + point.realizedPnl, 0) / points.length : 0 }; }; return { day: series('day'), week: series('week'), month: series('month'), year: series('year') };
+    const toSeries = (granularity: TradeStatsGranularity, groups: Map<string, StatsSample[]>, keys: string[], labels?: Map<string, string>) => {
+      let equity = 0, wins = 0, losses = 0;
+      const points = keys.map((key) => {
+        const items = groups.get(key) ?? [];
+        const realizedPnl = items.reduce((sum, item) => sum + item.realizedPnl, 0);
+        equity += realizedPnl;
+        for (const item of items) {
+          const outcome = this.statsOutcome(item, preferences.breakevenPercent);
+          if (outcome === 'win') wins += 1;
+          if (outcome === 'loss') losses += 1;
+        }
+        return { key, label: labels?.get(key) ?? key, count: items.length, realizedPnl, equity, ...((wins + losses) > 0 ? { winRate: wins / (wins + losses) * 100 } : {}) };
+      });
+      const active = points.filter((point) => point.count > 0);
+      return { granularity, points, activeBucketAverage: active.length ? active.reduce((sum, point) => sum + point.realizedPnl, 0) / active.length : 0, calendarBucketAverage: points.length ? points.reduce((sum, point) => sum + point.realizedPnl, 0) / points.length : 0 };
+    };
+    const calendarSeries = (granularity: 'day' | 'week' | 'month' | 'year') => {
+      const groups = new Map<string, StatsSample[]>();
+      for (const sample of samples) {
+        const key = this.statsPeriodKey(sample.closedAt, preferences, granularity);
+        groups.set(key, [...(groups.get(key) ?? []), sample]);
+      }
+      const sampleKeys = [...groups.keys()].sort();
+      return toSeries(granularity, groups, this.statsRangeKeys(query, preferences, granularity, sampleKeys));
+    };
+    const ordered = [...samples].sort((left, right) => left.closedAt.localeCompare(right.closedAt) || left.id.localeCompare(right.id));
+    const sequenceGroups = new Map<string, StatsSample[]>();
+    const sequenceLabels = new Map<string, string>();
+    const unitLabel = (query.unit ?? 'campaign') === 'campaign' ? '매매' : '진입';
+    ordered.forEach((sample, index) => {
+      const key = String(index + 1);
+      sequenceGroups.set(key, [sample]);
+      sequenceLabels.set(key, `${unitLabel} ${key}`);
+    });
+    return { sequence: toSeries('sequence', sequenceGroups, [...sequenceGroups.keys()], sequenceLabels), day: calendarSeries('day'), week: calendarSeries('week'), month: calendarSeries('month'), year: calendarSeries('year') };
   }
   private statsPeriodKey(closedAt: string, preferences: TradeStatsPreferences, granularity: 'day' | 'week' | 'month' | 'year'): string {
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
