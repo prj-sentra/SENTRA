@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PatchTradeCampaignAnalysisRequest, TradeCampaignImage } from '@trading-journal/shared';
 import { canonicalCampaignAnalysisPatch } from './components/TradeAnalysisEditor';
 import { moveGalleryImage } from './components/gallery-order';
+import { appViewFromPath, appViewPaths } from './App';
 
 describe('redesigned journal web contracts', () => {
   it('canonicalizes disabled analysis conditionals and keeps the optimistic token', () => {
@@ -28,5 +29,19 @@ describe('redesigned journal web contracts', () => {
     ];
     expect(moveGalleryImage(images, 'a', 1).map((image) => image.id)).toEqual(['b', 'a']);
     expect(moveGalleryImage(images, 'a', -1)).toBe(images);
+  });
+
+  it('maps stable page endpoints and falls back to the journal', () => {
+    expect(appViewPaths).toEqual({
+      stats: '/dashboard',
+      'trade-log': '/journal',
+      credentials: '/settings',
+      admin: '/admin',
+    });
+    expect(appViewFromPath('/dashboard')).toBe('stats');
+    expect(appViewFromPath('/journal/')).toBe('trade-log');
+    expect(appViewFromPath('/settings')).toBe('credentials');
+    expect(appViewFromPath('/admin')).toBe('admin');
+    expect(appViewFromPath('/unknown')).toBe('trade-log');
   });
 });

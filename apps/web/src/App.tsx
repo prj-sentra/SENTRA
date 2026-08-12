@@ -10,10 +10,22 @@ import { StatsPage } from './components/StatsPage';
 import { SyncControl } from './components/SyncControl';
 import { TradeJournalPage } from './components/TradeJournalPage';
 
+export const appViewPaths: Record<AppView, string> = {
+  stats: '/dashboard',
+  'trade-log': '/journal',
+  credentials: '/settings',
+  admin: '/admin',
+};
+
+export function appViewFromPath(pathname: string): AppView {
+  const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return (Object.entries(appViewPaths).find(([, path]) => path === normalized)?.[0] as AppView | undefined) ?? 'trade-log';
+}
+
 export function App() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [view, setView] = useState<AppView>('trade-log');
+  const [view, setView] = useState<AppView>(() => appViewFromPath(window.location.pathname));
   const [accounts, setAccounts] = useState<SafeMt5AccountRef[]>([]);
   const [accountId, setAccountId] = useState<string>();
   const [campaigns, setCampaigns] = useState<TradeCampaign[]>([]);
@@ -23,6 +35,22 @@ export function App() {
   const [editingAccount, setEditingAccount] = useState<SafeMt5AccountRef>(); const [accountBusy, setAccountBusy] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(); const generation = useRef(0);
   const [journalTargetId, setJournalTargetId] = useState<string>();
+
+  const navigateView = useCallback((next: AppView, replace = false) => {
+    const path = appViewPaths[next];
+    if (window.location.pathname !== path) window.history[replace ? 'replaceState' : 'pushState']({}, '', path);
+    setView(next);
+  }, []);
+  useEffect(() => {
+    const initialView = appViewFromPath(window.location.pathname);
+    if (window.location.pathname.replace(/\/+$/, '') !== appViewPaths[initialView]) navigateView(initialView, true);
+    const handlePopState = () => setView(appViewFromPath(window.location.pathname));
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigateView]);
+  useEffect(() => {
+    if (user && view === 'admin' && !user.isAdmin) navigateView('stats', true);
+  }, [navigateView, user, view]);
 
   const loadCurrentUser = useCallback(async () => { try { setUser(await apiRequest<CurrentUser>('/auth/me')); } catch { setUser(null); } finally { setCheckingSession(false); } }, []);
   useEffect(() => setUnauthorizedHandler(() => setUser(null)), []); useEffect(() => { void loadCurrentUser(); }, [loadCurrentUser]);
@@ -90,7 +118,7 @@ export function App() {
   if (checkingSession) return <main className="shell"><p className="muted" role="status">세션을 불러오는 중입니다…</p></main>;
   if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
   const noAccount = !accountId;
-  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={setView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
+  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={navigateView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={loadAccountData} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
     {view === 'trade-log' && (noAccount
       ? <p className="journal-state">사이드바에서 MT5 계정을 선택하세요.</p>
       : <TradeJournalPage
@@ -114,7 +142,7 @@ export function App() {
           onReorderImages={reorderImages}
           onDeleteImage={deleteImage}
         />)}
-    {view === 'stats' && (noAccount ? <p className="journal-state">통계를 보려면 MT5 계정을 선택하세요.</p> : <StatsPage accountId={accountId!} request={apiRequest} onOpenRecord={(record) => { setJournalTargetId(record.targetId); setSelectedDate(record.journalDate); setView('trade-log'); }} />)}
+    {view === 'stats' && (noAccount ? <p className="journal-state">통계를 보려면 MT5 계정을 선택하세요.</p> : <StatsPage accountId={accountId!} request={apiRequest} onOpenRecord={(record) => { setJournalTargetId(record.targetId); setSelectedDate(record.journalDate); navigateView('trade-log'); }} />)}
     {view === 'credentials' ? <CredentialsSettings username={user.username} onCredentialsUpdated={clearAuthenticatedState} mt5AccountSettings={<section className="settings-mt5-section"><div className="settings-section-heading"><h2>MT5 계정 관리</h2></div><div className="accounts-page settings-mt5-content"><AccountEditor account={editingAccount} busy={accountBusy} onCreate={createAccount} onUpdate={updateAccount} onCancel={editingAccount ? () => setEditingAccount(undefined) : undefined} /><div className="account-list">{accounts.map((account) => <article key={account.id}><div><strong>{account.nickname}</strong><span>{account.server} / {account.accountLogin} · 시간 {account.timeCorrectionHours >= 0 ? '+' : ''}{account.timeCorrectionHours}h{account.active ? '' : ' · 비활성'}</span></div><div className="account-actions"><button type="button" className="secondary-button compact" onClick={() => setEditingAccount(account)}>수정</button><button type="button" className="secondary-button compact" disabled={accountBusy} onClick={() => void toggleAccount(account)}>{account.active ? '비활성화' : '활성화'}</button></div></article>)}</div></div></section>} /> : null}
     {view === 'admin' ? <UserManagement currentUser={user} /> : null}</main></div>;
 }

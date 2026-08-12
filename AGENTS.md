@@ -6,7 +6,7 @@ S.E.N.T.R.A. is a strict-TypeScript trading-journal monorepo: a React/Vite SPA, 
 
 ## Architecture & Data Flow
 
-- `apps/web/src/main.tsx` mounts `App`; `apps/web/src/App.tsx` is the UI composition root. It owns hook state and switches views with a local `AppView` value—there is no URL router, global store, or query cache.
+- `apps/web/src/main.tsx` mounts `App`; `apps/web/src/App.tsx` is the UI composition root. It owns hook state and synchronizes `AppView` with stable History API routes (`/dashboard`, `/journal`, `/settings`, `/admin`)—there is no global store or query cache.
 - `apps/web/src/api/client.ts` centralizes credentialed API requests. Components receive data and callbacks through props and update state immutably.
 - `apps/api/src/main.ts` boots Nest on `0.0.0.0:${PORT:-3000}`, configures credentialed CORS, and requires an exact `WEB_ORIGIN`. `app.module.ts` composes auth, MT5 accounts, trade log, and health modules.
 - API requests flow controller/guard → feature service → `PrismaService` → PostgreSQL. Controllers stay thin; validation, authorization, transactions, DTO conversion, sync, and domain behavior belong in services.
