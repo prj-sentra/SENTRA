@@ -57,10 +57,12 @@ cross. Projection, display, and head mutations use first opening execution
 time, opening ticket, then position ID as their deterministic order.
 
 Marking a non-head trade as a manual head atomically moves that trade and every
-later member into a new campaign with an empty analysis. Only a
+later member into the affected range, then reapplies interval connectivity
+inside that range. The selected connected component starts with a `MANUAL`
+head; any later disconnected component starts its own `AUTO` campaign. Only a
 non-account-first `MANUAL` head can be unset. Removing it reapplies automatic
 interval rules: connected intervals merge into the preceding campaign, while a
-real gap retains an `AUTO` head. Connected merges archive the complete analysis
+real gap retains or creates an `AUTO` head. Connected merges archive the complete analysis
 and review graph including indicators and prior archives, append memo content,
 move images, and rewrite conflict references before deleting the losing
 campaign.

@@ -326,15 +326,38 @@ export class TradeLogService {
         await tx.tradeCampaign.update({ where: { id: campaignId }, data: { version: { increment: 1 } } });
         return { campaign: await this.serializedCampaign(tx, campaignId) } as CampaignHeadMutationResponse;
       }
-      await this.preserveCampaignMerge(tx, previousCampaignId, campaignId);
       await tx.campaignMembership.update({ where: { tradeId: head.tradeId }, data: { headSource: 'AUTO', source: 'AUTO' } });
-      await tx.campaignMembership.updateMany({ where: { campaignId }, data: { campaignId: previousCampaignId, headSource: 'AUTO' } });
-      await tx.tradeCampaign.delete({ where: { id: campaignId } });
+      const recomputedMembers = accountMembers.map((member) => member.tradeId === head.tradeId
+        ? { ...member, headSource: 'AUTO', source: 'AUTO' }
+        : member);
+      const component = this.connectedAutomaticComponent(recomputedMembers, index);
+      const involvedCampaignIds = [...new Set(component.map((member) => member.campaignId))];
+      for (const involvedCampaignId of involvedCampaignIds) if (involvedCampaignId !== previousCampaignId) await this.lockCampaignRows(tx, involvedCampaignId);
+      for (const losingCampaignId of involvedCampaignIds) {
+        if (losingCampaignId === previousCampaignId) continue;
+        await this.preserveCampaignMerge(tx, previousCampaignId, losingCampaignId);
+      }
+      await tx.campaignMembership.updateMany({
+        where: { tradeId: { in: component.map((member) => member.tradeId) } },
+        data: { campaignId: previousCampaignId, headSource: 'AUTO' },
+      });
+      for (const member of component) {
+        if (member.tradeId !== head.tradeId && member.headSource === 'MANUAL') {
+          await tx.campaignMembership.update({
+            where: { tradeId: member.tradeId },
+            data: { source: 'MANUAL', headSource: 'MANUAL' },
+          });
+        }
+      }
+      for (const losingCampaignId of involvedCampaignIds) {
+        if (losingCampaignId !== previousCampaignId) await tx.tradeCampaign.delete({ where: { id: losingCampaignId } });
+      }
       await tx.tradeCampaign.update({ where: { id: previousCampaignId }, data: { version: { increment: 1 } } });
       await this.normalizeCampaign(tx, previousCampaignId);
+      const affectedCampaignId = await this.recomputeCampaignGaps(tx, previousCampaignId, ownerId, lockedAccountId, head.tradeId);
       return {
         previousCampaign: undefined,
-        campaign: await this.serializedCampaign(tx, previousCampaignId),
+        campaign: await this.serializedCampaign(tx, affectedCampaignId),
       } as CampaignHeadMutationResponse;
     });
   }
@@ -354,11 +377,32 @@ export class TradeLogService {
       if (start < 0) throw new BadRequestException('Trade does not belong to campaign');
       if (start === 0) throw new BadRequestException('Campaign head is already set');
       const selected = members[start];
+      const suffix = members.slice(start);
+      const groups = this.partitionCampaignRange(suffix);
       const created = await tx.tradeCampaign.create({
         data: { rootTradeId: selected.tradeId, tradingDate: this.seoulMidnight(selected.trade.openedAt!), ownerId, mt5AccountId: lockedAccountId, analysis: { create: {} } },
       });
-      await tx.campaignMembership.updateMany({ where: { tradeId: { in: members.slice(start).map((member) => member.tradeId) } }, data: { campaignId: created.id, headSource: 'AUTO' } });
-      await tx.campaignMembership.update({ where: { tradeId }, data: { headSource: 'MANUAL', source: 'MANUAL' } });
+      const createdGroups = [created];
+      for (const group of groups.slice(1)) {
+        const root = group[0];
+        createdGroups.push(await tx.tradeCampaign.create({
+          data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!), ownerId, mt5AccountId: lockedAccountId, analysis: { create: {} } },
+        }));
+      }
+      for (const [index, group] of groups.entries()) {
+        const target = createdGroups[index];
+        await tx.campaignMembership.updateMany({
+          where: { tradeId: { in: group.map((member) => member.tradeId) } },
+          data: { campaignId: target.id, headSource: 'AUTO' },
+        });
+        const root = group[0];
+        await tx.campaignMembership.update({
+          where: { tradeId: root.tradeId },
+          data: index === 0 || root.headSource === 'MANUAL'
+            ? { headSource: 'MANUAL', source: 'MANUAL' }
+            : { headSource: 'AUTO', source: 'AUTO' },
+        });
+      }
       await tx.tradeCampaign.update({ where: { id: campaign.id }, data: { version: { increment: 1 } } });
       await this.normalizeCampaign(tx, campaign.id);
       return {
@@ -829,6 +873,71 @@ export class TradeLogService {
       if (leftPosition !== rightPosition) return leftPosition < rightPosition ? -1 : 1;
       return left.tradeId.localeCompare(right.tradeId);
     });
+  }
+
+  private partitionCampaignRange<T extends { headSource: string; trade: { openedAt: Date | null; closedAt: Date | null } }>(members: T[]): T[][] {
+    const groups: T[][] = [];
+    let group: T[] = [];
+    let end = Number.NEGATIVE_INFINITY;
+    for (const member of members) {
+      const opened = member.trade.openedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+      if (group.length && (member.headSource === 'MANUAL' || opened > end)) {
+        groups.push(group);
+        group = [];
+        end = Number.NEGATIVE_INFINITY;
+      }
+      group.push(member);
+      end = member.trade.closedAt ? Math.max(end, member.trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+    }
+    if (group.length) groups.push(group);
+    return groups;
+  }
+
+  private connectedAutomaticComponent<T extends { headSource: string; trade: { openedAt: Date | null; closedAt: Date | null } }>(members: T[], targetIndex: number): T[] {
+    let start = targetIndex;
+    let frontier = Number.NEGATIVE_INFINITY;
+    for (let index = targetIndex - 1; index >= 0; index -= 1) {
+      const member = members[index];
+      start = index;
+      if (member.headSource === 'MANUAL') break;
+    }
+    let component: T[] = [];
+    for (let index = start; index < members.length; index += 1) {
+      const member = members[index];
+      const opened = member.trade.openedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+      if (component.length && (member.headSource === 'MANUAL' || opened > frontier)) {
+        if (component.includes(members[targetIndex])) return component;
+        component = [];
+        frontier = Number.NEGATIVE_INFINITY;
+      }
+      component.push(member);
+      frontier = member.trade.closedAt ? Math.max(frontier, member.trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+    }
+    return component.includes(members[targetIndex]) ? component : [];
+  }
+
+  private async recomputeCampaignGaps(tx: Tx, campaignId: string, ownerId: string, accountId: string, affectedTradeId: string): Promise<string> {
+    const members = await this.orderedCampaignMembers(tx, campaignId, accountId);
+    const groups = this.partitionCampaignRange(members);
+    let affectedCampaignId = groups[0]?.some((member) => member.tradeId === affectedTradeId) ? campaignId : '';
+    for (const group of groups.slice(1)) {
+      const root = group[0];
+      const created = await tx.tradeCampaign.create({
+        data: { rootTradeId: root.tradeId, tradingDate: this.seoulMidnight(root.trade.openedAt!), ownerId, mt5AccountId: accountId, analysis: { create: {} } },
+      });
+      await tx.campaignMembership.updateMany({
+        where: { tradeId: { in: group.map((member) => member.tradeId) } },
+        data: { campaignId: created.id, headSource: 'AUTO' },
+      });
+      await tx.campaignMembership.update({
+        where: { tradeId: root.tradeId },
+        data: root.headSource === 'MANUAL' ? { source: 'MANUAL', headSource: 'MANUAL' } : { source: 'AUTO', headSource: 'AUTO' },
+      });
+      await this.normalizeCampaign(tx, created.id);
+      if (group.some((member) => member.tradeId === affectedTradeId)) affectedCampaignId = created.id;
+    }
+    if (groups.length > 1) await tx.tradeCampaign.update({ where: { id: campaignId }, data: { version: { increment: 1 } } });
+    return affectedCampaignId || campaignId;
   }
 
   private hasCampaignAnalysisContent(analysis: CampaignWithRelations['analysis'] | null): boolean {

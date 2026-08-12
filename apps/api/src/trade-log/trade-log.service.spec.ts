@@ -74,6 +74,43 @@ describe('TradeLogService campaign-head boundaries', () => {
     expect(ordered.map((row: { tradeId: string }) => row.tradeId)).toEqual(['low-position', 'high-position', 'late-ticket']);
   });
 
+  it('partitions a manual suffix into interval components without splitting touching or transitive intervals', () => {
+    const service = new TradeLogService({} as never);
+    const at = (milliseconds: number) => new Date(milliseconds);
+    const rows = [
+      { headSource: 'AUTO', trade: { openedAt: at(2), closedAt: at(4) } },
+      { headSource: 'AUTO', trade: { openedAt: at(3), closedAt: at(3) } },
+      { headSource: 'AUTO', trade: { openedAt: at(5), closedAt: at(6) } },
+      { headSource: 'AUTO', trade: { openedAt: at(6), closedAt: null } },
+    ];
+    expect((service as any).partitionCampaignRange(rows).map((group: unknown[]) => group.length)).toEqual([2, 2]);
+  });
+
+  it('recomputes only the automatic component containing an unset head and stops at gaps or later manual heads', () => {
+    const service = new TradeLogService({} as never);
+    const at = (milliseconds: number) => new Date(milliseconds);
+    const rows = [
+      { headSource: 'AUTO', trade: { openedAt: at(1), closedAt: at(10) } },
+      { headSource: 'AUTO', trade: { openedAt: at(2), closedAt: at(3) } },
+      { headSource: 'AUTO', trade: { openedAt: at(5), closedAt: at(6) } },
+      { headSource: 'AUTO', trade: { openedAt: at(7), closedAt: at(8) } },
+      { headSource: 'MANUAL', trade: { openedAt: at(8), closedAt: at(20) } },
+    ];
+    expect((service as any).connectedAutomaticComponent(rows, 1)).toEqual(rows.slice(0, 4));
+  });
+
+  it('includes the preceding manual root as the bounded frontier without crossing an earlier manual boundary', () => {
+    const service = new TradeLogService({} as never);
+    const at = (milliseconds: number) => new Date(milliseconds);
+    const rows = [
+      { headSource: 'MANUAL', trade: { openedAt: at(1), closedAt: at(2) } },
+      { headSource: 'MANUAL', trade: { openedAt: at(3), closedAt: at(20) } },
+      { headSource: 'AUTO', trade: { openedAt: at(4), closedAt: at(5) } },
+      { headSource: 'AUTO', trade: { openedAt: at(6), closedAt: at(7) } },
+    ];
+    expect((service as any).connectedAutomaticComponent(rows, 2)).toEqual(rows.slice(1));
+  });
+
   it('normalizes campaign roots with persisted opening ticket before position ID', async () => {
     const openedAt = new Date('2026-08-01T00:00:00.000Z');
     const tx: any = {
@@ -243,7 +280,7 @@ describe('TradeLogService campaign-head boundaries', () => {
       previousCampaign: undefined, campaign: { id: 'campaign-1' },
     });
     expect(preserve).toHaveBeenCalledWith(tx, 'campaign-1', 'campaign-2');
-    expect(tx.campaignMembership.updateMany).toHaveBeenCalledWith({ where: { campaignId: 'campaign-2' }, data: { campaignId: 'campaign-1', headSource: 'AUTO' } });
+    expect(tx.campaignMembership.updateMany).toHaveBeenCalledWith({ where: { tradeId: { in: ['previous', 'head'] } }, data: { campaignId: 'campaign-1', headSource: 'AUTO' } });
     expect(tx.tradeCampaign.delete).toHaveBeenCalledWith({ where: { id: 'campaign-2' } });
   });
 
