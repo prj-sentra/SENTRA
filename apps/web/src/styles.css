@@ -1333,6 +1333,36 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .drawer-period-filter > span { color: var(--text-muted); font-size: .7rem; }
 .filter-category-master { display: inline-flex; align-items: center; gap: 7px; color: var(--text-primary); font-size: .78rem; font-weight: 700; cursor: pointer; }
 .filter-category-master input { width: 15px; height: 15px; margin: 0; accent-color: var(--blue); }
+.dashboard-filter-sidebar { position: fixed; z-index: 35; top: 0; right: 0; display: grid; grid-template-columns: 112px; width: 112px; height: 100vh; border-left: 1px solid var(--border); background: var(--surface); box-shadow: -8px 0 28px rgb(15 23 42 / 8%); transition: width .2s ease, grid-template-columns .2s ease; }
+.dashboard-filter-sidebar.is-open { grid-template-columns: 112px minmax(300px, 360px); width: min(472px, 94vw); }
+.dashboard-filter-rail { display: grid; align-content: start; gap: 8px; padding: 14px 10px; border-right: 1px solid var(--border); background: var(--layer-01); }
+.dashboard-filter-rail .secondary-button { width: 100%; min-height: 40px; padding: 6px; font-size: .72rem; }
+.dashboard-unit { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 4px; }
+.dashboard-unit button { min-width: 0; padding-inline: 4px; font-size: .7rem; }
+.dashboard-filter-expanded { display: grid; min-width: 0; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; background: var(--surface); }
+.dashboard-filter-expanded > header { display: grid; gap: 2px; padding: 15px 16px 11px; border-bottom: 1px solid var(--border); }
+.dashboard-filter-expanded > header span { color: var(--text-muted); font-size: .68rem; }
+.dashboard-filter-dates { display: grid; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.dashboard-filter-dates > div { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 5px; }
+.dashboard-filter-dates input[type='date'] { width: 100%; min-width: 0; height: 36px; border: 1px solid var(--border); padding: 0 7px; background: var(--surface); font: inherit; font-size: .7rem; }
+.dashboard-filter-criteria { overflow-y: auto; padding: 5px 14px 18px; }
+.dashboard-filter-criteria fieldset { margin: 0; padding: 9px 2px; border: 0; border-bottom: 1px solid var(--border); }
+.dashboard-filter-criteria legend { padding: 0 0 5px; }
+.dashboard-filter-criteria fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.dashboard-filter-criteria fieldset > div > label { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 3px; color: var(--text-secondary); background: var(--layer-01); cursor: pointer; font-size: .7rem; }
+.dashboard-filter-criteria fieldset > div > label:has(input:checked) { color: var(--blue); background: #edf5ff; font-weight: 650; }
+.dashboard-filter-criteria fieldset input { width: 13px; height: 13px; margin: 0; accent-color: var(--blue); }
+.dashboard-filter-criteria fieldset span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats-page { padding-right: 120px; transition: padding-right .2s ease; }
+@media (max-width: 800px) {
+  .dashboard-filter-sidebar { top: auto; bottom: 0; width: 100%; height: auto; grid-template-columns: 1fr; border-top: 1px solid var(--border); border-left: 0; }
+  .dashboard-filter-sidebar.is-open { top: 0; grid-template-columns: 96px minmax(0, 1fr); width: 100%; height: 100vh; }
+  .dashboard-filter-rail { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 7px; border-right: 0; }
+  .dashboard-unit { margin: 0; }
+  .dashboard-filter-sidebar.is-open .dashboard-filter-rail { display: grid; grid-template-columns: 1fr; align-content: start; border-right: 1px solid var(--border); }
+  .dashboard-filter-criteria fieldset > div { grid-template-columns: 1fr; }
+  .stats-page { padding-right: 0; padding-bottom: 64px; }
+}
 .stats-unit button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border); background: var(--surface); }
 .stats-unit button + button { border-left: 0; }
 .stats-unit button.active { background: var(--blue); color: #fff; }
