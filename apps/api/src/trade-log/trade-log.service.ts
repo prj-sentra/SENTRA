@@ -323,6 +323,7 @@ export class TradeLogService {
     const dimensions: TradeStatsDimension[] = ['symbol', 'side', 'exitReason', 'entryWeekday', 'session', 'baseTimeframe', 'bollingerSetup', 'executionEvaluation', 'violationFlags', 'holdDuration', 'analysisCompleteness'];
     const breakdowns = Object.fromEntries(dimensions.map((dimension) => [dimension, this.statsBreakdown(filtered, dimension, preferences.breakevenPercent, preferences.timeZone)]));
     const filterOptions = Object.fromEntries(dimensions.map((dimension) => [dimension, this.statsBreakdown(samples, dimension, preferences.breakevenPercent, preferences.timeZone).map(({ key, label }) => ({ key, label }))]));
+    const performanceGroups = this.statsPerformanceGroups(filtered, normalized.groupDimensions ?? [], preferences.breakevenPercent, preferences.timeZone);
     const timeSeries = this.statsSeriesByGranularity(filtered, preferences, normalized);
     const riskR = filtered.filter((sample) => sample.riskAmount && sample.riskAmount > 0).map((sample) => sample.realizedPnl / sample.riskAmount!);
     const drawdown = this.statsDrawdown(filtered, riskR);
@@ -346,6 +347,7 @@ export class TradeLogService {
       timeSeries,
       breakdowns,
       filterOptions,
+      performanceGroups,
       crosstab: { rowDimension: normalized.rowDimension ?? 'symbol', columnDimension: normalized.columnDimension ?? 'session', ...crosstab },
       drawdown,
       distributions: this.statsDistributions(filtered),
@@ -385,7 +387,7 @@ export class TradeLogService {
   private validateStatsQuery(query: TradeStatsQuery): TradeStatsQuery {
     if (!query || typeof query.accountId !== 'string' || !query.accountId) throw new BadRequestException('accountId is required');
     const normalized = { ...query } as TradeStatsQuery;
-    for (const key of ['symbols', 'sides', 'sessions', 'baseTimeframes', 'outcomes', 'evaluations', 'violations', 'exitReasons', 'entryWeekdays', 'bollingerSetups', 'analysisCompleteness', 'holdDurationBands'] as const) {
+    for (const key of ['symbols', 'sides', 'sessions', 'baseTimeframes', 'outcomes', 'evaluations', 'violations', 'exitReasons', 'entryWeekdays', 'bollingerSetups', 'analysisCompleteness', 'holdDurationBands', 'groupDimensions'] as const) {
       const value = normalized[key];
       if (typeof value === 'string') (normalized as unknown as Record<string, unknown>)[key] = [value];
       else if (value !== undefined && (!Array.isArray(value) || !value.every((item) => typeof item === 'string'))) throw new BadRequestException('Stats query is invalid');
@@ -394,6 +396,8 @@ export class TradeLogService {
     if (normalized.unit !== undefined && !['campaign', 'trade'].includes(normalized.unit) || !valid(normalized.sides, ['long', 'short']) || !valid(normalized.sessions, ['asia', 'london', 'new-york', 'off-session']) || !valid(normalized.outcomes, ['win', 'loss', 'breakeven', 'unclassified']) || !valid(normalized.evaluations, ['as_planned', 'plan_violated']) || !valid(normalized.bollingerSetups, ['no_touch', 'one_band:normal', 'one_band:reverse', 'one_band:chase', 'two_band:normal', 'two_band:reverse', 'two_band:chase']) || !valid(normalized.analysisCompleteness, ['complete', 'incomplete']) || (normalized.rowDimension !== undefined && !['symbol', 'side', 'exitReason', 'entryWeekday', 'session', 'baseTimeframe', 'bollingerSetup', 'executionEvaluation', 'violationFlags', 'holdDuration', 'analysisCompleteness'].includes(normalized.rowDimension)) || (normalized.columnDimension !== undefined && !['symbol', 'side', 'exitReason', 'entryWeekday', 'session', 'baseTimeframe', 'bollingerSetup', 'executionEvaluation', 'violationFlags', 'holdDuration', 'analysisCompleteness'].includes(normalized.columnDimension))) throw new BadRequestException('Stats query is invalid');
     for (const value of [normalized.from, normalized.to]) if (value !== undefined && (typeof value !== 'string' || Number.isNaN(Date.parse(value)))) throw new BadRequestException('Stats date is invalid');
     if (normalized.from && normalized.to && new Date(normalized.from) > new Date(normalized.to)) throw new BadRequestException('Stats from must not exceed to');
+    const dimensions = ['symbol', 'side', 'exitReason', 'entryWeekday', 'session', 'baseTimeframe', 'bollingerSetup', 'executionEvaluation', 'violationFlags', 'holdDuration', 'analysisCompleteness'];
+    if (normalized.groupDimensions && (new Set(normalized.groupDimensions).size !== normalized.groupDimensions.length || normalized.groupDimensions.some((dimension) => !dimensions.includes(dimension)))) throw new BadRequestException('Stats grouping dimensions are invalid');
     return normalized;
   }
   private validateStatsPreferences(request: PatchTradeStatsPreferencesRequest): Record<string, unknown> {
@@ -520,6 +524,28 @@ export class TradeLogService {
   private statsBreakdown(samples: StatsSample[], dimension: TradeStatsDimension, threshold: number, timeZone = 'Asia/Seoul'): TradeStatsBucket[] {
     const groups = new Map<string, StatsSample[]>(); for (const sample of samples) for (const key of this.statsDimension(sample, dimension, timeZone)) groups.set(key, [...(groups.get(key) ?? []), sample]);
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, items]) => { const classified = items.filter((item) => this.statsOutcome(item, threshold) !== 'unclassified'), wins = classified.filter((item) => this.statsOutcome(item, threshold) === 'win'), pnl = items.reduce((sum, item) => sum + item.realizedPnl, 0), oneLotPnls = items.filter((item) => item.lots > 0).map((item) => item.realizedPnl / item.lots); return { key, label: this.statsDimensionLabel(dimension, key), count: items.length, classifiedCount: classified.length, ...(classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length ? { winRate: wins.length / classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length * 100 } : {}), realizedPnl: pnl, ...(oneLotPnls.length ? { oneLotPnl: oneLotPnls.reduce((sum, value) => sum + value, 0) / oneLotPnls.length } : {}), sufficiency: items.length < 10 ? '1-9' : items.length < 30 ? '10-29' : '30+' }; });
+  }
+  private statsPerformanceGroups(samples: StatsSample[], dimensions: TradeStatsDimension[], threshold: number, timeZone: string): TradeStatsResponse['performanceGroups'] {
+    if (!dimensions.length) return [];
+    const dimensionKeys = dimensions.map((dimension) => [...new Set(samples.flatMap((sample) => this.statsDimension(sample, dimension, timeZone)))].sort());
+    if (dimensionKeys.some((keys) => !keys.length)) return [];
+    const combinations = dimensionKeys.reduce<string[][]>((rows, keys) => rows.flatMap((row) => keys.map((key) => [...row, key])), [[]]);
+    return combinations.map((keys) => {
+      const items = samples.filter((sample) => keys.every((key, index) => this.statsDimension(sample, dimensions[index], timeZone).includes(key)));
+      const overview = this.statsOverview(items, threshold);
+      const points = items.filter((item) => item.lots > 0).map((item) => item.realizedPnl / item.lots);
+      return {
+        key: keys.join('|'),
+        labels: keys.map((key, index) => this.statsDimensionLabel(dimensions[index], key)),
+        predicates: keys.map((key, index) => ({ dimension: dimensions[index], key })),
+        count: items.length,
+        classifiedCount: overview.classifiedCount,
+        winRate: overview.winRate,
+        totalPnl: overview.totalRealizedPnl,
+        averagePnl: overview.averageRealizedPnl,
+        ...(points.length ? { averagePoint: points.reduce((sum, value) => sum + value, 0) / points.length } : {}),
+      };
+    });
   }
   private statsSeriesByGranularity(samples: StatsSample[], preferences: TradeStatsPreferences, query: TradeStatsQuery): TradeStatsResponse['timeSeries'] {
     const toSeries = (granularity: TradeStatsGranularity, groups: Map<string, StatsSample[]>, keys: string[], labels?: Map<string, string>, timestamps?: Map<string, number>) => {

@@ -1346,6 +1346,14 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .stats-table th, .stats-table td { padding: 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+.integrated-performance { display: grid; gap: 14px; }
+.performance-dimension-picker { display: flex; flex-wrap: wrap; gap: 7px; }
+.performance-dimension-picker label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--layer-01); cursor: pointer; font-size: .74rem; }
+.performance-dimension-picker label:has(input:checked) { border-color: #8bbce8; color: var(--blue); background: #edf5ff; font-weight: 650; }
+.performance-dimension-picker input { width: 14px; height: 14px; margin: 0; accent-color: var(--blue); }
+.integrated-performance-table th, .integrated-performance-table td { text-align: right; }
+.integrated-performance-table th:first-child { text-align: left; }
+.integrated-performance-empty { margin: 0; padding: 24px; color: var(--text-muted); background: var(--layer-01); text-align: center; }
 .stats-table tbody tr:hover { background: var(--layer-01); }
 .sufficiency-badge { display: inline-block; padding: 2px 6px; border: 1px solid var(--border); color: var(--text-secondary); font-size: .68rem; }
 .heat-cell, .table-link { border: 0; background: transparent; color: inherit; cursor: pointer; }
