@@ -1,10 +1,10 @@
 import { BadGatewayException } from '@nestjs/common';
-import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5BridgeUnauthorized } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeUnauthorized } from './mt5-bridge.client';
 
-const request = { server: 'broker-live', accountLogin: 123, password: 'secret', historyFromMsc: 0, historyToMsc: 1_700_000_001_000 };
-const v4 = (patch: Record<string, unknown> = {}) => ({
-  contractVersion: 4, server: request.server, accountLogin: request.accountLogin, cursor: 'cursor-2',
-  historyRange: { fromMsc: request.historyFromMsc, toMsc: request.historyToMsc },
+const request = { contractVersion: 5 as const, server: 'broker-live', accountLogin: 123, password: 'secret', mode: 'bootstrap' as const, snapshotToMsc: 1_700_000_001_000 };
+const v5 = (patch: Record<string, unknown> = {}) => ({
+  contractVersion: 5, server: request.server, accountLogin: request.accountLogin, mode: request.mode, snapshotToMsc: request.snapshotToMsc,
+  page: { hasMore: false, bytes: 0 },
   account: { currency: 'USD', currencyDigits: 2, currentBalance: '100.12' }, deals: [], orders: [], ...patch,
 });
 const opening = (patch: Record<string, unknown> = {}) => ({
@@ -16,10 +16,21 @@ describe('Mt5BridgeClient', () => {
   const originalFetch = global.fetch;
   beforeEach(() => { process.env.MT5_BRIDGE_BASE_URL = 'http://bridge.internal:18812'; process.env.MT5_BRIDGE_TOKEN = 'bridge-secret'; });
   afterEach(() => { global.fetch = originalFetch; });
-  const response = (body: unknown, status = 200) => { global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })) as typeof fetch; };
+  const response = (body: unknown, status = 200) => {
+    const value = structuredClone(body);
+    if (value && typeof value === 'object' && 'page' in value && value.page && typeof value.page === 'object' && 'bytes' in value.page) {
+      let bytes: number;
+      do {
+        bytes = Buffer.byteLength(JSON.stringify(value));
+        if (value.page.bytes === bytes) break;
+        value.page.bytes = bytes;
+      } while (true);
+    }
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify(value), { status })) as typeof fetch;
+  };
 
-  it('uses authenticated bounded I/O and accepts the exact v4 account and history echo', async () => {
-    response(v4());
+  it('uses authenticated bounded I/O and accepts the exact v5 identity, mode, and snapshot echo', async () => {
+    response(v5());
     await expect(new Mt5BridgeClient().sync(request)).resolves.toMatchObject({ account: { currentBalance: '100.12' } });
     expect(global.fetch).toHaveBeenCalledWith(new URL('http://bridge.internal:18812/sync'), expect.objectContaining({
       method: 'POST', headers: expect.objectContaining({ authorization: 'Bearer bridge-secret' }), signal: expect.any(AbortSignal), body: JSON.stringify(request),
@@ -28,22 +39,21 @@ describe('Mt5BridgeClient', () => {
 
   it('rejects identity, history range, account snapshot, and old contract mismatches', async () => {
     for (const body of [
-      v4({ server: 'attacker' }),
-      v4({ historyRange: { fromMsc: 1, toMsc: request.historyToMsc } }),
-      v4({ account: { currency: 'USD', currencyDigits: 2, currentBalance: '1e2' } }),
-      v4({ account: { currency: 'USD', currencyDigits: 2.5, currentBalance: '100.12' } }),
-      v4({ contractVersion: 3 }),
+      v5({ server: 'attacker' }),
+      v5({ snapshotToMsc: 1 }),
+      v5({ page: { hasMore: true, bytes: 100 } }),
+      v5({ account: { currency: 'USD', currencyDigits: 2, currentBalance: '1e2' } }),
+      v5({ account: { currency: 'USD', currencyDigits: 2.5, currentBalance: '100.12' } }),
+      v5({ contractVersion: 4 }),
     ]) {
       response(body);
       await expect(new Mt5BridgeClient().sync(request)).rejects.toBeInstanceOf(BadGatewayException);
     }
   });
 
-  it('classifies only the explicit bridge cursor rejection for a safe cursorless retry', async () => {
+  it('rejects bridge request failures instead of applying v4 cursor recovery', async () => {
     response({ error: 'invalid or expired cursor' }, 400);
-    await expect(new Mt5BridgeClient().sync({ ...request, cursor: 'stale' })).rejects.toBeInstanceOf(Mt5BridgeCursorRejected);
-    response({ error: 'other bad request' }, 400);
-    await expect(new Mt5BridgeClient().sync({ ...request, cursor: 'stale' })).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(new Mt5BridgeClient().sync({ ...request, pageCursor: 'opaque' })).rejects.toBeInstanceOf(BadGatewayException);
   });
   it('classifies bridge bearer-token rejection without exposing the token', async () => {
     response({ error: 'unauthorized' }, 401);
@@ -52,10 +62,10 @@ describe('Mt5BridgeClient', () => {
 
   it('accepts lossless IDs and rejects numeric or PostgreSQL-overflow identifiers', async () => {
     const deal = opening({ ticket: '9223372036854775807', order: '1', positionId: '1' });
-    response(v4({ deals: [deal] }));
+    response(v5({ deals: [deal] }));
     await expect(new Mt5BridgeClient().sync(request)).resolves.toMatchObject({ deals: [{ ticket: deal.ticket }] });
     for (const ticket of [9007199254740992, '9223372036854775808']) {
-      response(v4({ deals: [{ ...deal, ticket }] }));
+      response(v5({ deals: [{ ...deal, ticket }] }));
       await expect(new Mt5BridgeClient().sync(request)).rejects.toThrow('invalid payload');
     }
   });

@@ -1,12 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { Mt5SyncService } from './mt5-sync.service';
-import { Mt5BridgeCursorRejected } from './mt5-bridge.client';
 
 const account = { id: 'account-1', ownerId: 'owner-1', active: true, server: 'Broker', canonicalServer: 'broker', accountLogin: 7n, credentialCiphertext: Buffer.from('x'), credentialIv: Buffer.alloc(12), credentialTag: Buffer.alloc(16), credentialVersion: 1 };
 const deal = { ticket: '11', order: '10', positionId: '9', time: 1, timeMsc: 1000, type: 0, entry: 0, magic: '0', reason: 0, volume: 1, price: 2, commission: 0, swap: 0, profit: 0, fee: 0, symbol: 'XAUUSD', comment: '', externalId: '' };
 
 function statefulDb() {
-  const state = { lease: undefined as any, cursor: undefined as string | undefined, deals: [] as any[], orders: [] as any[], balances: [] as any[], balanceEvents: [] as any[], ledger: undefined as any, plans: [] as any[], trade: undefined as any, campaign: undefined as any, membership: undefined as any };
+  const state = { lease: undefined as any, status: undefined as any, deals: [] as any[], orders: [] as any[], balances: [] as any[], balanceEvents: [] as any[], ledger: undefined as any, plans: [] as any[], trade: undefined as any, campaign: undefined as any, membership: undefined as any };
   const db: any = {
     $queryRaw: jest.fn(async (query: any) => {
       const sql = query.strings?.join('') ?? '';
@@ -57,8 +56,8 @@ function statefulDb() {
       }),
     },
     mt5SyncStatus: {
-      findUnique: jest.fn(async () => state.cursor !== undefined ? { cursor: state.cursor } : null),
-      upsert: jest.fn(async ({ create, update }: any) => { state.cursor = state.cursor !== undefined ? update.cursor : create.cursor; }),
+      findUnique: jest.fn(async () => state.status ?? null),
+      upsert: jest.fn(async ({ create, update }: any) => { state.status = state.status ? { ...state.status, ...update } : create; }),
       updateMany: jest.fn(),
     },
     mt5Deal: {
@@ -122,6 +121,7 @@ function statefulDb() {
       }),
     },
     trade: {
+      findMany: jest.fn(async () => []),
       findUnique: jest.fn(async () => state.trade ?? null),
       upsert: jest.fn(async ({ create, update }: any) => {
         const normalize = (data: any) => data.seedBalance === undefined ? data : {
@@ -146,11 +146,12 @@ function statefulDb() {
 const deposit = { ...deal, ticket: '1', order: '0', positionId: '0', time: 0, timeMsc: 500, type: 2, symbol: '', volume: 0, price: 0, profit: 1000 };
 const bridge = (batches: any[]) => ({
   sync: jest.fn(async (request: any) => ({
-    contractVersion: 4,
+    contractVersion: 5,
     server: request.server,
     accountLogin: request.accountLogin,
-    cursor: 'cursor',
-    historyRange: { fromMsc: request.historyFromMsc, toMsc: request.historyToMsc },
+    mode: request.mode,
+    snapshotToMsc: request.snapshotToMsc,
+    page: { hasMore: false, bytes: 100 },
     account: { currency: 'USD', currencyDigits: 2, currentBalance: '1000' },
     deals: [],
     orders: [],
@@ -162,14 +163,14 @@ const cipher = { decrypt: jest.fn(() => 'secret') };
 describe('Mt5SyncService account-scoped balance ledger', () => {
   it('reconstructs a verified ledger from zero and projects the position entry seed', async () => {
     const { db, state } = statefulDb();
-    const upstream = bridge([{ cursor: 'first', deals: [deposit, deal] }]);
+    const upstream = bridge([{ deals: [deposit, deal] }]);
     const service = new Mt5SyncService(db, cipher as never, upstream as never);
 
     await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
-      state: 'completed', importedCount: 1, receivedCount: 2, cursor: 'first',
+      state: 'completed', importedCount: 1, receivedCount: 2,
     });
 
-    expect(upstream.sync.mock.calls[0][0]).toMatchObject({ historyFromMsc: 0 });
+    expect(upstream.sync.mock.calls[0][0]).toMatchObject({ contractVersion: 5, mode: 'bootstrap' });
     expect(state.ledger).toMatchObject({
       accountId: 'account-1', currency: 'USD', status: 'VERIFIED', lastError: null,
     });
@@ -187,6 +188,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.trade.analysis.thesis).toBe('keep me');
   });
 
+
   it('projects the latest MT5 closing deal reason onto the trade and exit', async () => {
     const { db, state } = statefulDb();
     const closingDeal = {
@@ -201,7 +203,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
       price: 3,
       profit: 10,
     };
-    const service = new Mt5SyncService(db, cipher as never, bridge([{ cursor: 'first', deals: [deposit, deal, closingDeal] }]) as never);
+    const service = new Mt5SyncService(db, cipher as never, bridge([{ deals: [deposit, deal, closingDeal] }]) as never);
 
     await service.sync('owner-1', 'account-1');
 
@@ -209,48 +211,78 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.trade.exit.create.reason).toBe('manual');
   });
 
-  it('rebuilds from persisted deals on an unchanged cursor response', async () => {
+  it('uses the successful snapshot overlap for incremental sync', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([
-      { cursor: 'first', deals: [deposit, deal] },
-      { cursor: 'unchanged' },
+      { deals: [deposit, deal] },
+      {},
     ]);
     const service = new Mt5SyncService(db, cipher as never, upstream as never);
 
     await service.sync('owner-1', 'account-1');
     await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
-      state: 'completed', receivedCount: 0, cursor: 'unchanged',
+      state: 'completed', receivedCount: 0,
     });
 
     expect(state.deals).toHaveLength(2);
     expect(state.balanceEvents).toHaveLength(2);
     expect(state.trade.seedBalance.toString()).toBe('1000');
-    expect(upstream.sync.mock.calls[1][0].cursor).toBe('first');
+    expect(upstream.sync.mock.calls[1][0]).toMatchObject({ mode: 'incremental', changedSinceMsc: expect.any(Number) });
   });
 
-  it('retries once without an explicitly rejected legacy cursor', async () => {
+  it('persists a bootstrap cursor and releases its lease before resuming the same snapshot', async () => {
     const { db, state } = statefulDb();
-    state.cursor = 'legacy-signed-cursor';
-    const sync = jest.fn()
-      .mockRejectedValueOnce(new Mt5BridgeCursorRejected())
-      .mockImplementationOnce(async (request: any) => ({
-        contractVersion: 4,
-        server: request.server,
-        accountLogin: request.accountLogin,
-        cursor: 'v4-cursor',
-        historyRange: { fromMsc: request.historyFromMsc, toMsc: request.historyToMsc },
-        account: { currency: 'USD', currencyDigits: 2, currentBalance: '1000' },
-        deals: [deposit, deal],
-        orders: [],
-      }));
-    const service = new Mt5SyncService(db, cipher as never, { sync } as never);
+    const upstream = bridge([
+      { page: { hasMore: true, nextCursor: 'bootstrap-page-2', bytes: 100 }, deals: [deposit, deal] },
+      {},
+    ]);
+    const service = new Mt5SyncService(db, cipher as never, upstream as never);
 
-    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed', cursor: 'v4-cursor' });
+    const first = await service.sync('owner-1', 'account-1');
 
-    expect(sync).toHaveBeenCalledTimes(2);
-    expect(sync.mock.calls[0][0]).toMatchObject({ cursor: 'legacy-signed-cursor' });
-    expect(sync.mock.calls[1][0]).not.toHaveProperty('cursor');
-    expect(state.trade.seedBalance.toString()).toBe('1000');
+    expect(first).toMatchObject({ state: 'in_progress', progress: { mode: 'bootstrap', pageCursor: 'bootstrap-page-2' } });
+    expect(state.status).toMatchObject({ mode: 'bootstrap', pageCursor: 'bootstrap-page-2' });
+    expect(state.status.lastSuccessfulSnapshotMsc).toBeUndefined();
+    expect(state.lease).toBeUndefined();
+    expect(state.trade).toBeUndefined();
+
+    const second = await service.sync('owner-1', 'account-1');
+
+    expect(second).toMatchObject({ state: 'completed', importedCount: 1 });
+    expect(upstream.sync.mock.calls[1][0]).toMatchObject({
+      mode: 'bootstrap',
+      pageCursor: 'bootstrap-page-2',
+      snapshotToMsc: first.progress!.snapshotToMsc,
+    });
+    expect(state.status).toMatchObject({ mode: null, pageCursor: null, lastSuccessfulSnapshotMsc: BigInt(first.progress!.snapshotToMsc) });
+    expect(state.trade).toBeDefined();
+  });
+
+  it('projects incremental earlier-page changes without advancing its watermark until the final page', async () => {
+    const { db, state } = statefulDb();
+    const priorWatermark = 1_700_000_000_000;
+    state.status = {
+      accountId: account.id, server: account.canonicalServer, accountLogin: account.accountLogin,
+      lastSuccessfulSnapshotMsc: BigInt(priorWatermark), mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null,
+    };
+    const upstream = bridge([
+      { page: { hasMore: true, nextCursor: 'incremental-page-2', bytes: 100 }, deals: [deposit, deal] },
+      {},
+    ]);
+    const service = new Mt5SyncService(db, cipher as never, upstream as never);
+
+    const first = await service.sync('owner-1', 'account-1');
+
+    expect(first).toMatchObject({ state: 'in_progress', progress: { mode: 'incremental', pageCursor: 'incremental-page-2' } });
+    expect(state.trade).toBeDefined();
+    expect(state.status.lastSuccessfulSnapshotMsc).toBe(BigInt(priorWatermark));
+    expect(upstream.sync.mock.calls[0][0]).toMatchObject({
+      mode: 'incremental',
+      changedSinceMsc: priorWatermark - 72 * 60 * 60 * 1000,
+    });
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
+    expect(state.status.lastSuccessfulSnapshotMsc).toBe(BigInt(first.progress!.snapshotToMsc));
   });
 
   it('records divergence and withholds every derived seed instead of guessing', async () => {

@@ -1,0 +1,79 @@
+{
+  "kind": "api-package-test-report",
+  "generatedAt": "2026-08-12T13:17:00Z",
+  "surfaces": [
+    "mt5-window-server bridge v5",
+    "Windows v5 probe/validator scripts",
+    "trading-journal API",
+    "trading-journal web"
+  ],
+  "commands": [
+    {
+      "cwd": "/home/hoya/mt5-window-server",
+      "command": "python3 -m unittest -v",
+      "result": "passed",
+      "tests": 9
+    },
+    {
+      "cwd": "/home/hoya/trading-journal",
+      "command": "pnpm test",
+      "result": "passed",
+      "api": "21 suites/159 tests passed",
+      "web": "18 files/63 tests passed"
+    },
+    {
+      "cwd": "/home/hoya/trading-journal",
+      "command": "TEST_DATABASE_URL=<disposable sentra_test> pnpm --filter @trading-journal/api test -- --runInBand mt5-campaign-serialization.int.spec.ts",
+      "result": "passed with explicit sync state completed assertions in all races",
+      "tests": 4
+    },
+    {
+      "cwd": "/home/hoya/trading-journal",
+      "command": "pnpm typecheck && pnpm build",
+      "result": "passed"
+    },
+    {
+      "cwd": "/home/hoya/trading-journal",
+      "command": "git diff --check && docker compose up -d --build && curl -fsS http://127.0.0.1/health",
+      "result": "passed"
+    }
+  ],
+  "sourceHashes": {
+    "tradingJournalGitDiff": "576fa64cda83447bccf79887ac63a4a84e5f9004",
+    "mt5WindowServerDeployedHead": "40ce24201e543751491262617358623c3b4824b7",
+    "completeSourceManifest": "921298f635a71b83445e4ef9366608d50bf60a832d137578216cb7186b92b1cf"
+  },
+  "limitations": [],
+  "liveDeployment": {
+    "migration": "20260812120000_mt5_sync_contract_v5 applied",
+    "publicHealth": "passed",
+    "services": "healthy",
+    "Jxhxxn10": {
+      "sync": "completed",
+      "bootstrapPages": [
+        {
+          "bytes": 500184,
+          "deals": 1709,
+          "orders": 0
+        }
+      ]
+    },
+    "망치뿅": {
+      "sync": "completed",
+      "bootstrapPages": [
+        {
+          "bytes": 786190,
+          "deals": 2689,
+          "orders": 0
+        },
+        {
+          "bytes": 664811,
+          "deals": 2268,
+          "orders": 0
+        }
+      ]
+    },
+    "finalState": "active accounts have no page cursor or last error",
+    "finalRedeployHealth": "passed at 2026-08-12T13:09:57.235Z"
+  }
+}

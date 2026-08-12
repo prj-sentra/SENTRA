@@ -7,7 +7,7 @@
 3. Provision a read-only MT5 credential and a unique bridge bearer token.
 4. Set `MT5_BRIDGE_BASE_URL`, `MT5_BRIDGE_TOKEN`, and `MT5_BRIDGE_TIMEOUT_MS` for the API. Set `MT5_SYNC_TOKEN` only for the Caddy sync endpoint that requires it; never reuse either token.
 5. Confirm the public proxy cannot route to the bridge or private API endpoints.
-6. Verify the bridge exposes only contractVersion 3. Before enabling sync, run the isolated provenance verifier: `MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' pnpm --filter @trading-journal/api test:migration:provenance-mt5-position-entry-balances`. The migration preserves cursors and raw/authored/manual data, nulls only legacy MT5 seeds, and is restore-only rollback.
+6. Verify the bridge exposes only contractVersion 5 with fixed-snapshot bootstrap/incremental pagination. Before enabling sync, run the isolated provenance verifier: `MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' pnpm --filter @trading-journal/api test:migration:provenance-mt5-position-entry-balances`. The migration preserves raw/authored/manual data and the last successful snapshot, nulls only legacy MT5 seeds, and is restore-only rollback.
 
 ## Legacy gallery preparation and write freeze
 
@@ -57,10 +57,10 @@ MIGRATION_VERIFY_DATABASE_URL='postgresql://…/trading_journal_verify' \
 2. Deploy database migrations before starting the new API.
 3. Start the bridge, then the API, and verify `/health` through Caddy.
 4. Create or replace the MT5 account through the authenticated application flow. Never insert encrypted credentials manually.
-5. Trigger one sync and verify that the account identity matches, the lease completes, facts and projected trades commit together, and the returned cursor is stored byte-for-byte.
-6. Trigger a second sync from the stored cursor and verify idempotency.
+5. Trigger bootstrap sync and verify that every page uses the same `snapshotToMsc`, each response is below 1 MiB, every non-final page durably stores `page.nextCursor` before releasing its lease, and bootstrap projection occurs only after the final page.
+6. Verify the final page clears mode/page cursor/error state, records `lastSuccessfulSnapshotMsc`, and leaves no lease. Trigger an incremental sync and verify the 72-hour overlap plus persisted open-position set is idempotent.
 7. Verify another user cannot read, modify, sync, or infer the account by identifier.
-8. Deactivate a test account during an in-flight sync and verify stale output is rejected with no cursor advancement.
+8. Deactivate a test account during an in-flight sync and verify stale output is rejected with no page-cursor or successful-snapshot advancement.
 
 ## Empty MT5 campaign recovery
 

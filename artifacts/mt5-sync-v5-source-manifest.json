@@ -1,0 +1,112 @@
+{
+  "kind": "source-manifest",
+  "schemaVersion": 1,
+  "excluded": [
+    "Todo.md",
+    ".gjc/**",
+    "generated build outputs"
+  ],
+  "files": [
+    {
+      "path": "apps/api/prisma/migrations/20260812120000_mt5_sync_contract_v5/migration.sql",
+      "sha256": "1e76489ca50b2fc7af1f5ae15f4856eb9be843446729e9cfbe9599e19eef795c"
+    },
+    {
+      "path": "apps/api/prisma/schema.prisma",
+      "sha256": "3f68ed432bde8fb312fd0b2c174745bee0d4c422024d63c3958df6959b5c085f"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/credential-cipher.service.spec.ts",
+      "sha256": "864e077e08959358bd27c3262ee17c93b019bbb88fa9efadf3dfd27a7f8c353b"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/credential-cipher.service.ts",
+      "sha256": "9d00a996c7cbf3aa6ea20099019d94fb5fa10d47e63383758bb0c31914b20fd4"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-account-lock.spec.ts",
+      "sha256": "40fcf4e87701e839fde22392c67dfe1b2ada70e0eec16e1f212f2d0f4e03a1f8"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-account-lock.ts",
+      "sha256": "6f9eed12b789cac509a9fc163f1b6d92e12251c0b348e71304605d8c76a99507"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.controller.ts",
+      "sha256": "6b3aee24c9cfeb08ececce2982b111879c2a7e791d3222b75960d2dbaa321aa2"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.module.ts",
+      "sha256": "4d7d034ae6876f8d28a54baa71f040527dccfaa46171b9356bee28dc090cf784"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.service.spec.ts",
+      "sha256": "1f13d832f563b1c55bf4cdc70ba5b8243162a48fe85411a060c52a4c25af9496"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.service.ts",
+      "sha256": "aa56ea4e8a98649bb1df0ad474b8b69d8d96aae5df69237954a817dfc9c4c35b"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-accounts.validation.ts",
+      "sha256": "6d8530d29ec1da3dbaf65ac28235e07aa47b5e981f90026d6333eb6cf0870384"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-bridge.client.spec.ts",
+      "sha256": "a1f44d74e19f45e11bb2d4e852bf8cd36113ba85b5055b328298ec1bb3a49c66"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-bridge.client.ts",
+      "sha256": "6b88e0a9ea2f0b40d3d8ed9413e4b0df943cc53619a3bcb981e8247166b5b084"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-campaign-serialization.int.spec.ts",
+      "sha256": "44545652aed1ef165d970337f996bb7144fb795a15182cb6253d955d0d11cb34"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-empty-campaign-recovery.int.spec.ts",
+      "sha256": "3ba6a05f5d4e269926473c6750e17380db578a0a34bf8afc3b6ebea88955173a"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-sync.service.spec.ts",
+      "sha256": "84f33ba0edba1e8bc89270517788a3e0284c4c9056f584fc7e5e1b89de8959d4"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-sync.service.ts",
+      "sha256": "c4b83514d52907e75f8afc1e0298aa41ba1330090a7235604d8e6536dd13e192"
+    },
+    {
+      "path": "apps/api/src/mt5-accounts/mt5-sync.stateful.spec.ts",
+      "sha256": "931b00286edf2d7716d1d4513f4738cb1ef489dc1a15f58ba3c4114a0505d13a"
+    },
+    {
+      "path": "apps/web/src/components/SyncControl.test.tsx",
+      "sha256": "d286268ecc7c55d5f1b2ef6f054ef874f009062c068a3d07c3cc47856b267949"
+    },
+    {
+      "path": "apps/web/src/components/SyncControl.tsx",
+      "sha256": "491875ef5b064e25ee493098ead95edee5cbf7c29f2e8d2ce84e375f6e2ac822"
+    },
+    {
+      "path": "docs/operations/evidence/wiki-trade-analysis-cutover/20260808T100139Z.md",
+      "sha256": "b2e815c0328242834db01a867af9eca1d3001d9c795c91f9e6d51441602bed9a"
+    },
+    {
+      "path": "docs/operations/mt5-account-cutover.md",
+      "sha256": "49529a97c05f44cae2cf383b7924026cb719134a27e52af83bc43553ac64f46b"
+    },
+    {
+      "path": "docs/operations/mt5-account-sync-contract.md",
+      "sha256": "7c145cfda8c04937482bde6f85d4de0267d3d10c99d0691741adb6ea6e49ac52"
+    },
+    {
+      "path": "docs/operations/wiki-trade-analysis-cutover.md",
+      "sha256": "e14599b0e887a9b3dd2c6b4fe1025d7e2ac3556bb33e43edbd4eb0fcf3e6c886"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "sha256": "0aa88ca65b1e8db2d068776b15b04fefd0e5d444a072ea82392100caa4a3271b"
+    }
+  ],
+  "manifestSha256": "921298f635a71b83445e4ef9366608d50bf60a832d137578216cb7186b92b1cf"
+}

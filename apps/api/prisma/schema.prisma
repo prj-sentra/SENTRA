@@ -554,8 +554,13 @@ model Mt5SyncStatus {
   server                String
   accountLogin          BigInt     @map("account_login")
   lastSyncAt            DateTime?  @map("last_sync_at")
+  lastSuccessfulSnapshotMsc BigInt? @map("last_successful_snapshot_msc")
   lastDealTime          DateTime?  @map("last_deal_time")
-  cursor                String?
+  mode                  String?    @map("mode")
+  snapshotToMsc         BigInt?   @map("snapshot_to_msc")
+  pageCursor                   String?    @map("page_cursor")
+  changedSinceMsc              BigInt?    @map("changed_since_msc")
+  openPositionIds              Json?      @map("open_position_ids")
   lastReceivedDealCount Int        @default(0) @map("last_received_deal_count")
   lastError             String?    @map("last_error")
   updatedAt             DateTime   @updatedAt @map("updated_at")

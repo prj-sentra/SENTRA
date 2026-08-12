@@ -5,7 +5,7 @@ import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
 import { lockOwnedMt5Account } from './mt5-account-lock';
-import { Mt5BridgeClient, Mt5BridgeCursorRejected, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
 import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
 
 const LEASE_MS = 60_000;
@@ -21,6 +21,7 @@ function canonicalFact(value: unknown, fields: readonly string[]): string {
 const METRIC_CONTRACT_VERSION = 1;
 const BALANCE_LEDGER_VERSION = 1;
 const FULL_HISTORY_FROM_MSC = 0;
+const INCREMENTAL_OVERLAP_MS = 72 * 60 * 60 * 1000;
 
 export function mt5DealReason(reason: number): TradeExitReason {
   switch (reason) {
@@ -68,9 +69,17 @@ export class Mt5SyncService {
 
   async sync(ownerId: string, accountId: string): Promise<Mt5SyncResponse> {
     const claimed = await this.claim(ownerId, accountId);
-    if (!claimed) return { state: 'in_progress', accountId, message: 'Synchronization is already in progress' };
+    if (!claimed) {
+      const status = await this.prisma.mt5SyncStatus.findUnique({ where: { accountId }, select: { mode: true, snapshotToMsc: true, pageCursor: true } });
+      return {
+        state: 'in_progress', accountId, message: 'Synchronization is already in progress',
+        ...(status?.mode && status.snapshotToMsc !== null && {
+          progress: { mode: status.mode as 'bootstrap' | 'incremental', snapshotToMsc: Number(status.snapshotToMsc), ...(status.pageCursor && { pageCursor: status.pageCursor }) },
+        }),
+      };
+    }
 
-    const { account, leaseId, cursor } = claimed;
+    const { account, leaseId, status } = claimed;
     try {
       const password = this.cipher.decrypt({
         ciphertext: Buffer.from(account.credentialCiphertext),
@@ -78,28 +87,45 @@ export class Mt5SyncService {
         tag: Buffer.from(account.credentialTag),
         version: account.credentialVersion,
       });
-      const historyToMsc = Date.now() + UNCORRECTED_TIME_LOOKAHEAD_MS;
-      const bridgeRequest = {
-        server: account.server,
-        accountLogin: Number(account.accountLogin),
-        password,
-        historyFromMsc: FULL_HISTORY_FROM_MSC,
-        historyToMsc,
-      };
-      let payload;
-      try {
-        payload = await this.bridge.sync({ ...bridgeRequest, ...(cursor !== undefined && { cursor }) });
-      } catch (error) {
-        if (!(error instanceof Mt5BridgeCursorRejected) || cursor === undefined) throw error;
-        payload = await this.bridge.sync(bridgeRequest);
-      }
-      const renewed = await this.prisma.mt5SyncLease.updateMany({
-        where: { accountId, leaseId, expiresAt: { gt: new Date() } },
-        data: { expiresAt: new Date(Date.now() + LEASE_MS) },
-      });
-      if (renewed.count !== 1) throw new StaleSyncResult();
-      const syncedAt = new Date();
-      const result = await this.prisma.$transaction(async (tx) => {
+      const resumed = status?.mode && status.snapshotToMsc !== null && status.snapshotToMsc !== undefined;
+      const mode = resumed ? status!.mode as 'bootstrap' | 'incremental' : status?.lastSuccessfulSnapshotMsc ? 'incremental' : 'bootstrap';
+      const snapshotToMsc = resumed ? Number(status!.snapshotToMsc) : Date.now() + UNCORRECTED_TIME_LOOKAHEAD_MS;
+      const changedSinceMsc = mode === 'incremental'
+        ? (resumed ? Number(status!.changedSinceMsc) : Math.max(0, Number(status!.lastSuccessfulSnapshotMsc) - INCREMENTAL_OVERLAP_MS))
+        : undefined;
+      const persistedOpenPositionIds = Array.isArray(status?.openPositionIds)
+        && status.openPositionIds.every((value): value is string => typeof value === 'string')
+        ? status.openPositionIds
+        : undefined;
+      const openPositionIds = mode === 'incremental'
+        ? resumed && persistedOpenPositionIds
+          ? persistedOpenPositionIds
+          : (await this.prisma.trade.findMany({ where: { mt5AccountId: accountId, status: TradeStatus.OPEN, mt5PositionId: { not: null } }, select: { mt5PositionId: true } }))
+            .map((trade) => trade.mt5PositionId!.toString())
+            .sort((left, right) => {
+              const a = BigInt(left);
+              const b = BigInt(right);
+              return a < b ? -1 : a > b ? 1 : 0;
+            })
+        : undefined;
+      let pageCursor = resumed ? status!.pageCursor ?? undefined : undefined;
+      let receivedCount = 0;
+      let importedCount = 0;
+      let finalPayload: Awaited<ReturnType<Mt5BridgeClient['sync']>> | undefined;
+      while (!finalPayload) {
+        const payload = await this.bridge.sync({
+          contractVersion: 5, server: account.server, accountLogin: Number(account.accountLogin), password, mode, snapshotToMsc,
+          ...(pageCursor !== undefined && { pageCursor }),
+          ...(changedSinceMsc !== undefined && { changedSinceMsc }),
+          ...(openPositionIds !== undefined && { openPositionIds }),
+        });
+        const renewed = await this.prisma.mt5SyncLease.updateMany({
+          where: { accountId, leaseId, expiresAt: { gt: new Date() } },
+          data: { expiresAt: new Date(Date.now() + LEASE_MS) },
+        });
+        if (renewed.count !== 1) throw new StaleSyncResult();
+        const syncedAt = new Date();
+        const pageResult = await this.prisma.$transaction(async (tx) => {
         const lockedAccount = await lockOwnedMt5Account(tx, ownerId, accountId);
         if (lockedAccount.canonicalServer !== account.canonicalServer || lockedAccount.accountLogin !== account.accountLogin) throw new StaleSyncResult();
         const fenceAt = new Date();
@@ -123,45 +149,77 @@ export class Mt5SyncService {
         const changedPositions = new Set<string>();
         for (const deal of payload.deals) if (await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(deal.positionId);
         for (const order of payload.orders) if (await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(order.positionId);
-        const ledger = await this.rebuildBalanceLedger(
-          tx,
-          accountId,
-          account.canonicalServer,
-          account.accountLogin,
-          payload.account.currency,
-          payload.account.currencyDigits,
-          payload.account.currentBalance,
-          payload.historyRange,
-          syncedAt,
-        );
-        for (const positionId of ledger.positionIds) changedPositions.add(positionId);
-        const importedCount = await this.projectTrades(tx, ownerId, accountId, account.server, account.canonicalServer, account.accountLogin, [...changedPositions], ledger.assertions, []);
-        const lastDealTime = payload.deals.length
-          ? new Date(Math.max(...payload.deals.map((deal) => deal.timeMsc)))
-          : undefined;
+        receivedCount += payload.deals.length;
+        if (payload.page.hasMore) {
+          let projected = 0;
+          if (mode === 'incremental' && changedPositions.size) {
+            const ledger = await this.rebuildBalanceLedger(
+              tx,
+              accountId,
+              account.canonicalServer,
+              account.accountLogin,
+              payload.account.currency,
+              payload.account.currencyDigits,
+              payload.account.currentBalance,
+              { fromMsc: changedSinceMsc!, toMsc: snapshotToMsc },
+              syncedAt,
+            );
+            projected = await this.projectTrades(
+              tx,
+              ownerId,
+              accountId,
+              account.server,
+              account.canonicalServer,
+              account.accountLogin,
+              [...changedPositions],
+              ledger.assertions,
+              [],
+            );
+          }
+          await tx.mt5SyncStatus.upsert({
+            where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
+            create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, lastReceivedDealCount: payload.deals.length },
+            update: { mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, lastReceivedDealCount: payload.deals.length, lastError: null },
+          });
+          const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
+          if (deleted.count !== 1) throw new StaleSyncResult();
+          return { importedCount: projected, ledger: null };
+        }
+        const ledger = await this.rebuildBalanceLedger(tx, accountId, account.canonicalServer, account.accountLogin, payload.account.currency, payload.account.currencyDigits, payload.account.currentBalance, { fromMsc: mode === 'bootstrap' ? FULL_HISTORY_FROM_MSC : changedSinceMsc!, toMsc: snapshotToMsc }, syncedAt);
+        if (mode === 'bootstrap') {
+          for (const positionId of ledger.positionIds) changedPositions.add(positionId);
+        }
+        const projected = await this.projectTrades(tx, ownerId, accountId, account.server, account.canonicalServer, account.accountLogin, [...changedPositions], ledger.assertions, []);
+        const lastDealTime = payload.deals.length ? new Date(Math.max(...payload.deals.map((deal) => deal.timeMsc))) : undefined;
         await tx.mt5SyncStatus.upsert({
           where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
-          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, cursor: payload.cursor, lastSyncAt: syncedAt, lastDealTime, lastReceivedDealCount: payload.deals.length },
-          update: { cursor: payload.cursor, lastSyncAt: syncedAt, ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
+          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, lastReceivedDealCount: payload.deals.length },
+          update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
-        return { importedCount, ledger };
+        return { importedCount: projected, ledger };
       });
-      return {
-        state: 'completed',
-        accountId,
-        importedCount: result.importedCount,
-        receivedCount: payload.deals.length,
-        cursor: payload.cursor,
-        syncedAt: syncedAt.toISOString(),
-        balanceLedger: {
-          status: result.ledger.verified ? 'verified' : 'diverged',
-          currency: payload.account.currency,
-          calculatedBalance: Number(result.ledger.calculatedBalance),
-          currentBalance: Number(payload.account.currentBalance),
-        },
-      } as Mt5SyncResponse;
+        importedCount += pageResult.importedCount;
+        if (payload.page.hasMore) {
+          return {
+            state: 'in_progress',
+            accountId,
+            receivedCount,
+            message: 'Synchronization has more history pages',
+            progress: { mode, snapshotToMsc, pageCursor: payload.page.nextCursor },
+          };
+        }
+        finalPayload = payload;
+        return {
+          state: 'completed', accountId, importedCount, receivedCount, syncedAt: syncedAt.toISOString(),
+          balanceLedger: {
+            status: pageResult.ledger!.verified ? 'verified' : 'diverged',
+            currency: payload.account.currency, calculatedBalance: Number(pageResult.ledger!.calculatedBalance), currentBalance: Number(payload.account.currentBalance),
+          },
+        } as Mt5SyncResponse;
+      }
+      throw new Error('MT5 synchronization ended without a final page');
     } catch (error) {
       if (error instanceof StaleSyncResult) {
         await this.prisma.mt5SyncLease.deleteMany({ where: { accountId, leaseId } });
@@ -194,7 +252,7 @@ export class Mt5SyncService {
         throw error;
       }
       const status = await tx.mt5SyncStatus.findUnique({ where: { accountId } });
-      return { account, leaseId, cursor: status?.cursor ?? undefined };
+      return { account, leaseId, status };
     });
   }
 

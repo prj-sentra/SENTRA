@@ -78,8 +78,18 @@ export class Mt5AccountsService {
           },
           select: safeAccountSelect,
         });
-        if (patch.timeCorrectionHours !== undefined && patch.timeCorrectionHours !== current.timeCorrectionHours) {
-          await tx.mt5SyncStatus.updateMany({ where: { accountId: id }, data: { cursor: null } });
+        if (identityChanged || exactServerChanged || patch.timeCorrectionHours !== undefined && patch.timeCorrectionHours !== current.timeCorrectionHours) {
+          await tx.mt5SyncStatus.updateMany({
+            where: { accountId: id },
+            data: {
+              mode: null,
+              snapshotToMsc: null,
+              pageCursor: null,
+              changedSinceMsc: null,
+              openPositionIds: Prisma.JsonNull,
+              lastSuccessfulSnapshotMsc: null,
+            },
+          });
         }
         return serializeAccount(account);
       });

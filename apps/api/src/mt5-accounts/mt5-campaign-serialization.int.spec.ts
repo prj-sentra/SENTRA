@@ -77,23 +77,20 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
 
   function bridge() {
     return {
-      sync: async () => ({
-        contractVersion: 3,
-        ledgerSemanticsVersion: 1,
-        server: 'Broker Server',
-        accountLogin: 7001,
-        cursor: 'fixture-cursor',
+      sync: async (request: { server: string; accountLogin: number; mode: 'bootstrap' | 'incremental'; snapshotToMsc: number }) => ({
+        contractVersion: 5,
+        server: request.server,
+        accountLogin: request.accountLogin,
+        mode: request.mode,
+        snapshotToMsc: request.snapshotToMsc,
+        page: { hasMore: false, bytes: 1 },
+        account: { currency: 'USD', currencyDigits: 2, currentBalance: '10011' },
         deals: [{
           ticket: '9001', order: '8001', positionId: '5001', time: 1_760_000_000, timeMsc: 1_760_000_000_000,
           type: 0, entry: 0, magic: '0', reason: 0, volume: 1, price: 100, commission: -1, swap: 0, profit: 12, fee: 0,
           symbol: 'EURUSD', comment: 'fixture', externalId: 'fixture-deal',
         }],
         orders: [],
-        positionEntryBalances: [{
-          positionId: '5001', entryDealTicket: '9001', entryOrderTicket: '8001',
-          entryTimeMsc: 1_760_000_000_000, preEntryBalance: '10000', ledgerSemanticsVersion: 1,
-        }],
-        unsupportedPositionEntryBalances: [],
       }),
     };
   }
@@ -146,6 +143,9 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
     await database.campaignMembership.deleteMany({ where: { trade: { ownerId } } });
     await database.tradeCampaign.deleteMany({ where: { ownerId } });
     await database.mt5PositionEntryBalance.deleteMany({ where: { accountId } });
+    await database.mt5AccountBalanceEvent.deleteMany({ where: { accountId } });
+    await database.mt5AccountBalanceLedgerState.deleteMany({ where: { accountId } });
+    await database.mt5PositionEntryPlan.deleteMany({ where: { accountId } });
     await database.mt5Deal.deleteMany({ where: { accountId } });
     await database.mt5Order.deleteMany({ where: { accountId } });
     await database.mt5SyncStatus.deleteMany({ where: { accountId } });
@@ -188,7 +188,9 @@ describe('MT5 campaign serialization on disposable PostgreSQL', () => {
       const contending = winner === 'sync' ? manualCall() : syncCall();
       await waitForPending(contending);
       lockGate.release();
-      await Promise.all([winning, contending]);
+      const results = await Promise.all([winning, contending]);
+      const syncResult = winner === 'sync' ? results[0] : results[1];
+      expect(syncResult).toMatchObject({ state: 'completed' });
       await assertOutcome(fixture, kind === 'resolve');
     } finally {
       lockGate.release();

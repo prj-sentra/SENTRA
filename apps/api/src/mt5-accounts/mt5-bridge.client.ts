@@ -1,12 +1,15 @@
 import { BadGatewayException, Injectable } from '@nestjs/common';
 
 export interface Mt5BridgeRequest {
+  contractVersion: 5;
   server: string;
   accountLogin: number;
   password: string;
-  cursor?: string;
-  historyFromMsc: number;
-  historyToMsc: number;
+  mode: 'bootstrap' | 'incremental';
+  snapshotToMsc: number;
+  pageCursor?: string;
+  changedSinceMsc?: number;
+  openPositionIds?: string[];
 }
 
 export interface Mt5DealFact {
@@ -69,8 +72,9 @@ export interface Mt5PositionEntryPlanFact {
 export interface Mt5BridgeResponse {
   server: string;
   accountLogin: number;
-  cursor: string;
-  historyRange: { fromMsc: number; toMsc: number };
+  mode: 'bootstrap' | 'incremental';
+  snapshotToMsc: number;
+  page: { hasMore: boolean; nextCursor?: string; bytes: number };
   account: { currency: string; currencyDigits: number; currentBalance: string };
   deals: Mt5DealFact[];
   orders: Mt5OrderFact[];
@@ -86,12 +90,6 @@ const STRING_FIELDS = ['symbol', 'comment', 'externalId'] as const;
 
 const MAX_DECIMAL_PRECISION = 65;
 const MAX_DECIMAL_SCALE = 30;
-
-export class Mt5BridgeCursorRejected extends BadGatewayException {
-  constructor() {
-    super('MT5 bridge rejected the synchronization cursor');
-  }
-}
 
 export class Mt5BridgeUnauthorized extends BadGatewayException {
   constructor() {
@@ -117,23 +115,14 @@ export class Mt5BridgeClient {
       });
       const declaredLength = Number(response.headers.get('content-length'));
       if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) throw new BadGatewayException('MT5 bridge response is too large');
-      const text = await response.text();
-      if (Buffer.byteLength(text) > MAX_RESPONSE_BYTES) throw new BadGatewayException('MT5 bridge response is too large');
+      const text = await this.readBoundedBody(response);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Mt5BridgeUnauthorized();
-        if (response.status === 400) {
-          try {
-            const body = JSON.parse(text) as unknown;
-            if (this.record(body) && body.error === 'invalid or expired cursor') throw new Mt5BridgeCursorRejected();
-          } catch (error) {
-            if (error instanceof Mt5BridgeCursorRejected) throw error;
-          }
-        }
         throw new BadGatewayException('MT5 bridge request failed');
       }
       let value: unknown;
       try { value = JSON.parse(text); } catch { throw new BadGatewayException('MT5 bridge returned invalid JSON'); }
-      return this.validate(value, request);
+      return this.validate(value, request, Buffer.byteLength(text));
     } catch (error) {
       if (error instanceof BadGatewayException) throw error;
       throw new BadGatewayException('MT5 bridge is unavailable');
@@ -142,11 +131,14 @@ export class Mt5BridgeClient {
     }
   }
 
-  private validate(value: unknown, request: Mt5BridgeRequest): Mt5BridgeResponse {
+  private validate(value: unknown, request: Mt5BridgeRequest, responseBytes: number): Mt5BridgeResponse {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (value.server !== request.server || value.accountLogin !== request.accountLogin) throw new BadGatewayException('MT5 bridge identity mismatch');
-    if (value.contractVersion !== 4 || typeof value.cursor !== 'string' || !Array.isArray(value.deals) || !Array.isArray(value.orders) || !this.record(value.historyRange) || !this.record(value.account)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
-    if (typeof value.historyRange.fromMsc !== 'number' || typeof value.historyRange.toMsc !== 'number' || value.historyRange.fromMsc !== request.historyFromMsc || value.historyRange.toMsc !== request.historyToMsc || !Number.isSafeInteger(value.historyRange.fromMsc) || value.historyRange.fromMsc < 0 || !Number.isSafeInteger(value.historyRange.toMsc) || value.historyRange.toMsc < value.historyRange.fromMsc) throw new BadGatewayException('MT5 bridge history range mismatch');
+    if (value.contractVersion !== 5 || value.mode !== request.mode || value.snapshotToMsc !== request.snapshotToMsc || !Array.isArray(value.deals) || !Array.isArray(value.orders) || !this.record(value.page) || !this.record(value.account)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
+    if (!Number.isSafeInteger(value.snapshotToMsc) || (value.snapshotToMsc as number) < 0
+      || typeof value.page.hasMore !== 'boolean' || !Number.isSafeInteger(value.page.bytes) || value.page.bytes !== responseBytes
+      || (value.page.hasMore && (typeof value.page.nextCursor !== 'string' || !value.page.nextCursor))
+      || (!value.page.hasMore && value.page.nextCursor !== undefined)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (typeof value.account.currency !== 'string' || !value.account.currency.trim() || !Number.isInteger(value.account.currencyDigits) || (value.account.currencyDigits as number) < 0 || (value.account.currencyDigits as number) > 8 || !this.canonicalSignedDecimal(value.account.currentBalance)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     for (const deal of value.deals) this.validateFact(deal, DEAL_NUMBER_FIELDS, DEAL_BIGINT_FIELDS);
     for (const order of value.orders) this.validateFact(order, ORDER_NUMBER_FIELDS, ORDER_BIGINT_FIELDS);
@@ -177,6 +169,29 @@ export class Mt5BridgeClient {
 
   private record(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private async readBoundedBody(response: Response): Promise<string> {
+    if (!response.body) return '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let bytes = 0;
+    let text = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > MAX_RESPONSE_BYTES) {
+          await reader.cancel();
+          throw new BadGatewayException('MT5 bridge response is too large');
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      return text + decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   private timeoutMs(): number {

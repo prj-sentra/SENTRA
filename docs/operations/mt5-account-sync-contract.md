@@ -1,40 +1,53 @@
-# MT5 account sync contract
+# MT5 account sync contract v5
 
 ## Trust boundary
 
-The API is the only public owner of account credentials and trade data. The MT5 bridge is a private, outbound dependency and must not be exposed through the public reverse proxy. Configure `MT5_BRIDGE_BASE_URL`, `MT5_BRIDGE_TOKEN`, and `MT5_BRIDGE_TIMEOUT_MS` on the API. The bridge token must be distinct from `MT5_SYNC_TOKEN`, stored as a secret, and rotated independently.
+The API alone owns MT5 credentials and journal data. The private bridge is called at `POST /sync` with `Authorization: Bearer <MT5_BRIDGE_TOKEN>`; it is never exposed through the public proxy. `MT5_BRIDGE_TOKEN` and trusted-route `MT5_SYNC_TOKEN` are separate secrets and neither is browser-visible.
 
-The API sends the configured server, decimal account login, decrypted read-only password, the last opaque cursor, `historyFromMsc`, and `historyToMsc` to `POST /sync` with `Authorization: Bearer <MT5_BRIDGE_TOKEN>`. `historyFromMsc` is zero so every account is reconstructed independently from the beginning of the Unix epoch. `historyToMsc` is always 24 hours after the API request time so an uncorrected broker clock cannot hide records whose encoded timestamp appears to be in the future. The bridge uses these exact inclusive history bounds, echoes them with the server and account login, and returns an opaque cursor, raw deal/order facts, account currency, and current balance. The API validates the identity, range, account snapshot, and full response before committing facts.
+The API request is:
 
-## Journal redesign invariants
+```ts
+{
+  contractVersion: 5,
+  server: string,                 // exact configured server text
+  accountLogin: number,
+  password: string,
+  mode: 'bootstrap' | 'incremental',
+  snapshotToMsc: number,
+  pageCursor?: string,
+  changedSinceMsc?: number,       // incremental only
+  openPositionIds?: string[]      // incremental only
+}
+```
 
-The UI supplies exactly one owned `accountId`; all campaign, statistics, trade, conflict, and image operations are account-scoped by the API. `MT5_SYNC_TOKEN` is injected only at the trusted proxy/API boundary and is never a browser variable.
+The bridge response must echo the exact identity, mode, and `snapshotToMsc`:
 
-The configured server text is preserved exactly for bridge requests. A separately stored canonical server identity is used for database matching. Bridge v4 is stateless with respect to users, accounts, and journal Seed values: it logs into the account supplied by each request and returns raw history plus the current account balance, currency, and `currencyDigits`. The API owns the account-scoped balance ledger. It orders persisted deals by `(timeMsc, ticket)`, starts at zero, applies `profit + commission + swap + fee` for every deal, and rounds each delta and running balance with `ROUND_HALF_UP` to the account currency precision before comparing the result with the equally rounded bridge balance. Only a verified ledger produces position-entry assertions and `Trade.seedBalance`; divergence persists its diagnostic state and projects seedless Trades instead of guessing.
+```ts
+{
+  contractVersion: 5,
+  server: string,
+  accountLogin: number,
+  mode: 'bootstrap' | 'incremental',
+  snapshotToMsc: number,
+  page: { hasMore: boolean, nextCursor?: string, bytes: number },
+  account: { currency: string, currencyDigits: number, currentBalance: string },
+  deals: DealFact[],
+  orders: OrderFact[]
+}
+```
 
-Image uploads require a campaign-scoped UUID `uploadId`. Retrying the same key returns the persisted row. Physical flat-root files use an independent globally unique UUID `.webp` filename created with exclusive filesystem writes; logical replay identifiers are never used as paths.
-The durable sync lease is claimed before bridge I/O and renewed by an exact `(accountId, leaseId, unexpired)` compare-and-set immediately after bridge I/O. Renewal failure discards the response before persistence; the fenced transaction still requires the same live lease.
+`page.nextCursor` is required and non-empty only when `hasMore` is true. Cursors are opaque. v4 stream digests and digest cursors are not part of this contract.
 
-Balance events, ledger state, raw MT5 facts, position assertions, and Trade projection are committed in the same fenced transaction. The ledger is keyed by the API account and exact canonical server/login identity, so histories cannot cross users or accounts. Every balance event retains its source Deal ticket, before/delta/after values, currency, and ledger version. Replays rebuild these derived rows from persisted raw Deals, including when a digest cursor suppresses an unchanged Deal stream.
-## Consistency and retries
+## Durable pagination and consistency
 
-A sync is authorized only while the initiating user owns the active account and the exact lease remains live. Imported facts, projected trades, campaign membership, cursor advancement, and lease completion form one fenced operation. Failed validation, a stale lease, account replacement/deactivation, or persistence failure must not advance the cursor or retain partial output.
+A first sync is a bootstrap with a fixed snapshot. Every page is validated, stored idempotently, and then advances the durable page cursor in the same fenced transaction. The lease is renewed after each bridge call and the transaction rechecks active ownership, exact account identity, credential version/ciphertext, and the live lease. A failed request leaves the persisted cursor at the last committed page so a retry resumes safely.
 
-Fact identifiers are lossless base-10 integer strings. Cursors are opaque: neither service may parse, normalize, truncate, or reconstruct them. Replaying a cursor and response must be idempotent. Operators may retry transport failures; they must not manually advance a cursor.
-## Campaign serialization and historical accounts
+Bootstrap balance-ledger reconstruction and trade/campaign projection are deliberately deferred until the final page, so incomplete historical imports are never published as complete journal state. Incremental pages rebuild the ledger and project only positions changed on that committed page; this allows a position split across response pages to be updated without retaining an unbounded changed-position set. Only the final incremental page clears pagination state and advances `lastSuccessfulSnapshotMsc`. No partial page can advance the successful watermark.
 
-Every campaign mutation first locks the owned `mt5_accounts` row and then takes the transaction-scoped advisory lock derived from the canonical server/login identity. This row-then-advisory order is shared by sync, campaign relink, and conflict resolution; callers re-read mutable state after both locks. The lock helper authorizes ownership but is deliberately active-state agnostic: it can return an owned inactive or replaced account.
+An incremental sync uses `lastSuccessfulSnapshotMsc - 72 hours` as `changedSinceMsc` and obtains `openPositionIds` from persisted OPEN trades for that account. Its snapshot is fixed across all pages. Its watermark advances only in the final fenced transaction. Bootstrap ledger verification starts at millisecond zero; incremental ledger results may be diverged because the request is intentionally overlapping rather than full-history.
 
-Locking is not sync eligibility. Sync separately enforces its active-account, exact identity/credential, and live-lease fence after acquiring the shared lock. An inactive or replaced account therefore produces no sync facts, projections, campaign changes, or cursor advancement. Manual relink and conflict-resolution operations retain their existing owned historical scope: they may edit an inactive or replaced account's history, subject to the normal trade, campaign, conflict, ownership, and account-compatibility checks.
+Concurrent calls return `{ state: 'in_progress', accountId, progress? }`. `progress` contains the durable mode, snapshot, and current page cursor when available. The UI may poll the same authenticated sync route while this state is returned; it must cancel polling on account changes and unmount.
 
-Projection is membership-first. When a projected trade already has a membership, sync does not create a campaign or membership and does not move or relabel AUTO or MANUAL intent. Only an unassociated projected trade receives its root campaign and AUTO membership. This makes a valid replay idempotent and prevents replay from creating an empty root campaign.
+## Limits and operations
 
-## Per-stream replay
-
-The bridge computes deal and order digests independently. A response returns the complete serialized deals stream only when its digest changed since the cursor and the complete serialized orders stream only when its digest changed; the unchanged stream is an empty array. The signed opaque cursor always records both current digests. The account snapshot and exact history range are returned on every v4 response. The API accepts deals-only, orders-only, both-stream, and neither-stream replay and rebuilds the balance ledger from persisted raw facts before advancing the cursor.
-
-## Network and response limits
-
-Allow API-to-bridge traffic only. Use TLS outside a single-host private container network. The API timeout is 1,000–30,000 ms and defaults to 10,000 ms. The bridge response limit is 1 MiB. Logs and metrics must never contain passwords, bearer tokens, session cookies, or full bridge payloads.
-
-Monitor sync success/failure counts, latency, stale-fence rejection, and last successful sync age. Treat repeated identity mismatch, invalid payload, or authentication failure as a security incident.
+Bridge responses are limited to 1 MiB before JSON processing. The API timeout is 1,000–30,000 ms (10,000 ms default). Do not log passwords, bearer tokens, cookies, or full bridge payloads. Treat repeated identity mismatch, invalid response, or bridge authentication failures as security incidents.

@@ -1,0 +1,64 @@
+{
+  "architectReview": {
+    "architectureStatus": "CLEAR",
+    "productStatus": "CLEAR",
+    "codeStatus": "CLEAR",
+    "recommendation": "APPROVE",
+    "evidence": "Final architect review agent://6-LiveV5FinalReview approved the v5 architecture, product behavior, source, deployment, and source-bound evidence with no blockers.",
+    "commands": ["agent://6-LiveV5FinalReview"],
+    "blockers": []
+  },
+  "executorQa": {
+    "status": "passed",
+    "e2eStatus": "passed",
+    "redTeamStatus": "passed",
+    "evidence": "Final red-team review agent://7-LiveV5Qa covered signed pagination, byte limits, resumability, account switching, PostgreSQL campaign races, live deployment, and failed-account recovery.",
+    "e2eCommands": ["python3 -m unittest -v", "pnpm test", "TEST_DATABASE_URL=<disposable> pnpm --filter @trading-journal/api test -- --runInBand mt5-campaign-serialization.int.spec.ts", "pnpm typecheck", "pnpm build", "docker compose up -d --build", "curl -fsS http://127.0.0.1/health"],
+    "redTeamCommands": ["agent://7-LiveV5Qa", "git diff --check"],
+    "artifactRefs": [
+      {"id":"v5-package-report","kind":"api-package-test-report","path":"artifacts/mt5-sync-v5-api-package-test-report.json","description":"Tests, builds, deployment and live account evidence."},
+      {"id":"v5-source-manifest","kind":"package-source-manifest","path":"artifacts/mt5-sync-v5-source-manifest.json","description":"Complete v5 source manifest including migration and excluding unrelated Todo.md."}
+    ],
+    "contractCoverage": [
+      {"id":"pagination","contractRef":"MT5 sync v5 pagination contract","obligation":"Signed fixed-snapshot pages stay below 1 MiB and complete without gaps.","status":"covered","surfaceEvidenceRefs":["live-api"],"adversarialCaseRefs":["multipage"]},
+      {"id":"resumability","contractRef":"MT5 sync v5 durability contract","obligation":"Page cursor, lease, watermark and open-position state are fenced and resumable.","status":"covered","surfaceEvidenceRefs":["package-tests"],"adversarialCaseRefs":["campaign-race"]},
+      {"id":"ui","contractRef":"MT5 sync UI concurrency contract","obligation":"Polling and stale account requests cannot lock or overwrite a replacement account.","status":"covered","surfaceEvidenceRefs":["ui-tests"],"adversarialCaseRefs":["stale-account"]}
+    ],
+    "surfaceEvidence": [
+      {"id":"live-api","contractRef":"MT5 sync v5 pagination contract","surface":"api","invocation":"Deployed bridge/API bootstrap and health verification recorded in package report","verdict":"passed","artifactRefs":["v5-package-report"]},
+      {"id":"package-tests","contractRef":"MT5 sync v5 durability contract","surface":"package","invocation":"Bridge 9, API 159, web 63, disposable PostgreSQL 4/4, typecheck and build","verdict":"passed","artifactRefs":["v5-package-report","v5-source-manifest"]},
+      {"id":"ui-tests","contractRef":"MT5 sync UI concurrency contract","surface":"package","invocation":"Vitest SyncControl polling, account-change, unmount, and late-response component contract scenarios","verdict":"passed","artifactRefs":["v5-package-report"]}
+    ],
+    "adversarialCases": [
+      {"id":"multipage","contractRef":"MT5 sync v5 pagination contract","scenario":"Large account history requires multiple near-limit pages.","expectedBehavior":"Every page has exact bytes below 1 MiB and final state clears cursor/error.","verdict":"passed","artifactRefs":["v5-package-report"]},
+      {"id":"campaign-race","contractRef":"MT5 sync v5 durability contract","scenario":"Manual relink or conflict resolution races sync in either lock order.","expectedBehavior":"Sync completes and one manual campaign destination remains.","verdict":"passed","artifactRefs":["v5-package-report"]},
+      {"id":"stale-account","contractRef":"MT5 sync UI concurrency contract","scenario":"Old account request resolves after selecting and syncing a replacement account.","expectedBehavior":"Replacement remains usable and stale completion is ignored.","verdict":"passed","artifactRefs":["v5-package-report"]}
+    ],
+    "blockers": []
+  },
+  "iteration": {
+    "status": "passed",
+    "evidence": "All joined cohort blockers and terminal critic findings were fixed; complete verification was rerun on the final source generation.",
+    "fullRerun": true,
+    "rerunCommands": ["pnpm test", "pnpm typecheck", "pnpm build", "disposable PostgreSQL integration 4/4", "git diff --check"],
+    "reviewCohort": {
+      "reviewGeneration": 5,
+      "sourceHash": "sha256:journal-576fa64cda83447bccf79887ac63a4a84e5f9004+bridge-head-40ce242",
+      "deltaOnly": true,
+      "priorGenerationSourceHash": "sha256:journal-678d3159b14cc27644a4ada9ebcb700f586ac016+bridge-head-40ce242",
+      "deltaPaths": ["apps/api/src/mt5-accounts/mt5-campaign-serialization.int.spec.ts", "artifacts/mt5-sync-v5-api-package-test-report.json", "artifacts/mt5-sync-v5-source-manifest.json"],
+      "joined": true,
+      "lanes": {
+        "cleaner": {"status":"passed","sourceHash":"sha256:journal-576fa64cda83447bccf79887ac63a4a84e5f9004+bridge-head-40ce242","evidence":"AI SLOP CLEANUP REPORT: changed files contain no blocking fallback, duplicate, dead-code, abstraction, boundary, UI, or missing-test findings; generated artifacts and unrelated Todo.md are excluded.","blockers":[]},
+        "architect": {"status":"CLEAR","sourceHash":"sha256:journal-576fa64cda83447bccf79887ac63a4a84e5f9004+bridge-head-40ce242","evidence":"agent://6-LiveV5FinalReview returned CLEAR/CLEAR/CLEAR and APPROVE.","blockers":[]},
+        "qa": {"status":"passed","sourceHash":"sha256:journal-576fa64cda83447bccf79887ac63a4a84e5f9004+bridge-head-40ce242","evidence":"agent://7-LiveV5Qa returned passed for e2e and red-team with no blockers.","blockers":[]}
+      }
+    },
+    "blockers": []
+  },
+  "criticReview": {
+    "verdict": "OKAY",
+    "evidence": "Terminal critic agent://10-V5CompletionCriticOkay verified all original and appended goal requirements with no blockers.",
+    "blockers": []
+  }
+}

@@ -154,7 +154,11 @@ export interface Mt5SyncResponse {
   accountId: string;
   importedCount?: number;
   receivedCount?: number;
-  cursor?: string;
+  progress?: {
+    mode: 'bootstrap' | 'incremental';
+    snapshotToMsc: number;
+    pageCursor?: string;
+  };
   syncedAt?: string;
   balanceLedger?: {
     status: 'verified' | 'diverged';
