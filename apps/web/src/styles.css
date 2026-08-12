@@ -1352,11 +1352,23 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .integrated-performance { display: grid; gap: 14px; padding-top: 24px; border-top: 1px solid var(--border); background: transparent; }
 .integrated-performance > .dashboard-section-title { margin: 0; }
 .performance-dimension-picker { display: flex; flex-wrap: wrap; gap: 7px; }
-.performance-dimension-picker label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--layer-01); cursor: pointer; font-size: .74rem; }
-.performance-dimension-picker label:has(input:checked) { border-color: #8bbce8; color: var(--blue); background: #edf5ff; font-weight: 650; }
+.performance-dimension-picker > div { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--layer-01); }
+.performance-dimension-picker > div.is-selected { border-color: #8bbce8; color: var(--blue); background: #edf5ff; }
+.performance-dimension-picker label { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; color: var(--text-secondary); cursor: pointer; font-size: .74rem; }
+.performance-dimension-picker .is-selected label { color: var(--blue); font-weight: 650; }
 .performance-dimension-picker input { width: 14px; height: 14px; margin: 0; accent-color: var(--blue); }
+.dimension-order-actions { display: inline-flex; border-left: 1px solid #b8d6f5; }
+.dimension-order-actions button { width: 27px; border: 0; border-left: 1px solid #d5e6f7; padding: 0; color: var(--blue); background: transparent; cursor: pointer; }
+.dimension-order-actions button:first-child { border-left: 0; }
+.dimension-order-actions button:hover:not(:disabled) { background: #dcecff; }
+.dimension-order-actions button:disabled { color: var(--text-muted); cursor: default; opacity: .45; }
 .integrated-performance-table th, .integrated-performance-table td { text-align: right; }
 .integrated-performance-table th:first-child { text-align: left; }
+.integrated-performance-table { width: max-content; min-width: 100%; table-layout: auto; }
+.integrated-performance-table .condition-column { width: auto; }
+.integrated-performance-table .metric-count-column { width: 76px; }
+.integrated-performance-table .metric-value-column { width: 124px; }
+.integrated-performance-table .condition-divider { border-right: 3px solid var(--border-strong); }
 .integrated-performance-empty { margin: 0; padding: 24px; color: var(--text-muted); background: var(--layer-01); text-align: center; }
 .stats-table tbody tr:hover { background: var(--layer-01); }
 .sufficiency-badge { display: inline-block; padding: 2px 6px; border: 1px solid var(--border); color: var(--text-secondary); font-size: .68rem; }

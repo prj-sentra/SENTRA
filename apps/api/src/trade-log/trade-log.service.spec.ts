@@ -356,6 +356,11 @@ describe('TradeLogService expanded statistics', () => {
     expect(service.statsDimensionLabel('bollingerSetup', 'one_band:normal')).toBe('원볼 정볼');
     expect(service.statsDimensionLabel('bollingerSetup', 'two_band:chase')).toBe('투볼 추볼');
     expect(service.statsDimensionLabel('bollingerSetup', 'no_touch')).toBe('터치 안함');
+    expect(['short', 'long'].sort((left, right) => service.statsDimensionCompare('side', left, right))).toEqual(['long', 'short']);
+    expect(['일요일', '월요일', '금요일'].sort((left, right) => service.statsDimensionCompare('entryWeekday', left, right))).toEqual(['월요일', '금요일', '일요일']);
+    expect(['off-session', 'new-york', 'asia', 'london'].sort((left, right) => service.statsDimensionCompare('session', left, right))).toEqual(['asia', 'london', 'new-york', 'off-session']);
+    expect(['72h+', '<1h', '24-48h', '4-24h'].sort((left, right) => service.statsDimensionCompare('holdDuration', left, right))).toEqual(['<1h', '4-24h', '24-48h', '72h+']);
+    expect(['XAUUSD', 'EURUSD', 'BTCUSD'].sort((left, right) => service.statsDimensionCompare('symbol', left, right))).toEqual(['BTCUSD', 'EURUSD', 'XAUUSD']);
   });
 });
 describe('TradeLogService stats range and risk coverage', () => {

@@ -509,25 +509,42 @@ export class TradeLogService {
   }
   private statsDimension(sample: StatsSample, dimension: TradeStatsDimension, timeZone = 'Asia/Seoul'): string[] { const trades = sample.trades, trade = trades[0]; if (dimension === 'session') return sample.sessions; if (dimension === 'symbol') return [...new Set(trades.map((item) => item.symbol))]; if (dimension === 'side') return [...new Set(trades.map((item) => item.side))]; if (dimension === 'exitReason') return [...new Set(trades.map((item) => item.exitReason ?? 'unspecified'))]; if (dimension === 'baseTimeframe') return [...new Set(trades.map((item) => item.analysis.baseTimeframe ?? 'unspecified'))]; if (dimension === 'bollingerSetup') return [...new Set(trades.map((item) => item.analysis.bollingerBandCount && item.analysis.bollingerDirection ? `${item.analysis.bollingerBandCount}:${item.analysis.bollingerDirection}` : 'no_touch'))]; if (dimension === 'executionEvaluation') return [...new Set(trades.map((item) => item.analysis.executionEvaluation ?? 'unspecified'))]; if (dimension === 'analysisCompleteness') return [trades.every((item) => item.analysisComplete) ? 'complete' : 'incomplete']; if (dimension === 'entryWeekday') return [new Intl.DateTimeFormat('ko-KR', { weekday: 'long', timeZone }).format(new Date(sample.openedAt))]; if (dimension === 'violationFlags') { const flags = trades.flatMap((item) => ['unplannedAdditionalEntry', 'excessiveSize', 'stopLossViolation', 'earlyExit', 'lateExit'].filter((key) => item.analysis[key as keyof TradeRecord['analysis']] === true).concat(item.analysis.otherViolation ? ['other'] : [])); return flags.length ? [...new Set(flags)] : ['none']; } const hours = (new Date(sample.closedAt).getTime() - new Date(sample.openedAt).getTime()) / 3600000; return [hours < 1 ? '<1h' : hours < 4 ? '1-4h' : hours < 24 ? '4-24h' : hours < 48 ? '24-48h' : hours < 72 ? '48-72h' : '72h+']; }
   private statsDimensionLabel(dimension: TradeStatsDimension, key: string): string {
-    if (dimension !== 'bollingerSetup') return key;
-    const labels: Record<string, string> = {
-      no_touch: '터치 안함',
-      'one_band:normal': '원볼 정볼',
-      'one_band:reverse': '원볼 역볼',
-      'one_band:chase': '원볼 추볼',
-      'two_band:normal': '투볼 정볼',
-      'two_band:reverse': '투볼 역볼',
-      'two_band:chase': '투볼 추볼',
+    const labelsByDimension: Partial<Record<TradeStatsDimension, Record<string, string>>> = {
+      side: { long: 'Long', short: 'Short' },
+      session: { asia: '아시아장', london: '유로장', 'new-york': '미장', 'off-session': '장외' },
+      bollingerSetup: {
+        no_touch: '터치 안함',
+        'one_band:normal': '원볼 정볼',
+        'one_band:reverse': '원볼 역볼',
+        'one_band:chase': '원볼 추볼',
+        'two_band:normal': '투볼 정볼',
+        'two_band:reverse': '투볼 역볼',
+        'two_band:chase': '투볼 추볼',
+      },
     };
-    return labels[key] ?? key;
+    return labelsByDimension[dimension]?.[key] ?? key;
+  }
+  private statsDimensionCompare(dimension: TradeStatsDimension, left: string, right: string): number {
+    const ordered: Partial<Record<TradeStatsDimension, string[]>> = {
+      side: ['long', 'short'],
+      entryWeekday: ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'],
+      session: ['asia', 'london', 'new-york', 'off-session'],
+      holdDuration: ['<1h', '1-4h', '4-24h', '24-48h', '48-72h', '72h+'],
+      bollingerSetup: ['no_touch', 'one_band:normal', 'one_band:reverse', 'one_band:chase', 'two_band:normal', 'two_band:reverse', 'two_band:chase'],
+    };
+    const order = ordered[dimension];
+    if (!order) return left.localeCompare(right, 'en', { numeric: true, sensitivity: 'base' });
+    const leftIndex = order.indexOf(left), rightIndex = order.indexOf(right);
+    if (leftIndex === -1 || rightIndex === -1) return leftIndex === rightIndex ? left.localeCompare(right, 'en', { numeric: true }) : leftIndex === -1 ? 1 : -1;
+    return leftIndex - rightIndex;
   }
   private statsBreakdown(samples: StatsSample[], dimension: TradeStatsDimension, threshold: number, timeZone = 'Asia/Seoul'): TradeStatsBucket[] {
     const groups = new Map<string, StatsSample[]>(); for (const sample of samples) for (const key of this.statsDimension(sample, dimension, timeZone)) groups.set(key, [...(groups.get(key) ?? []), sample]);
-    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, items]) => { const classified = items.filter((item) => this.statsOutcome(item, threshold) !== 'unclassified'), wins = classified.filter((item) => this.statsOutcome(item, threshold) === 'win'), pnl = items.reduce((sum, item) => sum + item.realizedPnl, 0), oneLotPnls = items.filter((item) => item.lots > 0).map((item) => item.realizedPnl / item.lots); return { key, label: this.statsDimensionLabel(dimension, key), count: items.length, classifiedCount: classified.length, ...(classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length ? { winRate: wins.length / classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length * 100 } : {}), realizedPnl: pnl, ...(oneLotPnls.length ? { oneLotPnl: oneLotPnls.reduce((sum, value) => sum + value, 0) / oneLotPnls.length } : {}), sufficiency: items.length < 10 ? '1-9' : items.length < 30 ? '10-29' : '30+' }; });
+    return [...groups.entries()].sort(([left], [right]) => this.statsDimensionCompare(dimension, left, right)).map(([key, items]) => { const classified = items.filter((item) => this.statsOutcome(item, threshold) !== 'unclassified'), wins = classified.filter((item) => this.statsOutcome(item, threshold) === 'win'), pnl = items.reduce((sum, item) => sum + item.realizedPnl, 0), oneLotPnls = items.filter((item) => item.lots > 0).map((item) => item.realizedPnl / item.lots); return { key, label: this.statsDimensionLabel(dimension, key), count: items.length, classifiedCount: classified.length, ...(classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length ? { winRate: wins.length / classified.filter((item) => this.statsOutcome(item, threshold) !== 'breakeven').length * 100 } : {}), realizedPnl: pnl, ...(oneLotPnls.length ? { oneLotPnl: oneLotPnls.reduce((sum, value) => sum + value, 0) / oneLotPnls.length } : {}), sufficiency: items.length < 10 ? '1-9' : items.length < 30 ? '10-29' : '30+' }; });
   }
   private statsPerformanceGroups(samples: StatsSample[], dimensions: TradeStatsDimension[], threshold: number, timeZone: string): TradeStatsResponse['performanceGroups'] {
     if (!dimensions.length) return [];
-    const dimensionKeys = dimensions.map((dimension) => [...new Set(samples.flatMap((sample) => this.statsDimension(sample, dimension, timeZone)))].sort());
+    const dimensionKeys = dimensions.map((dimension) => [...new Set(samples.flatMap((sample) => this.statsDimension(sample, dimension, timeZone)))].sort((left, right) => this.statsDimensionCompare(dimension, left, right)));
     if (dimensionKeys.some((keys) => !keys.length)) return [];
     const combinations = dimensionKeys.reduce<string[][]>((rows, keys) => rows.flatMap((row) => keys.map((key) => [...row, key])), [[]]);
     return combinations.map((keys) => {
