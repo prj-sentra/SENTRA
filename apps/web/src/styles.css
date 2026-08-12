@@ -1339,10 +1339,12 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .stats-chart-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .stats-chart-stack > section { display: grid; min-width: 0; gap: 8px; }
 .stats-chart-stack h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
-.tradingview-chart-shell { position: relative; min-width: 0; height: clamp(330px, 40vh, 430px); border: 1px solid var(--border); background: var(--surface); }
-.tradingview-chart { width: 100%; height: calc(100% - 30px); }
+.tradingview-chart-shell { position: relative; min-width: 0; height: clamp(330px, 40vh, 430px); padding-bottom: 24px; border: 1px solid var(--border); background: var(--surface); }
+.tradingview-chart { width: 100%; height: calc(100% - 54px); }
 .tradingview-chart-legend { display: flex; height: 30px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; color: var(--text-muted); font: .68rem 'IBM Plex Mono', ui-monospace, monospace; }
 .tradingview-chart-legend strong { color: var(--text-primary); font-size: .76rem; }
+.tradingview-time-axis { position: absolute; right: 0; bottom: 0; left: 0; height: 24px; overflow: hidden; border-top: 1px solid var(--border); pointer-events: none; }
+.tradingview-time-axis span { position: absolute; top: 6px; color: var(--text-muted); font: 400 10px 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; transform: translateX(-50%); }
 .stats-table-wrap { max-width: 100%; overflow: auto; }
 .stats-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .stats-table th, .stats-table td { padding: 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }

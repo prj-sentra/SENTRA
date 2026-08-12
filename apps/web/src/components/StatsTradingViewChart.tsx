@@ -24,6 +24,7 @@ export function StatsTradingViewChart({ points, value, label, percent = false, p
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [hovered, setHovered] = useState<{ label: string; value: number }>();
+  const [axisLabels, setAxisLabels] = useState<Array<{ left: number; text: string }>>([]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -53,6 +54,7 @@ export function StatsTradingViewChart({ points, value, label, percent = false, p
       rightPriceScale: { borderColor: '#d7dadd', scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
         borderColor: '#d7dadd',
+        visible: false,
         timeVisible: proportionalTime,
         secondsVisible: false,
         tickMarkFormatter: (time: Time) => {
@@ -74,12 +76,30 @@ export function StatsTradingViewChart({ points, value, label, percent = false, p
     const series = chart.addSeries(LineSeries, { color: '#0f62fe', lineWidth: 2, lineType: LineType.WithSteps, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: true });
     series.setData(data);
     chart.timeScale().fitContent();
+    const updateAxisLabels = () => {
+      const candidates = actualData.length <= 5
+        ? actualData
+        : Array.from({ length: 5 }, (_, index) => actualData[Math.round(index * (actualData.length - 1) / 4)]);
+      const next = candidates.flatMap((point) => {
+        const coordinate = chart.timeScale().timeToCoordinate(point.time);
+        if (coordinate === null) return [];
+        const timestamp = Number(point.time) * 1000;
+        const text = proportionalTime
+          ? shortTimeLabel(timestamp)
+          : new Intl.DateTimeFormat('ko-KR', { month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
+        return [{ left: Math.max(38, Math.min(container.clientWidth - 88, coordinate)), text }];
+      }).filter((entry, index, entries) => index === 0 || entry.left - entries[index - 1].left >= 72);
+      setAxisLabels(next);
+    };
+    requestAnimationFrame(updateAxisLabels);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(updateAxisLabels);
     chart.subscribeCrosshairMove((param) => {
       const entry = param.seriesData.get(series);
       if (!param.time || !entry || !('value' in entry)) return setHovered(undefined);
       setHovered({ label: labels.get(Number(param.time)) ?? '', value: entry.value });
     });
     return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateAxisLabels);
       chartRef.current = null;
       chart.remove();
     };
@@ -88,5 +108,6 @@ export function StatsTradingViewChart({ points, value, label, percent = false, p
   return <div className="tradingview-chart-shell" role="img" aria-label={label}>
     <div className="tradingview-chart-legend">{hovered ? <><span>{hovered.label}</span><strong>{percent ? `${hovered.value.toFixed(2)}%` : hovered.value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</strong></> : <span>그래프 위에 마우스를 올려 값을 확인하세요.</span>}</div>
     <div className="tradingview-chart" ref={containerRef} />
+    <div className="tradingview-time-axis" aria-hidden="true">{axisLabels.map((entry) => <span key={`${entry.left}-${entry.text}`} style={{ left: entry.left }}>{entry.text}</span>)}</div>
   </div>;
 }
