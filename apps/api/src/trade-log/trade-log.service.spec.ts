@@ -361,6 +361,25 @@ describe('TradeLogService expanded statistics', () => {
     expect(['72h+', '<1h', '24-48h', '4-24h'].sort((left, right) => service.statsDimensionCompare('holdDuration', left, right))).toEqual(['<1h', '4-24h', '24-48h', '72h+']);
     expect(['XAUUSD', 'EURUSD', 'BTCUSD'].sort((left, right) => service.statsDimensionCompare('symbol', left, right))).toEqual(['BTCUSD', 'EURUSD', 'XAUUSD']);
   });
+  it('excludes unevaluated filter options and preserves selected zero-result groups', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const sample = {
+      id: 'sample',
+      openedAt: '2026-08-01T00:00:00.000Z',
+      closedAt: '2026-08-01T01:00:00.000Z',
+      realizedPnl: 10,
+      lots: 1,
+      sessions: ['asia'],
+      trades: [{ symbol: 'BTCUSDT', side: 'long', analysisComplete: false, analysis: {} }],
+    };
+    expect(service.statsFilterOptions([sample], ['baseTimeframe', 'bollingerSetup'], 0.1, 'Asia/Seoul')).toEqual({
+      baseTimeframe: [],
+      bollingerSetup: [],
+    });
+    expect(service.statsPerformanceGroups([], ['symbol'], 0.1, 'Asia/Seoul', { symbols: ['BTCUSDT'] })).toEqual([
+      expect.objectContaining({ key: 'BTCUSDT', labels: ['BTCUSDT'], count: 0, totalPnl: 0, averagePnl: 0, winRate: 0, averagePoint: 0 }),
+    ]);
+  });
 });
 describe('TradeLogService stats range and risk coverage', () => {
   const preferences = { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 };

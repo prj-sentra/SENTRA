@@ -19,11 +19,6 @@ const primaryItems: Array<{ view: AppView; label: string }> = [
   { view: 'stats', label: '대시보드' }, { view: 'trade-log', label: '매매 일지' }, { view: 'credentials', label: '계정 설정' },
 ];
 
-const dashboardItems = [
-  ['dashboard-period', '기간별 성과'],
-  ['dashboard-analysis', '통합 성과'],
-] as const;
-
 export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccountChange, isAdmin = false, syncControl, footer }: SidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = (view: AppView) => { setMobileMenuOpen(false); onNavigate(view); };
@@ -33,10 +28,6 @@ export function Sidebar({ activeView, accounts, accountId, onNavigate, onAccount
     <nav id="primary-navigation" className={mobileMenuOpen ? 'mobile-open' : undefined}>{primaryItems.map((item) => <button key={item.view} className={activeView === item.view ? 'active' : undefined} type="button" aria-current={activeView === item.view ? 'page' : undefined} onClick={() => navigate(item.view)}>{item.label}</button>)}{isAdmin ? <button className={activeView === 'admin' ? 'active' : undefined} type="button" onClick={() => navigate('admin')}>사용자 관리</button> : null}</nav>
     <AccountSwitcher accounts={accounts} value={accountId} onChange={onAccountChange} />
     {syncControl ? <div className="sidebar-sync">{syncControl}</div> : null}
-    {activeView === 'stats' ? <nav className="sidebar-toc" aria-label="대시보드 목차">
-      <span>목차</span>
-      {dashboardItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={(event) => { event.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{label}</a>)}
-    </nav> : null}
     {footer ? <div className="sidebar-footer">{footer}</div> : null}
   </aside>;
 }
