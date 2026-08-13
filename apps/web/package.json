@@ -13,7 +13,6 @@
   "dependencies": {
     "@trading-journal/shared": "file:../../packages/shared",
     "@vitejs/plugin-react": "latest",
-    "lightweight-charts": "^5.2.0",
     "react": "latest",
     "react-dom": "latest",
     "typescript": "^5.9.3",
