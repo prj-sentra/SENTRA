@@ -829,18 +829,20 @@ export class TradeLogService {
   }
   private statsSeriesByGranularity(samples: StatsSample[], preferences: TradeStatsPreferences, query: TradeStatsQuery): TradeStatsResponse['timeSeries'] {
     const toSeries = (granularity: TradeStatsGranularity, groups: Map<string, StatsSample[]>, keys: string[], labels?: Map<string, string>, timestamps?: Map<string, number>) => {
-      let equity = 0, wins = 0, losses = 0;
+      let equity = 0, oneLotPnl = 0, wins = 0, losses = 0;
       const points = keys.map((key) => {
         const items = groups.get(key) ?? [];
         const realizedPnl = items.reduce((sum, item) => sum + item.realizedPnl, 0);
+        const oneLotRealizedPnl = items.reduce((sum, item) => sum + (item.lots > 0 ? item.realizedPnl / item.lots : 0), 0);
         equity += realizedPnl;
+        oneLotPnl += oneLotRealizedPnl;
         for (const item of items) {
           const outcome = this.statsOutcome(item, preferences.breakevenPercent);
           if (outcome === 'win') wins += 1;
           if (outcome === 'loss') losses += 1;
         }
         const fallbackTimestamp = Date.parse(`${key.length === 4 ? `${key}-01-01` : key.length === 7 ? `${key}-01` : key}T00:00:00.000Z`);
-        return { key, label: labels?.get(key) ?? key, timestamp: timestamps?.get(key) ?? fallbackTimestamp, count: items.length, realizedPnl, equity, ...((wins + losses) > 0 ? { winRate: wins / (wins + losses) * 100 } : {}) };
+        return { key, label: labels?.get(key) ?? key, timestamp: timestamps?.get(key) ?? fallbackTimestamp, count: items.length, realizedPnl, equity, oneLotPnl, ...((wins + losses) > 0 ? { winRate: wins / (wins + losses) * 100 } : {}) };
       });
       const active = points.filter((point) => point.count > 0);
       return { granularity, points, activeBucketAverage: active.length ? active.reduce((sum, point) => sum + point.realizedPnl, 0) / active.length : 0, calendarBucketAverage: points.length ? points.reduce((sum, point) => sum + point.realizedPnl, 0) / points.length : 0 };

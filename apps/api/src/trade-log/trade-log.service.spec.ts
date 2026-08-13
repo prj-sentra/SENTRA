@@ -706,15 +706,19 @@ describe('TradeLogService expanded statistics', () => {
 });
 describe('TradeLogService stats range and risk coverage', () => {
   const preferences = { timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120, breakevenPercent: 0.1 };
-  it('fills zero calendar buckets while retaining active averages and finite histogram bounds', () => {
+  it('fills zero calendar buckets while retaining active averages and filtered cumulative one-lot PnL', () => {
     const service = new TradeLogService(prisma() as never) as any;
     const samples = [
-      { id: 'a', closedAt: '2026-08-10T03:00:00.000Z', realizedPnl: 30, lots: 1, riskAmount: 10, riskPercent: 1, seedBalance: 1000, trades: [], sessions: [] },
-      { id: 'b', closedAt: '2026-08-12T03:00:00.000Z', realizedPnl: 30, lots: 1, riskAmount: 10, riskPercent: 2, seedBalance: 1000, trades: [], sessions: [] },
+      { id: 'a', closedAt: '2026-08-10T03:00:00.000Z', realizedPnl: 30, lots: 2, riskAmount: 10, riskPercent: 1, seedBalance: 1000, trades: [{ symbol: 'XAUUSD' }], sessions: [] },
+      { id: 'excluded', closedAt: '2026-08-11T03:00:00.000Z', realizedPnl: 999, lots: 1, riskAmount: 10, riskPercent: 1, seedBalance: 1000, trades: [{ symbol: 'EURUSD' }], sessions: [] },
+      { id: 'b', closedAt: '2026-08-12T03:00:00.000Z', realizedPnl: 30, lots: 3, riskAmount: 10, riskPercent: 2, seedBalance: 1000, trades: [{ symbol: 'XAUUSD' }], sessions: [] },
     ];
-    const day = service.statsSeriesByGranularity(samples, preferences, { accountId: 'account-1', from: '2026-08-10', to: '2026-08-12' }).day;
+    const query = { accountId: 'account-1', from: '2026-08-10', to: '2026-08-12', symbols: ['XAUUSD'] };
+    const filtered = samples.filter((sample) => service.matchesStatsFilters(sample, query, preferences));
+    const day = service.statsSeriesByGranularity(filtered, preferences, query).day;
     expect(day).toMatchObject({ activeBucketAverage: 30, calendarBucketAverage: 20 });
     expect(day.points.map((point: any) => point.count)).toEqual([1, 0, 1]);
+    expect(day.points.map((point: any) => point.oneLotPnl)).toEqual([15, 15, 25]);
   });
   it('uses configured local trading-day keys for inclusive date-only endpoints and averages proven risk percentages', () => {
     const service = new TradeLogService(prisma() as never) as any;

@@ -7,7 +7,7 @@ interface StatsLineChartProps {
   value: (point: TradeStatsSeriesPoint) => number;
   label: string;
   percent?: boolean;
-  proportionalTime?: boolean;
+  spacing?: 'time' | 'uniform';
 }
 
 interface ChartPoint { timestamp: number; label: string; value: number; }
@@ -18,9 +18,7 @@ const FALLBACK_WIDTH = 640;
 function shortTimeLabel(timestamp: number): string {
   return new Intl.DateTimeFormat('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(timestamp));
 }
-function dateLabel(timestamp: number, proportionalTime: boolean): string {
-  return proportionalTime ? shortTimeLabel(timestamp) : new Intl.DateTimeFormat('ko-KR', { month: '2-digit', day: '2-digit' }).format(new Date(timestamp));
-}
+function dateLabel(timestamp: number): string { return shortTimeLabel(timestamp); }
 function formatValue(value: number, percent: boolean): string {
   return percent ? `${value.toFixed(2)}%` : value.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
 }
@@ -31,32 +29,33 @@ function valueDomain(points: ChartPoint[], percent: boolean): [number, number] {
   const padding = high === low ? Math.max(Math.abs(high) * .1, 1) : (high - low) * .1;
   return [low - padding, high + padding];
 }
-function xCoordinate(timestamp: number, domain: [number, number], bounds: Bounds): number {
+function timeXCoordinate(timestamp: number, domain: [number, number], bounds: Bounds): number {
   return domain[0] === domain[1] ? (bounds.left + bounds.right) / 2 : bounds.left + (timestamp - domain[0]) / (domain[1] - domain[0]) * (bounds.right - bounds.left);
+}
+function xCoordinate(point: ChartPoint, index: number, points: ChartPoint[], domain: [number, number], bounds: Bounds, spacing: 'time' | 'uniform'): number {
+  if (spacing === 'time') return timeXCoordinate(point.timestamp, domain, bounds);
+  return points.length === 1 ? (bounds.left + bounds.right) / 2 : bounds.left + index / (points.length - 1) * (bounds.right - bounds.left);
 }
 function yCoordinate(value: number, domain: [number, number], bounds: Bounds): number {
   return bounds.bottom - (value - domain[0]) / (domain[1] - domain[0]) * (bounds.bottom - bounds.top);
 }
-function stepPath(points: ChartPoint[], xDomain: [number, number], yDomain: [number, number], bounds: Bounds): string {
+function stepPath(points: ChartPoint[], xDomain: [number, number], yDomain: [number, number], bounds: Bounds, spacing: 'time' | 'uniform'): string {
   return points.reduce((path, point, index) => {
-    const x = xCoordinate(point.timestamp, xDomain, bounds);
+    const x = xCoordinate(point, index, points, xDomain, bounds, spacing);
     const y = yCoordinate(point.value, yDomain, bounds);
     return index ? `${path} H ${x} V ${y}` : `M ${x} ${y}`;
   }, '');
 }
-function nearestPoint(points: ChartPoint[], timestamp: number): number {
-  let low = 0; let high = points.length - 1;
-  while (low <= high) { const middle = Math.floor((low + high) / 2); if (points[middle].timestamp < timestamp) low = middle + 1; else high = middle - 1; }
-  if (!low) return 0;
-  if (low === points.length) return points.length - 1;
-  return timestamp - points[low - 1].timestamp <= points[low].timestamp - timestamp ? low - 1 : low;
+function nearestPoint(points: ChartPoint[], x: number, xDomain: [number, number], bounds: Bounds, spacing: 'time' | 'uniform'): number {
+  return points.reduce((nearest, point, index) => Math.abs(xCoordinate(point, index, points, xDomain, bounds, spacing) - x) < Math.abs(xCoordinate(points[nearest], nearest, points, xDomain, bounds, spacing) - x) ? index : nearest, 0);
 }
 
-export function StatsLineChart({ points, value, label, percent = false, proportionalTime = false }: StatsLineChartProps) {
+export function StatsLineChart({ points, value, label, percent = false, spacing = 'time' }: StatsLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
   const [hoveredIndex, setHoveredIndex] = useState<number>();
   const chartPoints = useMemo(() => points.map((point) => ({ timestamp: point.timestamp, label: point.label, value: value(point) })).filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.value)).sort((left, right) => left.timestamp - right.timestamp), [points, value]);
+  useEffect(() => setHoveredIndex(undefined), [points]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -72,8 +71,7 @@ export function StatsLineChart({ points, value, label, percent = false, proporti
   const hovered = hoveredIndex === undefined ? undefined : chartPoints[hoveredIndex];
   const setHoveredFromX = (x: number) => {
     if (!chartPoints.length) return;
-    const ratio = Math.max(0, Math.min(1, (x - bounds.left) / (bounds.right - bounds.left)));
-    setHoveredIndex(nearestPoint(chartPoints, xDomain[0] + ratio * (xDomain[1] - xDomain[0])));
+    setHoveredIndex(nearestPoint(chartPoints, x, xDomain, bounds, spacing));
   };
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => { const rect = event.currentTarget.getBoundingClientRect(); setHoveredFromX(rect.width ? (event.clientX - rect.left) * width / rect.width : event.clientX); };
   const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
@@ -88,12 +86,14 @@ export function StatsLineChart({ points, value, label, percent = false, proporti
     {chartPoints.length ? <svg className="stats-line-chart" viewBox={`0 0 ${width} ${HEIGHT}`} role="img" aria-label={label} tabIndex={0} onPointerMove={handlePointerMove} onPointerLeave={() => setHoveredIndex(undefined)} onFocus={() => setHoveredIndex((current) => current ?? chartPoints.length - 1)} onKeyDown={handleKeyDown}>
       <g className="stats-line-chart-grid" aria-hidden="true">
         {Array.from({ length: 5 }, (_, index) => { const ratio = index / 4; const y = bounds.top + ratio * (bounds.bottom - bounds.top); const entry = yDomain[1] - ratio * (yDomain[1] - yDomain[0]); return <g key={`y-${index}`}><line x1={bounds.left} x2={bounds.right} y1={y} y2={y} /><text x={bounds.left - 6} y={y} textAnchor="end" dominantBaseline="middle">{formatValue(entry, percent)}</text></g>; })}
-        {Array.from({ length: 5 }, (_, index) => { const ratio = index / 4; const x = bounds.left + ratio * (bounds.right - bounds.left); const timestamp = xDomain[0] + ratio * (xDomain[1] - xDomain[0]); return <g key={`x-${index}`}><line x1={x} x2={x} y1={bounds.top} y2={bounds.bottom} /><text x={x} y={HEIGHT - 10} textAnchor="middle">{dateLabel(timestamp, proportionalTime)}</text></g>; })}
+        {spacing === 'time'
+          ? Array.from({ length: 5 }, (_, index) => { const ratio = index / 4; const x = bounds.left + ratio * (bounds.right - bounds.left); const timestamp = xDomain[0] + ratio * (xDomain[1] - xDomain[0]); return <g key={`x-${index}`}><line x1={x} x2={x} y1={bounds.top} y2={bounds.bottom} /><text x={x} y={HEIGHT - 10} textAnchor="middle">{dateLabel(timestamp)}</text></g>; })
+          : chartPoints.map((point, index) => { const x = xCoordinate(point, index, chartPoints, xDomain, bounds, spacing); return <g key={`x-${point.timestamp}-${index}`}><line x1={x} x2={x} y1={bounds.top} y2={bounds.bottom} /><text x={x} y={HEIGHT - 10} textAnchor="middle">{point.label}</text></g>; })}
         {yDomain[0] <= 0 && yDomain[1] >= 0 ? <line className="stats-line-chart-baseline" x1={bounds.left} x2={bounds.right} y1={yCoordinate(0, yDomain, bounds)} y2={yCoordinate(0, yDomain, bounds)} /> : null}
       </g>
-      <path className="stats-line-chart-path" d={stepPath(chartPoints, xDomain, yDomain, bounds)} />
-      {chartPoints.length === 1 ? <circle className="stats-line-chart-point" cx={xCoordinate(chartPoints[0].timestamp, xDomain, bounds)} cy={yCoordinate(chartPoints[0].value, yDomain, bounds)} r="3" /> : null}
-      {hovered ? <g className="stats-line-chart-hover" aria-hidden="true"><line x1={xCoordinate(hovered.timestamp, xDomain, bounds)} x2={xCoordinate(hovered.timestamp, xDomain, bounds)} y1={bounds.top} y2={bounds.bottom} /><circle cx={xCoordinate(hovered.timestamp, xDomain, bounds)} cy={yCoordinate(hovered.value, yDomain, bounds)} r="4" /></g> : null}
+      <path className="stats-line-chart-path" d={stepPath(chartPoints, xDomain, yDomain, bounds, spacing)} />
+      {chartPoints.length === 1 ? <circle className="stats-line-chart-point" cx={xCoordinate(chartPoints[0], 0, chartPoints, xDomain, bounds, spacing)} cy={yCoordinate(chartPoints[0].value, yDomain, bounds)} r="3" /> : null}
+      {hovered ? <g className="stats-line-chart-hover" aria-hidden="true"><line x1={xCoordinate(hovered, hoveredIndex!, chartPoints, xDomain, bounds, spacing)} x2={xCoordinate(hovered, hoveredIndex!, chartPoints, xDomain, bounds, spacing)} y1={bounds.top} y2={bounds.bottom} /><circle cx={xCoordinate(hovered, hoveredIndex!, chartPoints, xDomain, bounds, spacing)} cy={yCoordinate(hovered.value, yDomain, bounds)} r="4" /></g> : null}
     </svg> : <div className="stats-line-chart-empty" role="img" aria-label={label}>표시할 데이터가 없습니다.</div>}
   </div>;
 }

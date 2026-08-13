@@ -6,7 +6,7 @@ afterEach(() => { cleanup(); localStorage.clear(); });
 const preferences: TradeStatsPreferences = { breakevenPercent: 0.1, timeZone: 'America/New_York', tradingDayStartMinutes: 0, sessions: { asia: { startMinutes: 0, endMinutes: 480 }, london: { startMinutes: 480, endMinutes: 960 }, 'new-york': { startMinutes: 780, endMinutes: 1260 } }, display: { timeZone: 'Asia/Seoul', utcOffsetMinutes: 540, tradingDayStartLabel: '09:00', sessions: { asia: { startLabel: '09:00', endLabel: '17:00' }, london: { startLabel: '17:00', endLabel: '01:00' }, 'new-york': { startLabel: '22:00', endLabel: '06:00' } } } };
 const bucket = { key: 'EURUSD', label: 'EURUSD', count: 12, classifiedCount: 12, winRate: 50, realizedPnl: 120, oneLotPnl: 60, sufficiency: '10-29' as const };
 const overview = { totalTrades: 12, totalRealizedPnl: 120, averageRealizedPnl: 10, oneLotPnl: 60, winRate: 50, breakevenRate: 5, profitFactor: 1.4, payoff: 1.2, expectancy: 10, wins: 6, losses: 5, breakevens: 1, classifiedCount: 12, averageWin: 30, averageLoss: -15, maxWinStreak: 3, currentWinStreak: 2, maxLossStreak: 2, currentLossStreak: 0, totalRiskAmount: 20, riskAmountCount: 10, riskPercentCount: 10, r: { value: 1, count: 8, missingCount: 4, total: 8, expectancy: 1 } };
-const series = { granularity: 'day' as const, points: [{ key: '2026-01-01', label: '1월 1일', timestamp: Date.parse('2026-01-01T00:00:00Z'), count: 1, realizedPnl: 120, equity: 120, winRate: 50 }], activeBucketAverage: 120, calendarBucketAverage: 60 };
+const series = { granularity: 'day' as const, points: [{ key: '2026-01-01', label: '1월 1일', timestamp: Date.parse('2026-01-01T00:00:00Z'), count: 1, realizedPnl: 120, equity: 120, oneLotPnl: 60, winRate: 50 }], activeBucketAverage: 120, calendarBucketAverage: 60 };
 const stats: TradeStatsResponse = { preferences, query: { accountId: 'a', unit: 'campaign' }, overview, comparison: { current: overview, prior: overview, from: '2026-01-01', to: '2026-01-02', priorFrom: '2025-12-30', priorTo: '2025-12-31' }, timeSeries: { sequence: { ...series, granularity: 'sequence', points: [{ ...series.points[0], key: '1', label: '매매 1' }] }, day: series, week: { ...series, granularity: 'week' }, month: { ...series, granularity: 'month' }, year: { ...series, granularity: 'year' } }, breakdowns: { symbol: [bucket] }, performanceGroups: [], crosstab: { rowDimension: 'symbol', columnDimension: 'session', columns: [{ key: 'asia', label: 'Asia', predicate: { dimension: 'session', key: 'asia' } }, { key: 'london', label: 'London', predicate: { dimension: 'session', key: 'london' } }], rows: [{ key: 'breakout', label: 'Breakout', predicate: { dimension: 'symbol', key: 'breakout' }, cells: [] }] }, drawdown: { money: 20, percent: 2, r: 1 }, diagnostics: { missingSeedCount: 1, missingSeedIds: ['seed-1'], unclassifiedCount: 0, missingLotsCount: 1, missingLotsIds: ['lots-1'], missingRiskCount: 1, missingRiskIds: ['risk-1'], incompleteCampaignCount: 1, incompleteCampaignIds: ['campaign-1'] }, drilldown: [{ id: 'trade-1', targetId: 'campaign-9', type: 'campaign', tradeIds: ['trade-1'], campaignId: 'campaign-9', journalDate: '2026-01-03', accountId: 'a', symbol: 'EURUSD', side: 'long', openedAt: '2026-01-01T01:00:00Z', closedAt: '2026-01-01T02:00:00Z', realizedPnl: 120, lots: 1, outcome: 'win' }] };
 function page(request = vi.fn((path: string) => Promise.resolve(path.includes('preferences') ? preferences : { ...stats, filterOptions: { symbol: [{ key: 'EURUSD', label: 'EURUSD' }], session: [{ key: 'new-york', label: 'new-york' }, { key: 'asia', label: 'asia' }], entryWeekday: [{ key: '금요일', label: '금요일' }, { key: '월요일', label: '월요일' }], exitReason: [{ key: 'manual', label: 'manual' }], baseTimeframe: [{ key: '1h', label: '1h' }] } }))) { const open = vi.fn(); render(<StatsPage accountId="a" request={request} onOpenRecord={open} />); return { request, open }; }
 describe('StatsPage', () => {
@@ -29,10 +29,70 @@ describe('StatsPage', () => {
   it('opens the right filter sidebar and category checkboxes select all child values', async () => { const { request } = page(); const sidebar = await screen.findByLabelText('대시보드 공통 필터'); fireEvent.click(screen.getByRole('button', { name: '필터 열기' })); expect(sidebar).toHaveClass('is-open'); const category = screen.getByRole('group', { name: '종목' }).querySelector('legend input')!; fireEvent.click(category); await waitFor(() => expect(request.mock.calls.some(([path]) => path.includes('symbols=EURUSD'))).toBe(true)); });
   it('adds a partially selected criterion to integrated performance automatically', async () => { const { request } = page(); fireEvent.click(await screen.findByRole('button', { name: '필터 열기' })); fireEvent.click(screen.getByLabelText('EURUSD')); await waitFor(() => expect(request.mock.calls.some(([path]) => path.includes('symbols=EURUSD') && path.includes('groupDimensions=symbol'))).toBe(true)); });
   it('does not render dashboard section headings or the removed drilldown viewer', async () => { page(); await screen.findByLabelText('핵심 성과 지표'); expect(screen.queryByText('기간별 성과')).not.toBeInTheDocument(); expect(screen.queryByText('통합 성과')).not.toBeInTheDocument(); expect(screen.queryByText('드릴다운')).not.toBeInTheDocument(); });
-  it('places the comparison table between charts and advanced metrics', async () => { page(); const charts = await screen.findByLabelText('누적 실현 PnL 추이'); const comparison = screen.getByText('비교할 기준을 하나 이상 선택하세요.'); const advanced = screen.getByLabelText('고급 성과 지표'); expect(charts.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(comparison.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); });
+  it('places the comparison table between charts and advanced metrics', async () => { page(); const charts = await screen.findByLabelText('성과 추이'); const comparison = screen.getByText('비교할 기준을 하나 이상 선택하세요.'); const advanced = screen.getByLabelText('고급 성과 지표'); expect(charts.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(comparison.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); });
   it('restores cached unit and dates while refreshing a checked today date', async () => { localStorage.setItem('sentra:stats-controls', JSON.stringify({ unit: 'trade', from: '2026-02-01', to: '2020-01-01', throughLatest: true })); const { request } = page(); await waitFor(() => expect(screen.getByRole('button', { name: '진입' })).toHaveClass('active')); fireEvent.click(screen.getByRole('button', { name: '필터 열기' })); expect(screen.getByLabelText('시작일')).toHaveValue('2026-02-01'); expect(screen.getByLabelText('종료일')).not.toHaveValue('2020-01-01'); await waitFor(() => expect(request.mock.calls.some(([path]) => path.includes('unit=trade') && path.includes('from=2026-02-01') && !path.includes('to=2020-01-01'))).toBe(true)); });
   it('caches detailed selections and clears them with reset', async () => { localStorage.setItem('sentra:stats-filters-open', 'true'); localStorage.setItem('sentra:stats-controls', JSON.stringify({ unit: 'campaign', throughLatest: true, filters: { from: '2026-01-03', symbols: ['EURUSD'] } })); page(); await waitFor(() => expect(screen.getByLabelText('EURUSD')).toBeChecked()); fireEvent.click(screen.getByRole('button', { name: '필터 초기화' })); expect(screen.getByLabelText('EURUSD')).not.toBeChecked(); expect(screen.getByRole('button', { name: '매매' })).toHaveClass('active'); });
   it('recalculates statistics without changing filters', async () => { const { request } = page(); await screen.findByRole('button', { name: '다시 계산' }); const calls = request.mock.calls.length; fireEvent.click(screen.getByRole('button', { name: '다시 계산' })); await waitFor(() => expect(request.mock.calls.length).toBeGreaterThan(calls)); });
   it('keeps expanded filters hidden by default and caches visibility', async () => { page(); expect(await screen.findByRole('button', { name: '필터 열기' })).toHaveAttribute('aria-expanded', 'false'); expect(screen.queryByText('필터 설정')).not.toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: '필터 열기' })); expect(await screen.findByText('필터 설정')).toBeInTheDocument(); expect(localStorage.getItem('sentra:stats-filters-open')).toBe('true'); });
-  it('renders SVG PnL and win-rate charts and exposes the hovered point', async () => { page(); const pnl = await screen.findByRole('img', { name: '누적 실현 PnL 추이' }); expect(pnl.tagName).toBe('svg'); expect(screen.getByRole('img', { name: '누적 승률 추이' }).tagName).toBe('svg'); fireEvent.pointerMove(pnl, { clientX: 320 }); expect(await screen.findByText('1월 1일')).toBeInTheDocument(); expect(pnl.parentElement!.querySelector('.stats-line-chart-legend strong')).toHaveTextContent('120'); fireEvent.click(screen.getByRole('tab', { name: '매매' })); expect(screen.getAllByRole('img').length).toBeGreaterThanOrEqual(2); });
+  it('renders one chart at a time and switches chart values and sequence spacing', async () => {
+    page();
+    const chart = await screen.findByRole('img', { name: '성과 추이' });
+    expect(chart.tagName).toBe('svg');
+    expect(screen.getByRole('tablist', { name: '차트 유형' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '누적 실현 PnL' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.pointerMove(chart, { clientX: 320 });
+    expect(chart.parentElement!.querySelector('.stats-line-chart-legend strong')).toHaveTextContent('120');
+    fireEvent.click(screen.getByRole('tab', { name: '승률' }));
+    fireEvent.pointerMove(chart, { clientX: 320 });
+    expect(chart.parentElement!.querySelector('.stats-line-chart-legend strong')).toHaveTextContent('50.00%');
+    fireEvent.click(screen.getByRole('tab', { name: '총 먹은 포인트' }));
+    fireEvent.pointerMove(chart, { clientX: 320 });
+    expect(chart.parentElement!.querySelector('.stats-line-chart-legend strong')).toHaveTextContent('60');
+    fireEvent.click(screen.getByRole('tab', { name: '매매' }));
+    expect(screen.getByRole('tablist', { name: '차트 간격' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '균등 간격' }));
+    expect(screen.getByRole('tab', { name: '균등 간격' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: '일' }));
+    expect(screen.queryByRole('tablist', { name: '차트 간격' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '매매' }));
+    expect(screen.getByRole('tab', { name: '균등 간격' })).toHaveAttribute('aria-selected', 'true');
+  });
+  it('keeps the chart on the latest symbol-filter response when an older request resolves last', async () => {
+    const pending: Array<{ path: string; resolve: (value: TradeStatsResponse) => void }> = [];
+    const request = vi.fn((path: string) => new Promise<TradeStatsResponse>((resolve) => pending.push({ path, resolve })));
+    const response = (label: string, equity: number): TradeStatsResponse => ({
+      ...stats,
+      filterOptions: { symbol: [{ key: 'XAUUSD', label: 'Gold' }] },
+      timeSeries: Object.fromEntries(Object.entries(stats.timeSeries).map(([key, value]) => [key, {
+        ...value,
+        points: value.points.map((point) => ({ ...point, label, equity, oneLotPnl: equity / 2 })),
+      }])) as TradeStatsResponse['timeSeries'],
+    });
+
+    page(request);
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0].resolve(response('기존 EURUSD', 120));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: '필터 열기' }));
+    fireEvent.click(await screen.findByLabelText('Gold'));
+    await waitFor(() => expect(pending).toHaveLength(3));
+    expect(pending[2].path).toContain('symbols=XAUUSD');
+    pending[2].resolve(response('최신 Gold', 999));
+    await waitFor(() => {
+      const chart = screen.getByRole('img', { name: '성과 추이' });
+      fireEvent.pointerMove(chart, { clientX: 320 });
+      const legend = chart.closest('.stats-line-chart-shell')!.querySelector('.stats-line-chart-legend')!;
+      expect(legend).toHaveTextContent('최신 Gold');
+      expect(legend.querySelector('strong')).toHaveTextContent('999');
+    });
+
+    pending[1].resolve(response('오래된 EURUSD', 120));
+    await waitFor(() => {
+      const chart = screen.getByRole('img', { name: '성과 추이' });
+      fireEvent.pointerMove(chart, { clientX: 320 });
+      const legend = chart.closest('.stats-line-chart-shell')!.querySelector('.stats-line-chart-legend')!;
+      expect(legend).toHaveTextContent('최신 Gold');
+      expect(legend).not.toHaveTextContent('오래된 EURUSD');
+    });
+  });
 });
