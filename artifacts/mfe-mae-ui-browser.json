@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "web-automation-transcript",
+  "status": "passed",
+  "tool": "GJC Chromium",
+  "sourceCommit": "f81b14b5b8ffa9e58c23ca999850e06b9bb94123",
+  "sourceHash": "sha256:606f9a90bab1e5cacd01906db2dd1d88b16dfdd346e5b3e253adbc59e9a030b9",
+  "events": [
+    {"action":"authenticate-and-navigate","url":"http://127.0.0.1/journal","result":"passed"},
+    {"action":"assert-progress","viewport":{"width":1440,"height":1000},"copy":"시장 진행 분석 3 / 295 · 백그라운드에서 계산 중입니다.","result":"passed"},
+    {"action":"assert-trade-detail","viewport":{"width":1440,"height":1000},"copy":"매매 전체 시장 진행 · 최대 수익 기회 · 최대 손실 위험 · 수익 실현률 · 재계산 필요","result":"passed"},
+    {"action":"assert-mobile-detail","viewport":{"width":390,"height":844},"copy":"plain-language cards stack vertically and technical MFE/MAE is collapsed","result":"passed"},
+    {"action":"assert-mobile-dashboard","viewport":{"width":390,"height":844},"scrollWidth":375,"copy":"시장 진행 분석 · 데이터 품질 및 상세 분포","result":"passed"}
+  ],
+  "screenshots": [
+    {"path":"artifacts/mfe-mae-ui-desktop.png","sha256":"64d79fbc56e7d8347c9860c38f9c952fbecfe5c93651786e4083add8f22ccb15","width":1440,"height":1000,"nonUniform":true},
+    {"path":"artifacts/mfe-mae-ui-mobile.png","sha256":"0863bd5c5a81e1967f8d5136ddee8dec1247964c46b1578ecee3b4c620a71c8c","width":390,"height":844,"nonUniform":true}
+  ],
+  "runtimeDiagnostics": []
+}
