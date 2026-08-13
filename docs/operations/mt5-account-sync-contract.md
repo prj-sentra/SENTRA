@@ -48,6 +48,14 @@ Ledger reconstruction is independent of that request window: every page rebuilds
 
 Campaign classification is account-scoped and requires both matching trade direction and holding-time connectivity. Each projected MT5 position is the closed interval `[openedAt, closedAt]`; an open position ends at positive infinity. Positions are processed by first opening execution time, opening ticket, then position ID. A new position joins the earliest same-direction campaign containing a position that is open at its opening instant; touching endpoints overlap, and overlap is transitive. If no same-direction position is open, a new campaign starts. Normal synchronization never moves an existing MANUAL membership and never rewrites an already-authored automatic campaign as historical cleanup. Operator reclassification may split historical mixed-direction campaigns and merge historical AUTO campaigns under an account lock after a restore-tested backup: it retains the earliest root, moves images, combines memo text, archives every losing campaign analysis/review payload under `campaign-merge:<campaignId>`, rewrites conflict references, and deletes only emptied campaigns. MANUAL memberships remain fixed except where a mixed-direction historical campaign must be split.
 
+### Safe full synchronization
+
+`POST /mt5-accounts/:id/full-sync` starts or resumes a fixed-snapshot bootstrap without deleting the live journal first. Every Deal and Order observed by that rebuild receives the rebuild fetch timestamp. Only after the final page and account identity checks succeed does one account-locked transaction remove raw facts not observed since `rebuildStartedAt`, reconstruct the balance ledger, and project every surviving position. A failed or interrupted rebuild leaves the prior raw facts, trades, analyses, campaigns, images, and sync watermark usable; the persisted rebuild cursor resumes the same snapshot.
+
+Projection keeps the existing `Trade.id` for the canonical server, account login, and MT5 position ID. It updates MT5-owned execution fields but never replaces trade analysis, entry/exit notes, campaign analysis, memo, images, manual memberships, or manual heads. A previously projected position absent from the completed rebuild is retained and marked with `mt5_source_missing_at`; it is not deleted. Existing campaign membership is also retained during full synchronization.
+
+Classification changes are a separate operation. `GET /mt5-accounts/:id/classification-preview` calculates counts for the current algorithm without mutation. `POST /mt5-accounts/:id/reclassify` applies the reviewed proposal under the account lock. Authored automatic campaigns and manual memberships become explicit conflicts unless a direction split is required to restore the campaign invariant.
+
 ### Manual campaign heads
 
 Campaign boundaries have an explicit source. `AUTO` heads come from interval

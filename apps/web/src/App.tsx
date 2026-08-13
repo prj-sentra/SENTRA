@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CampaignHeadMutationResponse, CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, SetTradeCampaignHeadRequest, TradeCalendarDay, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, UnsetTradeCampaignHeadRequest, UpdateMt5AccountRequest } from '@trading-journal/shared';
+import type { CampaignClassificationApplyResponse, CampaignClassificationPreview, CampaignHeadMutationResponse, CreateMt5AccountRequest, Mt5SyncResponse, PatchTradeAnalysisRequest, PatchTradeCampaignAnalysisRequest, PatchTradeCampaignMemoRequest, PatchTradeCampaignReviewRequest, SafeMt5AccountRef, SetTradeCampaignHeadRequest, TradeCalendarDay, TradeCampaign, TradeCampaignDateResponse, TradeCampaignImage, UnsetTradeCampaignHeadRequest, UpdateMt5AccountRequest } from '@trading-journal/shared';
 import { UserManagement } from './admin/UserManagement';
 import { apiBaseUrl, apiRequest, setUnauthorizedHandler } from './api/client';
 import { AuthScreen, type CurrentUser } from './auth/AuthScreen';
@@ -115,6 +115,9 @@ export function App() {
   async function createAccount(request: CreateMt5AccountRequest) { setAccountBusy(true); try { await apiRequest('/mt5-accounts', { method: 'POST', body: JSON.stringify(request) }); await loadAccounts(); } finally { setAccountBusy(false); } }
   async function updateAccount(id: string, request: UpdateMt5AccountRequest) { setAccountBusy(true); try { await apiRequest(`/mt5-accounts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(request) }); setEditingAccount(undefined); await loadAccounts(); } finally { setAccountBusy(false); } }
   async function syncAccount(id: string): Promise<Mt5SyncResponse> { return apiRequest(`/mt5-accounts/${encodeURIComponent(id)}/sync`, { method: 'POST' }); }
+  async function fullSyncAccount(id: string): Promise<Mt5SyncResponse> { return apiRequest(`/mt5-accounts/${encodeURIComponent(id)}/full-sync`, { method: 'POST' }); }
+  async function previewAccountClassification(id: string): Promise<CampaignClassificationPreview> { return apiRequest(`/mt5-accounts/${encodeURIComponent(id)}/classification-preview`); }
+  async function reclassifyAccount(id: string, classificationFingerprint: string): Promise<CampaignClassificationApplyResponse> { return apiRequest(`/mt5-accounts/${encodeURIComponent(id)}/reclassify`, { method: 'POST', body: JSON.stringify({ classificationFingerprint }) }); }
   async function toggleAccount(account: SafeMt5AccountRef) { const action = account.active ? '비활성화' : '활성화'; if (!window.confirm(`${account.nickname} 계정을 ${action}하시겠습니까?`)) return; await updateAccount(account.id, { active: !account.active }); }
   async function calibrateTime() {
     if (!selectedAccount) { window.alert('먼저 MT5 계정을 선택하세요.'); return; }
@@ -162,7 +165,7 @@ export function App() {
   if (checkingSession) return <main className="shell"><p className="muted" role="status">세션을 불러오는 중입니다…</p></main>;
   if (!user) return <AuthScreen onAuthenticated={loadCurrentUser} />;
   const noAccount = !accountId;
-  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={navigateView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onCompleted={() => { void loadAccountData(); }} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
+  return <div className="app-layout"><Sidebar activeView={view} accounts={accounts} accountId={accountId} onNavigate={navigateView} onAccountChange={(id) => { setSelectedDate(undefined); setAccountId(id); }} isAdmin={user.isAdmin} syncControl={<SyncControl account={selectedAccount} onSync={syncAccount} onFullSync={fullSyncAccount} onClassificationPreview={previewAccountClassification} onReclassify={reclassifyAccount} onCompleted={() => { void loadAccountData(); }} />} footer={<><span>{user.username}</span><button type="button" className="secondary-button compact" disabled={!selectedAccount || accountBusy} onClick={() => void calibrateTime()}>시간대 보정</button><button type="button" className="secondary-button compact" onClick={() => void logout()}>로그아웃</button></>} /><main className="app-content">
     {view === 'trade-log' && (noAccount
       ? <p className="journal-state">사이드바에서 MT5 계정을 선택하세요.</p>
       : <TradeJournalPage

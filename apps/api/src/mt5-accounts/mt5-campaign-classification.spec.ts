@@ -16,19 +16,21 @@ function fixture(rows: Array<{
     if (!campaigns.has(row.campaign)) {
       campaigns.set(row.campaign, {
         id: row.campaign, memo: null, rootTrade: { id: row.id, openedAt: new Date(row.open), mt5PositionId: BigInt(row.positionId ?? row.open) },
+        updatedAt: new Date(row.open),
         analysis: row.authored ? { id: `analysis-${row.campaign}`, ...emptyAnalysis(), entryReason: 'authored' } : { id: `analysis-${row.campaign}`, ...emptyAnalysis() }, images: [], conflicts: [],
       });
     }
   }
-  const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO', headSource: row.headSource ?? 'AUTO' }]));
+  const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO', headSource: row.headSource ?? 'AUTO', updatedAt: new Date(row.open) }]));
   const trades = rows.map((row) => ({
     id: row.id, openedAt: new Date(row.open), closedAt: row.close === undefined ? null : new Date(row.close),
-    mt5PositionId: BigInt(row.positionId ?? row.open), side: row.side ?? 'LONG',
+    mt5PositionId: BigInt(row.positionId ?? row.open), side: row.side ?? 'LONG', updatedAt: new Date(row.open),
     get campaignMembership() { const membership = memberships.get(row.id); return membership ? { ...membership, campaign: campaigns.get(membership.campaignId)! } : null; },
   }));
   const deleted: string[] = [];
   const conflicts: string[] = [];
   const tx: any = {
+    mt5Account: { findFirst: jest.fn(async () => ({ id: 'account' })) },
     trade: { findMany: jest.fn(async () => trades) },
     mt5Deal: { findMany: jest.fn(async () => trades.map((trade, index) => ({
       positionId: trade.mt5PositionId,
@@ -46,7 +48,7 @@ function fixture(rows: Array<{
     tradeCampaign: {
       create: jest.fn(async ({ data }: any) => {
         const root = trades.find((trade) => trade.id === data.rootTradeId)!;
-        const campaign = { id: `split-${data.rootTradeId}`, memo: null, rootTrade: { id: root.id, openedAt: root.openedAt, mt5PositionId: root.mt5PositionId }, analysis: { id: `analysis-split-${root.id}`, ...emptyAnalysis() }, images: [], conflicts: [] };
+        const campaign = { id: `split-${data.rootTradeId}`, memo: null, rootTrade: { id: root.id, openedAt: root.openedAt, mt5PositionId: root.mt5PositionId }, updatedAt: root.updatedAt, analysis: { id: `analysis-split-${root.id}`, ...emptyAnalysis() }, images: [], conflicts: [] };
         campaigns.set(campaign.id, campaign);
         return campaign;
       }),
@@ -94,6 +96,24 @@ describe('MT5 interval-overlap campaign classification', () => {
     });
     expect(state.memberships.get('long')!.campaignId).toBe('mixed');
     expect(state.memberships.get('short')!.campaignId).toBe('split-short');
+  });
+
+  it('previews a direction split without mutating campaign memberships', async () => {
+    const state = fixture([
+      { id: 'long', open: 100, campaign: 'mixed', side: 'LONG' },
+      { id: 'short', open: 200, close: 300, campaign: 'mixed', side: 'SHORT' },
+    ]);
+    const previewService = new Mt5SyncService(state.tx, {} as never, {} as never);
+    await expect(previewService.previewCampaignReclassification('owner', 'account')).resolves.toMatchObject({
+      trades: 2,
+      currentCampaigns: 1,
+      proposedCampaigns: 2,
+      movedTrades: 1,
+      createdCampaigns: 1,
+      mergedCampaigns: 0,
+      hasChanges: true,
+    });
+    expect([...state.memberships.values()].map((membership) => membership.campaignId)).toEqual(['mixed', 'mixed']);
   });
 
   it('never moves manual memberships and records an explicit conflict', async () => {

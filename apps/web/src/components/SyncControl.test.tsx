@@ -27,6 +27,32 @@ describe('SyncControl', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });
     expect(screen.getByRole('status')).toHaveTextContent('잔고 원장 불일치 계산 926 / MT5 925 USD');
   });
+  it('confirms and polls a full rebuild separately from ordinary sync', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onSync = vi.fn();
+    const onFullSync = vi.fn()
+      .mockResolvedValueOnce({ state: 'in_progress', accountId: 'a1', progress: { mode: 'bootstrap', snapshotToMsc: 1, pageCursor: 'next' } })
+      .mockResolvedValueOnce({ state: 'completed', accountId: 'a1', importedCount: 2, receivedCount: 5, fullRebuild: { removedDeals: 1, removedOrders: 2, sourceMissingTrades: 3 } });
+    render(<SyncControl account={account} onSync={onSync} onFullSync={onFullSync} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '전체 다시 동기화' })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(750); });
+    expect(onSync).not.toHaveBeenCalled();
+    expect(onFullSync).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status')).toHaveTextContent('전체 재구성: Deal 1건 / Order 2건 제거 · MT5 누락 거래 3건 보존');
+  });
+  it('previews classification before applying it', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const preview = vi.fn().mockResolvedValue({
+      accountId: 'a1', classificationFingerprint: 'a'.repeat(64), trades: 4, currentCampaigns: 1, proposedCampaigns: 2, movedTrades: 2,
+      createdCampaigns: 1, mergedCampaigns: 0, manualConflicts: 0, authoredConflicts: 0, hasChanges: true,
+    });
+    const reclassify = vi.fn().mockResolvedValue({ moved: 2, deletedCampaigns: 0, conflicts: 0 });
+    render(<SyncControl account={account} onSync={vi.fn()} onClassificationPreview={preview} onReclassify={reclassify} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '자동 분류 검토' })); });
+    expect(preview).toHaveBeenCalledWith('a1');
+    expect(reclassify).toHaveBeenCalledWith('a1', 'a'.repeat(64));
+    expect(screen.getByRole('status')).toHaveTextContent('자동 분류 적용 완료 거래 이동 2건');
+  });
   it('shows the safe failed response message without invented counts or time', async () => {
     render(<SyncControl account={account} onSync={async () => ({ state: 'failed', accountId: 'a1', message: 'Synchronization result expired' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });

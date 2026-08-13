@@ -160,6 +160,7 @@ model Trade {
   mt5ServerCanonical        String?                 @map("mt5_server_canonical")
   mt5AccountLogin           BigInt?                 @map("mt5_account_login")
   mt5PositionId             BigInt?                 @map("mt5_position_id")
+  mt5SourceMissingAt        DateTime?               @map("mt5_source_missing_at")
   accountCurrency           String?                 @map("account_currency")
   quantityLots              Decimal?                @map("quantity_lots")
   entryPrice                Decimal?                @map("entry_price")
@@ -594,6 +595,7 @@ model Mt5SyncStatus {
   openPositionIds              Json?      @map("open_position_ids")
   lastReceivedDealCount Int        @default(0) @map("last_received_deal_count")
   lastError             String?    @map("last_error")
+  rebuildStartedAt      DateTime?  @map("rebuild_started_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
 
   @@id([server, accountLogin])

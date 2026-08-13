@@ -1,7 +1,7 @@
 {$CADDY_SITE_ADDRESS} {
 	encode gzip
 
-	@mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/sync$
+	@mt5_sync path_regexp mt5_sync ^/api/mt5-accounts/[^/]+/(sync|full-sync)$
 	handle @mt5_sync {
 		uri strip_prefix /api
 		reverse_proxy api:3000 {

@@ -58,8 +58,15 @@ function statefulDb() {
     },
     mt5SyncStatus: {
       findUnique: jest.fn(async () => state.status ?? null),
-      upsert: jest.fn(async ({ create, update }: any) => { state.status = state.status ? { ...state.status, ...update } : create; }),
-      updateMany: jest.fn(),
+      upsert: jest.fn(async ({ create, update }: any) => {
+        state.status = state.status ? { ...state.status, ...update } : create;
+        return state.status;
+      }),
+      updateMany: jest.fn(async ({ data }: any) => {
+        if (!state.status) return { count: 0 };
+        state.status = { ...state.status, ...data };
+        return { count: 1 };
+      }),
     },
     mt5Deal: {
       findUnique: jest.fn(async ({ where }: any) => state.deals.find((row) => row.ticket === where.server_accountLogin_ticket.ticket) ?? null),
@@ -72,11 +79,24 @@ function statefulDb() {
         else state.deals.push(normalized);
         return normalized;
       }),
+      update: jest.fn(async ({ where, data }: any) => {
+        const row = state.deals.find((item) => item.ticket === where.server_accountLogin_ticket.ticket);
+        Object.assign(row, data);
+        return row;
+      }),
+      deleteMany: jest.fn(async ({ where }: any) => {
+        const retained = state.deals.filter((row) => row.accountId !== where.accountId || row.fetchedAt >= where.fetchedAt.lt);
+        const count = state.deals.length - retained.length;
+        state.deals = retained;
+        return { count };
+      }),
       findMany: jest.fn(async ({ where }: any) => state.deals.filter((row) => {
         const positionMatches = where.positionId === undefined
           ? true
           : typeof where.positionId === 'object' && Array.isArray(where.positionId.in)
             ? where.positionId.in.includes(row.positionId)
+            : typeof where.positionId === 'object' && where.positionId.gt !== undefined
+              ? row.positionId > where.positionId.gt
             : row.positionId === where.positionId;
         return (where.accountId === undefined || row.accountId === where.accountId)
           && positionMatches
@@ -91,6 +111,17 @@ function statefulDb() {
         if (existing) Object.assign(existing, create);
         else state.orders.push(create);
         return create;
+      }),
+      update: jest.fn(async ({ where, data }: any) => {
+        const row = state.orders.find((item) => item.ticket === where.server_accountLogin_ticket.ticket);
+        Object.assign(row, data);
+        return row;
+      }),
+      deleteMany: jest.fn(async ({ where }: any) => {
+        const retained = state.orders.filter((row) => row.accountId !== where.accountId || row.fetchedAt >= where.fetchedAt.lt);
+        const count = state.orders.length - retained.length;
+        state.orders = retained;
+        return { count };
       }),
       findMany: jest.fn(async ({ where }: any) => state.orders
         .filter((row) => row.positionId === where.positionId)
@@ -149,6 +180,7 @@ function statefulDb() {
           : { id: 'trade-1', ...normalize(create), analysis: { thesis: 'keep me' } };
         return state.trade;
       }),
+      updateMany: jest.fn(async () => ({ count: 0 })),
     },
     tradeCampaign: {
       findMany: jest.fn(async () => []),
@@ -265,6 +297,54 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
         campaignMembership: { isNot: null },
       }),
     }));
+  });
+
+  it('full rebuild marks seen facts, removes only unseen raw facts, and preserves authored trade state', async () => {
+    const { db, state } = statefulDb();
+    const upstream = bridge([{ deals: [deposit, deal] }, { deals: [deposit, deal] }]);
+    const service = new Mt5SyncService(db, cipher as never, upstream as never);
+    await service.sync('owner-1', 'account-1');
+    const old = new Date(0);
+    for (const row of state.deals) row.fetchedAt = old;
+    state.deals.push({
+      ...state.deals.find((row) => row.ticket === 11n),
+      ticket: 99n,
+      positionId: 99n,
+      fetchedAt: old,
+    });
+    const analysis = state.trade.analysis;
+
+    await expect(service.sync('owner-1', 'account-1', true)).resolves.toMatchObject({
+      state: 'completed',
+      fullRebuild: { removedDeals: 1, removedOrders: 0, sourceMissingTrades: 0 },
+    });
+
+    expect(upstream.sync.mock.calls[1][0]).toMatchObject({ mode: 'bootstrap' });
+    expect(state.deals.map((row) => row.ticket)).toEqual([1n, 11n]);
+    expect(state.trade.analysis).toBe(analysis);
+    expect(state.membership).toMatchObject({ tradeId: 'trade-1', campaignId: 'campaign-1' });
+    expect(state.status.rebuildStartedAt).toBeNull();
+  });
+
+  it('rolls back the full rebuild sweep when the reconstructed balance does not match MT5', async () => {
+    const { db, state } = statefulDb();
+    const service = new Mt5SyncService(db, cipher as never, bridge([
+      { deals: [deposit, deal] },
+      { deals: [deposit, deal], account: { currency: 'USD', currencyDigits: 2, currentBalance: '999' } },
+    ]) as never);
+    await service.sync('owner-1', 'account-1');
+    const stale = {
+      ...state.deals.find((row) => row.ticket === 11n),
+      ticket: 99n,
+      positionId: 99n,
+      fetchedAt: new Date(0),
+    };
+    state.deals.push(stale);
+
+    await expect(service.sync('owner-1', 'account-1', true)).resolves.toMatchObject({ state: 'failed' });
+    expect(state.deals).toContainEqual(stale);
+    expect(state.status.rebuildStartedAt).toBeInstanceOf(Date);
+    expect(state.status.lastError).toBeDefined();
   });
 
 

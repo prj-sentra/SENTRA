@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -50,5 +51,35 @@ export class Mt5AccountsController {
   ) {
     this.syncService.assertTrustedToken(syncToken);
     return this.syncService.sync(request.user.id, id);
+  }
+
+  @Post(':id/full-sync')
+  @HttpCode(202)
+  fullSync(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Headers('x-mt5-sync-token') syncToken: string | undefined,
+  ) {
+    this.syncService.assertTrustedToken(syncToken);
+    return this.syncService.sync(request.user.id, id, true);
+  }
+
+  @Get(':id/classification-preview')
+  classificationPreview(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.syncService.previewCampaignReclassification(request.user.id, id);
+  }
+
+  @Post(':id/reclassify')
+  reclassify(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {
+    if (!body || typeof body !== 'object' || typeof (body as { classificationFingerprint?: unknown }).classificationFingerprint !== 'string'
+      || !/^[a-f0-9]{64}$/.test((body as { classificationFingerprint: string }).classificationFingerprint)) {
+      throw new BadRequestException('classificationFingerprint is required');
+    }
+    return this.syncService.reclassifyOwnedAccount(
+      request.user.id,
+      id,
+      false,
+      (body as { classificationFingerprint: string }).classificationFingerprint,
+    );
   }
 }

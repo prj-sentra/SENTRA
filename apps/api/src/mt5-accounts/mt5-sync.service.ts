@@ -1,6 +1,6 @@
-import { Inject, Injectable, Logger, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import type { Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
+import type { CampaignClassificationPreview, Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
 import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
@@ -111,8 +111,8 @@ export class Mt5SyncService {
     @Optional() @Inject(EXCURSION_WORKER_WAKE) private readonly excursionWorkerWake?: ExcursionWorkerWake,
   ) {}
 
-  async sync(ownerId: string, accountId: string): Promise<Mt5SyncResponse> {
-    const claimed = await this.claim(ownerId, accountId);
+  async sync(ownerId: string, accountId: string, forceFull = false): Promise<Mt5SyncResponse> {
+    const claimed = await this.claim(ownerId, accountId, forceFull);
     if (!claimed) {
       const status = await this.prisma.mt5SyncStatus.findUnique({ where: { accountId }, select: { mode: true, snapshotToMsc: true, pageCursor: true } });
       return {
@@ -132,7 +132,12 @@ export class Mt5SyncService {
         version: account.credentialVersion,
       });
       const resumed = status?.mode && status.snapshotToMsc !== null && status.snapshotToMsc !== undefined;
-      const mode = resumed ? status!.mode as 'bootstrap' | 'incremental' : status?.lastSuccessfulSnapshotMsc ? 'incremental' : 'bootstrap';
+      const rebuildStartedAt = status?.rebuildStartedAt ?? null;
+      const mode = rebuildStartedAt
+        ? 'bootstrap'
+        : resumed
+          ? status!.mode as 'bootstrap' | 'incremental'
+          : status?.lastSuccessfulSnapshotMsc ? 'incremental' : 'bootstrap';
       const snapshotToMsc = resumed ? Number(status!.snapshotToMsc) : Date.now() + UNCORRECTED_TIME_LOOKAHEAD_MS;
       const changedSinceMsc = mode === 'incremental'
         ? (resumed ? Number(status!.changedSinceMsc) : Math.max(0, Number(status!.lastSuccessfulSnapshotMsc) - INCREMENTAL_OVERLAP_MS))
@@ -191,8 +196,8 @@ export class Mt5SyncService {
         if (!liveAccount) throw new StaleSyncResult();
 
         const changedPositions = new Set<string>();
-        for (const deal of payload.deals) if (await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(deal.positionId);
-        for (const order of payload.orders) if (await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt, account.timeCorrectionHours ?? 0)) changedPositions.add(order.positionId);
+        for (const deal of payload.deals) if (await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0, rebuildStartedAt !== null)) changedPositions.add(deal.positionId);
+        for (const order of payload.orders) if (await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt, account.timeCorrectionHours ?? 0, rebuildStartedAt !== null)) changedPositions.add(order.positionId);
         receivedCount += payload.deals.length;
         if (payload.page.hasMore) {
           let projected = 0;
@@ -229,7 +234,34 @@ export class Mt5SyncService {
           if (deleted.count !== 1) throw new StaleSyncResult();
           return { importedCount: projected, ledger: null };
         }
+        let fullRebuild: Mt5SyncResponse['fullRebuild'];
+        if (rebuildStartedAt) {
+          const [removedDeals, removedOrders] = await Promise.all([
+            tx.mt5Deal.deleteMany({ where: { accountId, fetchedAt: { lt: rebuildStartedAt } } }),
+            tx.mt5Order.deleteMany({ where: { accountId, fetchedAt: { lt: rebuildStartedAt } } }),
+          ]);
+          const presentPositions = await tx.mt5Deal.findMany({
+            where: { accountId, positionId: { gt: 0 } },
+            distinct: ['positionId'],
+            select: { positionId: true },
+          });
+          const presentIds = presentPositions.map((row) => row.positionId);
+          const sourceMissing = await tx.trade.updateMany({
+            where: {
+              mt5AccountId: accountId,
+              mt5PositionId: presentIds.length ? { notIn: presentIds } : { not: null },
+              mt5SourceMissingAt: null,
+            },
+            data: { mt5SourceMissingAt: syncedAt },
+          });
+          fullRebuild = {
+            removedDeals: removedDeals.count,
+            removedOrders: removedOrders.count,
+            sourceMissingTrades: sourceMissing.count,
+          };
+        }
         const ledger = await this.rebuildBalanceLedger(tx, accountId, account.canonicalServer, account.accountLogin, payload.account.currency, payload.account.currencyDigits, payload.account.currentBalance, { fromMsc: mode === 'bootstrap' ? FULL_HISTORY_FROM_MSC : changedSinceMsc!, toMsc: snapshotToMsc }, syncedAt);
+        if (rebuildStartedAt && !ledger.verified) throw new Error('MT5 full rebuild balance verification failed');
         if (mode === 'bootstrap' || ledger.verified) {
           for (const positionId of ledger.positionIds) changedPositions.add(positionId);
         }
@@ -238,7 +270,7 @@ export class Mt5SyncService {
         await tx.mt5SyncStatus.upsert({
           where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
           create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, lastReceivedDealCount: payload.deals.length },
-          update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
+          update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, rebuildStartedAt: null, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
         const excursions = this.excursionWorkProducer
           ? await this.enqueueFinalExcursionWork(tx, accountId, BigInt(snapshotToMsc), 'SYNC_CHANGED')
@@ -254,7 +286,7 @@ export class Mt5SyncService {
           };
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
-        return { importedCount: projected, ledger, excursions };
+        return { importedCount: projected, ledger, excursions, fullRebuild };
       }, { maxWait: 10_000, timeout: 4 * 60_000 });
         importedCount += pageResult.importedCount;
         if (payload.page.hasMore) {
@@ -306,6 +338,7 @@ export class Mt5SyncService {
             status: pageResult.ledger!.verified ? 'verified' : 'diverged',
             currency: payload.account.currency, calculatedBalance: Number(pageResult.ledger!.calculatedBalance), currentBalance: Number(payload.account.currentBalance),
           },
+          ...(pageResult.fullRebuild && { fullRebuild: pageResult.fullRebuild }),
         } as Mt5SyncResponse;
       }
       throw new Error('MT5 synchronization ended without a final page');
@@ -389,7 +422,7 @@ export class Mt5SyncService {
     };
   }
 
-  private async claim(ownerId: string, accountId: string) {
+  private async claim(ownerId: string, accountId: string, forceFull: boolean) {
     const now = new Date();
     const leaseId = randomUUID();
     return this.prisma.$transaction(async (tx) => {
@@ -403,17 +436,41 @@ export class Mt5SyncService {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return null;
         throw error;
       }
-      const status = await tx.mt5SyncStatus.findUnique({ where: { accountId } });
+      let status = await tx.mt5SyncStatus.findUnique({ where: { accountId } });
+      if (forceFull && !status?.rebuildStartedAt) {
+        status = await tx.mt5SyncStatus.upsert({
+          where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
+          create: {
+            accountId,
+            server: account.canonicalServer,
+            accountLogin: account.accountLogin,
+            mode: 'bootstrap',
+            rebuildStartedAt: now,
+          },
+          update: {
+            mode: 'bootstrap',
+            snapshotToMsc: null,
+            pageCursor: null,
+            changedSinceMsc: null,
+            openPositionIds: Prisma.JsonNull,
+            rebuildStartedAt: now,
+            lastError: null,
+          },
+        });
+      }
       return { account, leaseId, status };
     });
   }
 
-  private async upsertDeal(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, deal: Mt5DealFact, fetchedAt: Date, correctionHours: number) {
+  private async upsertDeal(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, deal: Mt5DealFact, fetchedAt: Date, correctionHours: number, touchFetchedAt = false) {
     const key = { server_accountLogin_ticket: { server, accountLogin, ticket: BigInt(deal.ticket) } };
     const existing = await tx.mt5Deal.findUnique({ where: key, select: { rawJson: true, timeMscUtc: true } });
     const correctedTimeMsc = new Date(deal.timeMsc + correctionHours * 3_600_000);
     if (existing && canonicalFact(existing.rawJson, DEAL_FACT_FIELDS) === canonicalFact(deal, DEAL_FACT_FIELDS)
-      && existing.timeMscUtc.getTime() === correctedTimeMsc.getTime()) return false;
+      && existing.timeMscUtc.getTime() === correctedTimeMsc.getTime()) {
+      if (touchFetchedAt) await tx.mt5Deal.update({ where: key, data: { fetchedAt } });
+      return false;
+    }
     const data = {
       accountId, server, accountLogin, ticket: BigInt(deal.ticket), order: BigInt(deal.order), positionId: BigInt(deal.positionId),
       time: BigInt(deal.time), timeMsc: BigInt(deal.timeMsc), timeUtc: new Date(deal.time * 1000 + correctionHours * 3_600_000), timeMscUtc: correctedTimeMsc,
@@ -425,14 +482,17 @@ export class Mt5SyncService {
     return true;
   }
 
-  private async upsertOrder(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, order: Mt5OrderFact, fetchedAt: Date, correctionHours: number) {
+  private async upsertOrder(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, order: Mt5OrderFact, fetchedAt: Date, correctionHours: number, touchFetchedAt = false) {
     const key = { server_accountLogin_ticket: { server, accountLogin, ticket: BigInt(order.ticket) } };
     const existing = await tx.mt5Order.findUnique({ where: key, select: { rawJson: true, timeSetupMscUtc: true, timeDoneMscUtc: true } });
     const correctedSetup = new Date(order.timeSetupMsc + correctionHours * 3_600_000);
     const correctedDone = new Date(order.timeDoneMsc + correctionHours * 3_600_000);
     if (existing && canonicalFact(existing.rawJson, ORDER_FACT_FIELDS) === canonicalFact(order, ORDER_FACT_FIELDS)
       && existing.timeSetupMscUtc.getTime() === correctedSetup.getTime()
-      && existing.timeDoneMscUtc.getTime() === correctedDone.getTime()) return false;
+      && existing.timeDoneMscUtc.getTime() === correctedDone.getTime()) {
+      if (touchFetchedAt) await tx.mt5Order.update({ where: key, data: { fetchedAt } });
+      return false;
+    }
     const data = {
       accountId, server, accountLogin, ticket: BigInt(order.ticket), positionId: BigInt(order.positionId),
       timeSetup: BigInt(order.timeSetup), timeSetupMsc: BigInt(order.timeSetupMsc), timeSetupUtc: new Date(order.timeSetup * 1000 + correctionHours * 3_600_000), timeSetupMscUtc: correctedSetup,
@@ -694,6 +754,7 @@ export class Mt5SyncService {
       this.assertMetricState(existingTrade, initialPlan, metrics);
       const data = {
         ownerId, mt5AccountId: accountId, symbol: opened.symbol, side: opened.type === 1 ? TradeSide.SHORT : TradeSide.LONG,
+        mt5SourceMissingAt: null,
         status: closed ? TradeStatus.CLOSED : TradeStatus.OPEN, quantityLots: entryVolume, entryPrice: entries.length ? weighted(entries) : Number(opened.price),
         ...(exits.length && { exitPrice: weighted(exits), exitReason }), realizedPnl: deals.reduce((sum, deal) => sum + Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee), 0),
         openedAt: opened.timeMscUtc, ...(closed && { closedAt: exits[exits.length - 1].timeMscUtc }),
@@ -934,11 +995,142 @@ export class Mt5SyncService {
     ownerId: string,
     accountId: string,
     mergeAuthored = false,
+    expectedFingerprint?: string,
   ): Promise<{ moved: number; deletedCampaigns: number; conflicts: number }> {
     return this.prisma.$transaction(async (tx) => {
       await lockOwnedMt5Account(tx, ownerId, accountId);
+      if (expectedFingerprint) {
+        const current = await this.buildCampaignClassificationPreview(tx, ownerId, accountId);
+        if (current.classificationFingerprint !== expectedFingerprint) throw new ConflictException('Campaign classification changed after preview');
+      }
       return this.reclassifyCampaigns(tx, ownerId, accountId, mergeAuthored);
     }, { timeout: CAMPAIGN_RECLASSIFICATION_TIMEOUT_MS });
+  }
+
+  async previewCampaignReclassification(ownerId: string, accountId: string): Promise<CampaignClassificationPreview> {
+    const account = await this.prisma.mt5Account.findFirst({ where: { id: accountId, ownerId }, select: { id: true } });
+    if (!account) throw new NotFoundException('MT5 account not found');
+    return this.buildCampaignClassificationPreview(this.prisma as unknown as Prisma.TransactionClient, ownerId, accountId);
+  }
+
+  private async buildCampaignClassificationPreview(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    accountId: string,
+  ): Promise<CampaignClassificationPreview> {
+    const trades = await db.trade.findMany({
+      where: { ownerId, mt5AccountId: accountId, openedAt: { not: null } },
+      orderBy: [{ openedAt: 'asc' }, { mt5PositionId: 'asc' }, { id: 'asc' }],
+      include: {
+        campaignMembership: {
+          include: {
+            campaign: {
+              include: {
+                rootTrade: { select: { id: true, openedAt: true, mt5PositionId: true } },
+                analysis: { include: { economicIndicators: true, archives: true } },
+                images: { select: { id: true } },
+                conflicts: { select: { id: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const firstOpeningRows = trades.length ? await db.mt5Deal.findMany({
+      where: {
+        accountId,
+        positionId: { in: trades.map((trade) => trade.mt5PositionId).filter((id): id is bigint => id !== null) },
+        entry: 0,
+        type: { in: [0, 1] },
+      },
+      orderBy: [{ timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: { positionId: true, timeMsc: true, ticket: true },
+    }) : [];
+    const firstOpeningByPosition = new Map<string, CampaignOpeningKey>();
+    for (const deal of firstOpeningRows) {
+      const key = deal.positionId.toString();
+      if (!firstOpeningByPosition.has(key)) firstOpeningByPosition.set(key, deal);
+    }
+    const openingKeyForTrade = (trade: { openedAt: Date | null; mt5PositionId: bigint | null }): CampaignOpeningKey => {
+      const persisted = trade.mt5PositionId === null ? undefined : firstOpeningByPosition.get(trade.mt5PositionId.toString());
+      if (persisted) return persisted;
+      const positionId = trade.mt5PositionId ?? 0n;
+      return { timeMsc: BigInt(trade.openedAt?.getTime() ?? 0), ticket: positionId, positionId };
+    };
+    trades.sort((left, right) => {
+      const compared = compareCampaignOpeningKey(openingKeyForTrade(left), openingKeyForTrade(right));
+      return compared || left.id.localeCompare(right.id);
+    });
+    const components: typeof trades[] = [];
+    for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
+      let component: typeof trades = [];
+      let componentEnd = Number.NEGATIVE_INFINITY;
+      for (const trade of trades.filter((row) => row.side === side)) {
+        const openedAt = trade.openedAt!.getTime();
+        if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
+          components.push(component);
+          component = [];
+          componentEnd = Number.NEGATIVE_INFINITY;
+        }
+        component.push(trade);
+        componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+      }
+      if (component.length) components.push(component);
+    }
+    const currentCampaignIds = new Set(trades.flatMap((trade) => trade.campaignMembership ? [trade.campaignMembership.campaignId] : []));
+    const retainedCampaignIds = new Set<string>();
+    let movedTrades = 0;
+    let createdCampaigns = 0;
+    let manualConflicts = 0;
+    let authoredConflicts = 0;
+    for (const members of components) {
+      const memberIds = new Set(members.map((trade) => trade.id));
+      const campaigns = [...new Map(members.flatMap((trade) => trade.campaignMembership
+        ? [[trade.campaignMembership.campaignId, trade.campaignMembership.campaign] as const]
+        : [])).values()]
+        .sort((left, right) => {
+          const compared = compareCampaignOpeningKey(openingKeyForTrade(left.rootTrade), openingKeyForTrade(right.rootTrade));
+          return compared || left.id.localeCompare(right.id);
+        });
+      const canonical = campaigns.find((campaign) => memberIds.has(campaign.rootTrade.id));
+      if (canonical) retainedCampaignIds.add(canonical.id);
+      else createdCampaigns += 1;
+      for (const trade of members) {
+        const membership = trade.campaignMembership;
+        if (!membership || membership.campaignId === canonical?.id) continue;
+        movedTrades += 1;
+        const directionSplit = !memberIds.has(membership.campaign.rootTrade.id);
+        if (!directionSplit && membership.source === 'MANUAL') manualConflicts += 1;
+        else if (!directionSplit && this.hasAuthoredCampaignData(membership.campaign)) authoredConflicts += 1;
+      }
+    }
+    const mergedCampaigns = [...currentCampaignIds].filter((id) => !retainedCampaignIds.has(id)).length;
+    const classificationFingerprint = createHash('sha256').update(JSON.stringify(trades.map((trade) => ({
+      id: trade.id,
+      updatedAt: trade.updatedAt.toISOString(),
+      openedAt: trade.openedAt?.toISOString(),
+      closedAt: trade.closedAt?.toISOString(),
+      side: trade.side,
+      campaignId: trade.campaignMembership?.campaignId ?? null,
+      membershipUpdatedAt: trade.campaignMembership?.updatedAt.toISOString() ?? null,
+      membershipSource: trade.campaignMembership?.source ?? null,
+      headSource: trade.campaignMembership?.headSource ?? null,
+      campaignUpdatedAt: trade.campaignMembership?.campaign.updatedAt.toISOString() ?? null,
+      rootTradeId: trade.campaignMembership?.campaign.rootTrade.id ?? null,
+    })))).digest('hex');
+    return {
+      accountId,
+      classificationFingerprint,
+      trades: trades.length,
+      currentCampaigns: currentCampaignIds.size,
+      proposedCampaigns: components.length,
+      movedTrades,
+      createdCampaigns,
+      mergedCampaigns,
+      manualConflicts,
+      authoredConflicts,
+      hasChanges: movedTrades > 0 || createdCampaigns > 0 || mergedCampaigns > 0,
+    };
   }
 
   private hasAuthoredCampaignData(campaign: {

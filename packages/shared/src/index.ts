@@ -215,7 +215,36 @@ export interface Mt5SyncResponse {
     calculatedBalance: number;
     currentBalance: number;
   };
+  fullRebuild?: {
+    removedDeals: number;
+    removedOrders: number;
+    sourceMissingTrades: number;
+  };
   message?: string;
+}
+
+export interface CampaignClassificationPreview {
+  accountId: string;
+  classificationFingerprint: string;
+  trades: number;
+  currentCampaigns: number;
+  proposedCampaigns: number;
+  movedTrades: number;
+  createdCampaigns: number;
+  mergedCampaigns: number;
+  manualConflicts: number;
+  authoredConflicts: number;
+  hasChanges: boolean;
+}
+
+export interface CampaignClassificationApplyResponse {
+  moved: number;
+  deletedCampaigns: number;
+  conflicts: number;
+}
+
+export interface ApplyCampaignClassificationRequest {
+  classificationFingerprint: string;
 }
 
 export interface TradeCampaignImage {

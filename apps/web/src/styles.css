@@ -839,6 +839,7 @@ h3 {
 .app-content { min-width: 0; padding: 24px 16px; }
 .workspace-header { display: flex; justify-content: flex-end; min-height: 48px; margin-bottom: 16px; }
 .sync-control { display: grid; gap: 8px; min-width: 0; }
+.sync-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .sync-control .secondary-button { width: 100%; }
 .sync-control [role='status'] { white-space: pre-line; overflow-wrap: anywhere; font-size: .75rem; line-height: 1.55; }
 .sidebar-sync { display: grid; align-self: start; min-width: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border); }

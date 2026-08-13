@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Mt5SyncResponse, SafeMt5AccountRef } from '@trading-journal/shared';
+import type { CampaignClassificationApplyResponse, CampaignClassificationPreview, Mt5SyncResponse, SafeMt5AccountRef } from '@trading-journal/shared';
 
 export interface SyncControlProps {
   account: SafeMt5AccountRef | null;
   onSync: (accountId: string) => Promise<Mt5SyncResponse>;
+  onFullSync?: (accountId: string) => Promise<Mt5SyncResponse>;
+  onClassificationPreview?: (accountId: string) => Promise<CampaignClassificationPreview>;
+  onReclassify?: (accountId: string, classificationFingerprint: string) => Promise<CampaignClassificationApplyResponse>;
   onCompleted?: (response: Mt5SyncResponse) => Promise<void> | void;
 }
 
@@ -21,11 +24,15 @@ export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5Acco
   const ledgerSummary = ledger?.status === 'diverged'
     ? `\n잔고 원장 불일치\n계산 ${ledger.calculatedBalance} / MT5 ${ledger.currentBalance} ${ledger.currency}`
     : '';
-  return `동기화 완료\n계정: ${account.nickname}\n반영 ${imported}건 / 수신 ${received}건\n동기화 시각: ${syncedAt}${ledgerSummary}`;
+  const rebuild = response.fullRebuild
+    ? `\n전체 재구성: Deal ${response.fullRebuild.removedDeals}건 / Order ${response.fullRebuild.removedOrders}건 제거 · MT5 누락 거래 ${response.fullRebuild.sourceMissingTrades}건 보존`
+    : '';
+  return `동기화 완료\n계정: ${account.nickname}\n반영 ${imported}건 / 수신 ${received}건\n동기화 시각: ${syncedAt}${ledgerSummary}${rebuild}`;
 }
 
-export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) {
+export function SyncControl({ account, onSync, onFullSync, onClassificationPreview, onReclassify, onCompleted }: SyncControlProps) {
   const [syncing, setSyncing] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const pollTimer = useRef<number | undefined>(undefined);
@@ -50,20 +57,20 @@ export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) 
     setResult(null);
   }, [account?.id]);
 
-  async function sync(poll = false): Promise<void> {
+  async function sync(poll = false, full = false): Promise<void> {
     if (!account?.active || (!poll && syncing)) return;
     const current = generation.current;
     const accountId = account.id;
     setSyncing(true);
     try {
-      const response = await onSync(accountId);
+      const response = await (full && onFullSync ? onFullSync(accountId) : onSync(accountId));
       if (current !== generation.current || account.id !== accountId) return;
       showResult(formatSyncResult(response, account));
       if (response.state === 'completed') await onCompleted?.(response);
       if (response.state === 'in_progress') {
         window.clearTimeout(pollTimer.current);
         pollTimer.current = window.setTimeout(() => {
-          if (current === generation.current) void sync(true);
+          if (current === generation.current) void sync(true, full);
         }, poll ? 1_500 : 750);
       }
     } catch {
@@ -74,12 +81,54 @@ export function SyncControl({ account, onSync, onCompleted }: SyncControlProps) 
     }
   }
 
+  async function fullSync(): Promise<void> {
+    if (!account?.active || !onFullSync || syncing) return;
+    if (!window.confirm('MT5 원본 Deal/Order를 처음부터 다시 확인합니다.\n\n직접 작성한 거래 분석, 메모, 이미지와 현재 캠페인 분류는 유지됩니다. 계속하시겠습니까?')) return;
+    await sync(false, true);
+  }
+
+  async function reviewClassification(): Promise<void> {
+    if (!account?.active || !onClassificationPreview || !onReclassify || classifying || syncing) return;
+    setClassifying(true);
+    try {
+      const preview = await onClassificationPreview(account.id);
+      if (!preview.hasChanges) {
+        showResult('현재 자동 분류가 최신 기준과 일치합니다.');
+        return;
+      }
+      const summary = [
+        `자동 분류 변경안`,
+        `거래 이동 ${preview.movedTrades}건`,
+        `캠페인 생성 ${preview.createdCampaigns}건 / 병합 ${preview.mergedCampaigns}건`,
+        `수동 충돌 ${preview.manualConflicts}건 / 작성 데이터 충돌 ${preview.authoredConflicts}건`,
+        '',
+        '거래별 분석은 유지되고, 작성 데이터가 있는 자동 캠페인과 수동 분류는 충돌로 남습니다. 적용하시겠습니까?',
+      ].join('\n');
+      if (!window.confirm(summary)) return;
+      const applied = await onReclassify(account.id, preview.classificationFingerprint);
+      showResult(`자동 분류 적용 완료\n거래 이동 ${applied.moved}건 / 캠페인 정리 ${applied.deletedCampaigns}건 / 충돌 ${applied.conflicts}건`);
+      await onCompleted?.({ state: 'completed', accountId: account.id });
+    } catch {
+      showResult('자동 분류 검토 또는 적용에 실패했습니다.');
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   const unavailable = !account || !account.active;
   return (
     <div className="sync-control">
-      <button className="secondary-button" type="button" onClick={() => { void sync(); }} disabled={unavailable || syncing}>
-        {syncing ? '동기화 중…' : 'MT5 동기화'}
-      </button>
+      <div className="sync-actions">
+        <button className="secondary-button" type="button" onClick={() => { void sync(); }} disabled={unavailable || syncing}>
+          {syncing ? '동기화 중…' : 'MT5 동기화'}
+        </button>
+        {onFullSync ? <button className="secondary-button" type="button" onClick={() => { void fullSync(); }} disabled={unavailable || syncing || classifying}>
+          전체 다시 동기화
+        </button> : null}
+      </div>
+      {onClassificationPreview && onReclassify ? <button className="secondary-button" type="button" onClick={() => { void reviewClassification(); }} disabled={unavailable || syncing || classifying}>
+        {classifying ? '분류 확인 중…' : '자동 분류 검토'}
+      </button> : null}
       {unavailable ? <span className="muted">{account ? '비활성 계정은 동기화할 수 없습니다.' : '동기화할 MT5 계정을 선택하세요.'}</span> : null}
       {result ? <span className="muted" role="status">{result}</span> : null}
     </div>

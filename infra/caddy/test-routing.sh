@@ -21,6 +21,7 @@ assert_response() {
 }
 
 assert_response '/api/mt5-accounts/account-1/sync' '{"path":"/mt5-accounts/account-1/sync","token":"composed-test-secret"}'
+assert_response '/api/mt5-accounts/account-1/full-sync' '{"path":"/mt5-accounts/account-1/full-sync","token":"composed-test-secret"}'
 assert_response '/api/mt5-accounts/account-1/sync/extra' '{"path":"/mt5-accounts/account-1/sync/extra","token":null}'
 assert_response '/api/mt5-accounts/account-1' '{"path":"/mt5-accounts/account-1","token":null}'
 assert_response '/api/mt5-accounts//sync' '{"path":"/mt5-accounts/sync","token":null}'
