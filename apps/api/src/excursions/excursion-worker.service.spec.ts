@@ -38,13 +38,15 @@ describe('ExcursionWorkerService', () => {
     expect((worker as any).timer).toBeUndefined();
   });
 
-  it('retries a transient capability failure on the following poll', async () => {
+  it('backs off before retrying a transient capability failure', async () => {
     jest.useFakeTimers();
     process.env.MT5_EXCURSION_WORKER_ENABLED = 'true';
     const adapter = port({ getCapabilities: jest.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({}) });
     const worker = new ExcursionWorkerService(new ExcursionWorkService(), adapter);
     worker.onApplicationBootstrap();
     await jest.advanceTimersByTimeAsync(0);
+    await jest.advanceTimersByTimeAsync(29_000);
+    expect(adapter.getCapabilities).toHaveBeenCalledTimes(1);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(adapter.getCapabilities).toHaveBeenCalledTimes(2);
   });

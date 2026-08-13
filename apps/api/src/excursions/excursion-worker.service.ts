@@ -34,6 +34,7 @@ const POLL_MS = 1_000;
 const UNIT_MS = 20_000;
 const CLAIM_LEASE_MS = 45_000;
 const SHUTDOWN_DRAIN_MS = 5_000;
+const BRIDGE_FAILURE_BACKOFF_MS = 30_000;
 const MAX_CHUNKS = 20;
 const MAX_PAGES = 50;
 const MAX_TICKS = 50_000;
@@ -46,6 +47,7 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
   private activeController: AbortController | undefined;
   private stopping = false;
   private capabilitiesReady = false;
+  private bridgeBackoffUntilMsc = 0;
 
   constructor(
     private readonly work: ExcursionWorkService,
@@ -110,6 +112,7 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
   private async runOutcome(): Promise<'idle' | 'complete' | 'continuation' | 'stale' | string> {
     const port = this.port;
     if (!port || this.stopping) return 'idle';
+    if (Date.now() < this.bridgeBackoffUntilMsc) return 'idle';
     const controller = new AbortController();
     this.activeController = controller;
     const deadlineMsc = Date.now() + UNIT_MS;
@@ -144,6 +147,9 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
       }
     } catch (error) {
       const reason = this.stopping ? 'WORKER_SHUTDOWN' : controller.signal.aborted ? 'WORKER_DEADLINE' : this.failureReason(error);
+      if (reason === 'TICK_UNAVAILABLE' || reason === 'TRANSIENT_BRIDGE_FAILURE' || reason === 'TICK_IDENTITY_MISMATCH') {
+        this.bridgeBackoffUntilMsc = Date.now() + BRIDGE_FAILURE_BACKOFF_MS;
+      }
       if (claim) await port.requeueClaim(claim, reason, new Date());
       return reason;
     } finally {
