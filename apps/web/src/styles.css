@@ -1397,6 +1397,7 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .stats-series > header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .stats-chart-panel { display: grid; min-width: 0; gap: 8px; }
 .stats-chart-panel h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.stats-chart-description { margin: 0; color: var(--text-muted); font-size: .72rem; }
 .stats-chart-spacing { margin-left: auto; }
 .stats-line-chart-shell { min-width: 0; height: clamp(330px, 40vh, 430px); border: 1px solid var(--border); background: var(--surface); }
 .stats-line-chart { display: block; width: 100%; height: calc(100% - 30px); overflow: visible; touch-action: pan-y; }

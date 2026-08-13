@@ -592,14 +592,15 @@ describe('TradeLogService statistics helpers', () => {
     analysis: { schemaVersion: 3, baseTimeframe: '1h', createdAt: openedAt, updatedAt: openedAt },
     createdAt: openedAt, updatedAt: closedAt,
   });
-  it('aggregates campaign samples by PnL and lots while retaining trade mode', () => {
+  it('sums each entry PnL per Lot for campaign points while retaining trade mode', () => {
     const service = new TradeLogService(prisma() as never) as any;
     const records = [record('one', 20, 2, '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z', 1000), record('two', -10, 1, '2026-08-01T01:00:00.000Z', '2026-08-03T00:00:00.000Z', 1000)];
     const raw = records.map((trade) => ({ id: trade.id, campaignMembership: { campaignId: 'campaign-1' }, status: 'CLOSED', entry: {}, exit: {}, closedAt: new Date(trade.closedAt), realizedPnl: 1 }));
     const campaigns = service.statsSamples(raw, records, 'campaign', preferences);
-    expect(campaigns).toMatchObject([{ id: 'campaign-1', type: 'campaign', realizedPnl: 10, lots: 3 }]);
+    expect(campaigns).toMatchObject([{ id: 'campaign-1', type: 'campaign', realizedPnl: 10, lots: 3, oneLotPnl: 0 }]);
     expect(service.statsSamples(raw, records, 'trade', preferences)).toHaveLength(2);
-    expect(service.statsOverview(campaigns, 0.1).oneLotPnl).toBeCloseTo(10 / 3);
+    expect(service.statsOverview(campaigns, 0.1).oneLotPnl).toBe(0);
+    expect(service.statsSeriesByGranularity(campaigns, preferences, { accountId: 'account-1' }).sequence.points[0].oneLotPnl).toBe(0);
     expect(service.statsSamples([...raw, { id: 'open', campaignMembership: { campaignId: 'campaign-1' }, status: 'OPEN', entry: {}, exit: null, closedAt: null, realizedPnl: null }], records, 'campaign', preferences)).toEqual([]);
   });
   it('classifies inclusive breakeven, exposes missing seeds, overlapping sessions, prior comparison, user days, and drawdown', () => {
