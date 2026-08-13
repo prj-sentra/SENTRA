@@ -1078,7 +1078,7 @@ export class Mt5SyncService {
     const failed = resultCounts.get('FAILED') ?? 0;
     return {
       accountId,
-      total: completed + pending + recalculationNeeded + unsupported + failed,
+      total: completed + pending + unsupported + failed,
       completed,
       pending,
       recalculationNeeded,

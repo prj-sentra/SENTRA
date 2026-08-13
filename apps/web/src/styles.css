@@ -1315,7 +1315,7 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .trade-calendar-day.is-saturday { background: #f7f9ff; }
 button.trade-calendar-day.is-selected { background: #edf5ff; }
 .trade-calendar-date { font-weight: 600; }
-.excursion-panel, .excursion-summary { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
+.excursion-panel, .excursion-summary { container-type: inline-size; display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
 .campaign-excursion { border-top: 3px solid #8a3ffc; background: linear-gradient(180deg, #fdfbff 0, var(--surface) 82px); }
 .entry-excursion { margin-top: 14px; border-top: 3px solid var(--blue); background: linear-gradient(180deg, #f7faff 0, var(--surface) 82px); }
 .excursion-panel > header, .excursion-summary > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -1349,6 +1349,10 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
   .excursion-card-grid { grid-template-columns: 1fr; }
   .excursion-panel > header, .excursion-summary > header { align-items: stretch; flex-direction: column; }
   .excursion-status { align-self: flex-start; }
+}
+@container (max-width: 560px) {
+  .excursion-card-grid { grid-template-columns: 1fr; }
+  .excursion-card-grid strong { overflow: visible; text-overflow: clip; }
 }
 .trade-calendar-counts { align-self: end; color: var(--text-secondary); font-size: .62rem; white-space: nowrap; }
 .trade-calendar-pnl { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 .74rem 'IBM Plex Mono', monospace; }

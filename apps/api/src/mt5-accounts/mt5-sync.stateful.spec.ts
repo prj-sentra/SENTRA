@@ -358,7 +358,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
 
     await expect(service.getExcursionProgress('owner-1', 'account-1')).resolves.toEqual({
       accountId: 'account-1',
-      total: 13,
+      total: 12,
       completed: 4,
       pending: 6,
       recalculationNeeded: 1,
