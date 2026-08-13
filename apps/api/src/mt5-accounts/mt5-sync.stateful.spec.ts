@@ -257,6 +257,14 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     ]);
     expect(state.trade.seedBalance.toString()).toBe('1000');
     expect(state.trade.analysis.thesis).toBe('keep me');
+    expect(db.trade.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        ownerId: 'owner-1',
+        mt5AccountId: 'account-1',
+        side: 'LONG',
+        campaignMembership: { isNot: null },
+      }),
+    }));
   });
 
 

@@ -1,0 +1,33 @@
+{
+  "generatedAt": "2026-08-13T13:31:00.000Z",
+  "backup": {
+    "path": "artifacts/postgres-pre-direction-reclassification-20260813T132510Z.dump",
+    "sha256": "aedbe106095359536de1ee43caa7e224e108c69561ba2653d60ad5c4a4576a3a",
+    "restoreVerified": true,
+    "restoredTrades": 3309,
+    "restoredCampaigns": 454
+  },
+  "accountsReviewed": 8,
+  "usersReviewed": 5,
+  "baseline": {
+    "mixedDirectionCampaigns": 35,
+    "memberships": 3309
+  },
+  "result": {
+    "mixedDirectionCampaigns": 0,
+    "disconnectedCampaigns": 0,
+    "emptyCampaigns": 0,
+    "campaignRootsWithoutMembership": 0,
+    "trades": 3320,
+    "memberships": 3320,
+    "campaigns": 540,
+    "newTradesSinceBackup": 11,
+    "existingMembershipsMoved": 2346,
+    "conflicts": 0
+  },
+  "movedByAccount": {
+    "360b89ed-9c3a-4b60-a804-2b6e1b403c17": 154,
+    "60473eaa-621a-4125-b2ef-51d24983230f": 2183,
+    "f68c487b1af315456fef2eeb4b4dc5bf": 9
+  }
+}

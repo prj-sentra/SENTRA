@@ -9,16 +9,21 @@ const emptyAnalysis = () => ({
 
 function fixture(rows: Array<{
   id: string; open: number; close?: number; campaign: string; source?: 'AUTO' | 'MANUAL'; headSource?: 'AUTO' | 'MANUAL'; authored?: boolean;
-  ticket?: number; positionId?: number;
+  ticket?: number; positionId?: number; side?: 'LONG' | 'SHORT';
 }>) {
-  const campaigns = new Map(rows.map((row) => [row.campaign, {
-    id: row.campaign, memo: null, rootTrade: { openedAt: new Date(row.open), mt5PositionId: BigInt(row.positionId ?? row.open) },
-    analysis: row.authored ? { id: `analysis-${row.campaign}`, ...emptyAnalysis(), entryReason: 'authored' } : { id: `analysis-${row.campaign}`, ...emptyAnalysis() }, images: [], conflicts: [],
-  }]));
+  const campaigns = new Map<string, any>();
+  for (const row of rows) {
+    if (!campaigns.has(row.campaign)) {
+      campaigns.set(row.campaign, {
+        id: row.campaign, memo: null, rootTrade: { id: row.id, openedAt: new Date(row.open), mt5PositionId: BigInt(row.positionId ?? row.open) },
+        analysis: row.authored ? { id: `analysis-${row.campaign}`, ...emptyAnalysis(), entryReason: 'authored' } : { id: `analysis-${row.campaign}`, ...emptyAnalysis() }, images: [], conflicts: [],
+      });
+    }
+  }
   const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO', headSource: row.headSource ?? 'AUTO' }]));
   const trades = rows.map((row) => ({
     id: row.id, openedAt: new Date(row.open), closedAt: row.close === undefined ? null : new Date(row.close),
-    mt5PositionId: BigInt(row.positionId ?? row.open),
+    mt5PositionId: BigInt(row.positionId ?? row.open), side: row.side ?? 'LONG',
     get campaignMembership() { const membership = memberships.get(row.id); return membership ? { ...membership, campaign: campaigns.get(membership.campaignId)! } : null; },
   }));
   const deleted: string[] = [];
@@ -38,7 +43,16 @@ function fixture(rows: Array<{
     tradeCampaignAnalysisArchive: { upsert: jest.fn() },
     tradeCampaignAnalysis: { create: jest.fn(), deleteMany: jest.fn() },
     tradeCampaignImage: { count: jest.fn(async () => 0), findMany: jest.fn(async () => []), update: jest.fn() },
-    tradeCampaign: { update: jest.fn(), delete: jest.fn(async ({ where }: any) => { deleted.push(where.id); campaigns.delete(where.id); }) },
+    tradeCampaign: {
+      create: jest.fn(async ({ data }: any) => {
+        const root = trades.find((trade) => trade.id === data.rootTradeId)!;
+        const campaign = { id: `split-${data.rootTradeId}`, memo: null, rootTrade: { id: root.id, openedAt: root.openedAt, mt5PositionId: root.mt5PositionId }, analysis: { id: `analysis-split-${root.id}`, ...emptyAnalysis() }, images: [], conflicts: [] };
+        campaigns.set(campaign.id, campaign);
+        return campaign;
+      }),
+      update: jest.fn(),
+      delete: jest.fn(async ({ where }: any) => { deleted.push(where.id); campaigns.delete(where.id); }),
+    },
   };
   return { tx, memberships, deleted, conflicts };
 }
@@ -68,6 +82,18 @@ describe('MT5 interval-overlap campaign classification', () => {
     ]);
     await service.reclassifyCampaigns(state.tx, 'owner', 'account');
     expect([...state.memberships.values()].map((row) => row.campaignId)).toEqual(['ca', 'ca', 'ca']);
+  });
+
+  it('separates overlapping trades with opposite directions', async () => {
+    const state = fixture([
+      { id: 'long', open: 100, campaign: 'mixed', side: 'LONG' },
+      { id: 'short', open: 200, close: 300, campaign: 'mixed', side: 'SHORT' },
+    ]);
+    await expect(service.reclassifyCampaigns(state.tx, 'owner', 'account')).resolves.toEqual({
+      moved: 1, deletedCampaigns: 0, conflicts: 0,
+    });
+    expect(state.memberships.get('long')!.campaignId).toBe('mixed');
+    expect(state.memberships.get('short')!.campaignId).toBe('split-short');
   });
 
   it('never moves manual memberships and records an explicit conflict', async () => {

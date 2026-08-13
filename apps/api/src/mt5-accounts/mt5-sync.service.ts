@@ -22,6 +22,7 @@ const METRIC_CONTRACT_VERSION = 1;
 const BALANCE_LEDGER_VERSION = 1;
 const FULL_HISTORY_FROM_MSC = 0;
 const INCREMENTAL_OVERLAP_MS = 72 * 60 * 60 * 1000;
+const CAMPAIGN_RECLASSIFICATION_TIMEOUT_MS = 60_000;
 
 export const EXCURSION_WORK_PRODUCER = Symbol('EXCURSION_WORK_PRODUCER');
 export const EXCURSION_WORKER_WAKE = Symbol('EXCURSION_WORKER_WAKE');
@@ -723,6 +724,7 @@ export class Mt5SyncService {
           where: {
             ownerId,
             mt5AccountId: accountId,
+            side: data.side,
             id: { not: trade.id },
             openedAt: { lte: opened.timeMscUtc },
             OR: [{ closedAt: null }, { closedAt: { gte: opened.timeMscUtc } }],
@@ -734,7 +736,7 @@ export class Mt5SyncService {
           },
         });
         const manualHeads = await tx.trade.findMany({
-          where: { ownerId, mt5AccountId: accountId, openedAt: { not: null }, campaignMembership: { headSource: 'MANUAL' } },
+          where: { ownerId, mt5AccountId: accountId, side: data.side, openedAt: { not: null }, campaignMembership: { headSource: 'MANUAL' } },
           select: { mt5PositionId: true, campaignMembership: { select: { campaignId: true } } },
         });
         const openingIds = [...overlapping, ...manualHeads].map((row) => row.mt5PositionId).filter((id): id is bigint => id !== null);
@@ -800,7 +802,7 @@ export class Mt5SyncService {
           include: {
             campaign: {
               include: {
-                rootTrade: { select: { openedAt: true, mt5PositionId: true } },
+                rootTrade: { select: { id: true, openedAt: true, mt5PositionId: true } },
                 analysis: { include: { economicIndicators: true, archives: true } },
                 images: { select: { id: true } },
                 conflicts: { select: { id: true } },
@@ -836,20 +838,26 @@ export class Mt5SyncService {
       return compared || left.id.localeCompare(right.id);
     });
     const components: typeof trades[] = [];
-    let component: typeof trades = [];
-    let componentEnd = Number.NEGATIVE_INFINITY;
-    for (const trade of trades) {
-      const openedAt = trade.openedAt!.getTime();
-      // A manual head is a durable boundary, even where intervals overlap.
-      if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
-        components.push(component);
-        component = [];
-        componentEnd = Number.NEGATIVE_INFINITY;
+    for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
+      let component: typeof trades = [];
+      let componentEnd = Number.NEGATIVE_INFINITY;
+      for (const trade of trades.filter((row) => row.side === side)) {
+        const openedAt = trade.openedAt!.getTime();
+        // A manual head is a durable boundary, even where intervals overlap.
+        if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
+          components.push(component);
+          component = [];
+          componentEnd = Number.NEGATIVE_INFINITY;
+        }
+        component.push(trade);
+        componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
       }
-      component.push(trade);
-      componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+      if (component.length) components.push(component);
     }
-    if (component.length) components.push(component);
+    components.sort((left, right) => compareCampaignOpeningKey(
+      openingKeyForTrade(left[0]!),
+      openingKeyForTrade(right[0]!),
+    ));
 
     let moved = 0;
     let deletedCampaigns = 0;
@@ -863,12 +871,29 @@ export class Mt5SyncService {
           const compared = compareCampaignOpeningKey(openingKeyForTrade(left.rootTrade), openingKeyForTrade(right.rootTrade));
           return compared || left.id.localeCompare(right.id);
         });
-      const canonical = campaignRows[0];
+      const memberIds = new Set(members.map((trade) => trade.id));
+      const canonical = campaignRows.find((campaign) => memberIds.has(campaign.rootTrade.id))
+        ?? (campaignRows.length ? await tx.tradeCampaign.create({
+          data: {
+            rootTradeId: members[0]!.id,
+            tradingDate: seoulTradingDate(members[0]!.openedAt!),
+            ownerId,
+            mt5AccountId: accountId,
+            analysis: { create: {} },
+          },
+          include: {
+            rootTrade: { select: { id: true, openedAt: true, mt5PositionId: true } },
+            analysis: { include: { economicIndicators: true, archives: true } },
+            images: { select: { id: true } },
+            conflicts: { select: { id: true } },
+          },
+        }) : undefined);
       if (!canonical) continue;
       for (const trade of members) {
         const membership = trade.campaignMembership;
         if (!membership || membership.campaignId === canonical.id) continue;
-        if (membership.source === 'MANUAL' || !mergeAuthored && this.hasAuthoredCampaignData(membership.campaign)) {
+        const directionSplit = !memberIds.has(membership.campaign.rootTrade.id);
+        if (!directionSplit && (membership.source === 'MANUAL' || !mergeAuthored && this.hasAuthoredCampaignData(membership.campaign))) {
           await tx.campaignConflict.upsert({
             where: { tradeId: trade.id },
             create: { tradeId: trade.id, candidateCampaignIds: [canonical.id, membership.campaignId] },
@@ -913,7 +938,7 @@ export class Mt5SyncService {
     return this.prisma.$transaction(async (tx) => {
       await lockOwnedMt5Account(tx, ownerId, accountId);
       return this.reclassifyCampaigns(tx, ownerId, accountId, mergeAuthored);
-    });
+    }, { timeout: CAMPAIGN_RECLASSIFICATION_TIMEOUT_MS });
   }
 
   private hasAuthoredCampaignData(campaign: {
