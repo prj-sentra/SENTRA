@@ -1440,12 +1440,13 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .stats-note { margin: 0; padding: 12px 14px; border-left: 3px solid var(--blue); background: #edf5ff; color: var(--text-secondary); }
 .stats-series, .stats-breakdown, .stats-preferences { min-width: 0; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
 .stats-series { display: grid; gap: 14px; }
-.stats-series > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.stats-chart-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.stats-chart-stack > section { display: grid; min-width: 0; gap: 8px; }
-.stats-chart-stack h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.stats-series > header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.stats-chart-panel { display: grid; min-width: 0; gap: 8px; }
+.stats-chart-panel h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.stats-chart-description { margin: 0; color: var(--text-muted); font-size: .72rem; }
+.stats-chart-spacing { margin-left: auto; }
 .stats-line-chart-shell { min-width: 0; height: clamp(330px, 40vh, 430px); border: 1px solid var(--border); background: var(--surface); }
-.stats-line-chart { display: block; width: 100%; height: calc(100% - 30px); overflow: visible; touch-action: none; }
+.stats-line-chart { display: block; width: 100%; height: calc(100% - 30px); overflow: visible; touch-action: pan-y; }
 .stats-line-chart:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .stats-line-chart-legend { display: flex; height: 30px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; color: var(--text-muted); font: .68rem 'IBM Plex Mono', ui-monospace, monospace; }
 .stats-line-chart-legend strong { color: var(--text-primary); font-size: .76rem; }
@@ -1541,7 +1542,7 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
   .preferences-general-grid, .preferences-session-grid { grid-template-columns: 1fr; }
   .settings-card-heading { flex-wrap: wrap; }
   .stats-series > header { align-items: stretch; flex-direction: column; }
-  .stats-chart-stack { grid-template-columns: 1fr; }
+  .stats-chart-spacing { margin-left: 0; }
   .stats-toolbar { flex-wrap: wrap; }
   .stats-toolbar-actions { width: 100%; }
   .stats-toolbar-actions .secondary-button { flex: 1; }
