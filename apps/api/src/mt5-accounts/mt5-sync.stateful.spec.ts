@@ -447,4 +447,18 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.trade.realizedPnl).toBe(26);
     expect(state.balanceEvents.at(-1).balanceAfter.toString()).toBe('926');
   });
+
+  it('excludes MT5 account credit from the balance ledger', async () => {
+    const { db, state } = statefulDb();
+    const credit = { ...deposit, ticket: '2', timeMsc: 600, type: 3, profit: 236.8 };
+    const service = new Mt5SyncService(db, cipher as never, bridge([
+      { deals: [deposit, credit], account: { currency: 'USD', currencyDigits: 2, currentBalance: '1000' } },
+    ]) as never);
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
+
+    expect(state.ledger).toMatchObject({ status: 'VERIFIED', lastError: null });
+    expect(state.ledger.calculatedBalance.toString()).toBe('1000');
+    expect(state.balanceEvents.at(-1).balanceDelta.toString()).toBe('0');
+  });
 });

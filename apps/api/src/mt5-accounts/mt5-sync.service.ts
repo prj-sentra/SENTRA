@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
 import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
@@ -101,6 +101,7 @@ export const compareCampaignOpeningKey = (left: CampaignOpeningKey, right: Campa
 
 @Injectable()
 export class Mt5SyncService {
+  private readonly logger = new Logger(Mt5SyncService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly cipher: CredentialCipherService,
@@ -253,7 +254,7 @@ export class Mt5SyncService {
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
         return { importedCount: projected, ledger, excursions };
-      });
+      }, { maxWait: 10_000, timeout: 45_000 });
         importedCount += pageResult.importedCount;
         if (payload.page.hasMore) {
           return {
@@ -308,6 +309,7 @@ export class Mt5SyncService {
       }
       throw new Error('MT5 synchronization ended without a final page');
     } catch (error) {
+      this.logger.error(`MT5 sync failed for account ${accountId}: ${this.safeErrorCategory(error)}`, error instanceof Error ? error.stack : undefined);
       if (error instanceof StaleSyncResult) {
         await this.prisma.mt5SyncLease.deleteMany({ where: { accountId, leaseId } });
         return { state: 'failed', accountId, message: 'Synchronization result expired' };
@@ -474,7 +476,10 @@ export class Mt5SyncService {
     for (const deal of deals) {
       const before = balance;
       balancesBefore.set(deal.ticket.toString(), before);
-      const delta = deal.profit.plus(deal.commission).plus(deal.swap).plus(deal.fee)
+      // MT5 DEAL_TYPE_CREDIT (3) is reported separately as account credit and
+      // is not part of account_info().balance. All other deal types can carry
+      // balance-affecting profit/cost components.
+      const delta = (deal.type === 3 ? new Prisma.Decimal(0) : deal.profit.plus(deal.commission).plus(deal.swap).plus(deal.fee))
         .toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
       balance = before.plus(delta).toDecimalPlaces(currencyDigits, Prisma.Decimal.ROUND_HALF_UP);
       events.push({
