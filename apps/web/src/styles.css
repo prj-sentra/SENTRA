@@ -1173,7 +1173,8 @@ button.trade-cover { cursor: pointer; }
   .analysis-row-3-columns .analysis-fields, .analysis-row-4-columns .analysis-fields { grid-template-columns: minmax(0, 1fr); }
   .analysis-editor .target-price-row > .analysis-fields { grid-template-columns: minmax(0, 1fr); grid-template-areas: "prices" "percentages" "rr"; }
   .target-price-rr .calculated-value { min-height: 96px; }
-  .ma-timeframe-row .analysis-fields { overflow-x: auto; scrollbar-color: var(--border-strong) transparent; }
+  .ma-timeframe-row { min-width: 0; max-width: 100%; }
+  .ma-timeframe-row .analysis-fields { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-color: var(--border-strong) transparent; }
   .ma-timeframe-heading, .ma-timeframe-reading { min-width: 640px; }
   .indicator-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .indicator-delete-button { justify-self: start; }
