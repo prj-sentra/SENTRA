@@ -34,7 +34,7 @@ describe('SyncControl', () => {
       .mockResolvedValueOnce({ state: 'in_progress', accountId: 'a1', progress: { mode: 'bootstrap', snapshotToMsc: 1, pageCursor: 'next' } })
       .mockResolvedValueOnce({ state: 'completed', accountId: 'a1', importedCount: 2, receivedCount: 5, fullRebuild: { removedDeals: 1, removedOrders: 2, sourceMissingTrades: 3 } });
     render(<SyncControl account={account} onSync={onSync} onFullSync={onFullSync} />);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '전체 다시 동기화' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'MT5 동기화 초기화' })); });
     await act(async () => { await vi.advanceTimersByTimeAsync(750); });
     expect(onSync).not.toHaveBeenCalled();
     expect(onFullSync).toHaveBeenCalledTimes(2);
@@ -48,7 +48,7 @@ describe('SyncControl', () => {
     });
     const reclassify = vi.fn().mockResolvedValue({ moved: 2, deletedCampaigns: 0, conflicts: 0 });
     render(<SyncControl account={account} onSync={vi.fn()} onClassificationPreview={preview} onReclassify={reclassify} />);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '자동 분류 검토' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '매매 자동 분류 다시 적용' })); });
     expect(preview).toHaveBeenCalledWith('a1');
     expect(reclassify).toHaveBeenCalledWith('a1', 'a'.repeat(64));
     expect(screen.getByRole('status')).toHaveTextContent('자동 분류 적용 완료 거래 이동 2건');

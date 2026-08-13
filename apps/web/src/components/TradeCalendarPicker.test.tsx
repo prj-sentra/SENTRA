@@ -16,6 +16,13 @@ describe('TradeCalendarPicker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '매매일 달력 열기' }));
 
+    const weekdayLabels = screen.getAllByText(/^[일월화수목금토]$/);
+    expect(weekdayLabels.map((label) => label.textContent)).toEqual(['일', '월', '화', '수', '목', '금', '토']);
+    expect(weekdayLabels[0]).toHaveClass('is-sunday');
+    expect(weekdayLabels[6]).toHaveClass('is-saturday');
+    expect(screen.getByText('2')).toHaveClass('trade-calendar-date');
+    expect(screen.getByText('2').closest('.trade-calendar-day')).toHaveClass('is-sunday');
+    expect(screen.getByText('8').closest('.trade-calendar-day')).toHaveClass('is-saturday');
     expect(screen.getByRole('button', { name: /2026-08-03, 매매 2개, 진입 3개, 손익 \+125.5/ })).toHaveFocus();
     expect(screen.getByText('매매 2, 진입 3')).toBeInTheDocument();
     expect(screen.getByText('+125.5')).toHaveClass('is-positive');

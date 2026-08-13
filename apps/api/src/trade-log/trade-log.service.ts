@@ -267,18 +267,32 @@ export class TradeLogService {
       campaignCount: bigint;
       realizedPnl: Prisma.Decimal;
     }>>(Prisma.sql`
+      WITH campaign_days AS (
+        SELECT
+          tc.id,
+          (
+            CASE
+              WHEN BOOL_AND(t.closed_at IS NOT NULL) THEN MAX(t.closed_at)
+              ELSE MIN(t.opened_at)
+            END AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'
+          )::date AS journal_date
+        FROM trade_campaigns tc
+        JOIN campaign_memberships cm ON cm.campaign_id = tc.id
+        JOIN trades t ON t.id = cm.trade_id
+        WHERE tc.owner_id = ${ownerScope.ownerId}
+          AND tc.mt5_account_id = ${ownerScope.mt5AccountId}
+        GROUP BY tc.id
+      )
       SELECT
-        tc.trading_date AS "tradingDate",
+        cd.journal_date AS "tradingDate",
         COUNT(cm.id) AS "tradeCount",
-        COUNT(DISTINCT tc.id) AS "campaignCount",
+        COUNT(DISTINCT cd.id) AS "campaignCount",
         COALESCE(SUM(t.realized_pnl), 0) AS "realizedPnl"
-      FROM trade_campaigns tc
-      LEFT JOIN campaign_memberships cm ON cm.campaign_id = tc.id
-      LEFT JOIN trades t ON t.id = cm.trade_id
-      WHERE tc.owner_id = ${ownerScope.ownerId}
-        AND tc.mt5_account_id = ${ownerScope.mt5AccountId}
-      GROUP BY tc.trading_date
-      ORDER BY tc.trading_date ASC
+      FROM campaign_days cd
+      JOIN campaign_memberships cm ON cm.campaign_id = cd.id
+      JOIN trades t ON t.id = cm.trade_id
+      GROUP BY cd.journal_date
+      ORDER BY cd.journal_date ASC
     `);
     const calendarDays = calendarRows.map((row) => ({
       date: this.seoulDate(row.tradingDate),
@@ -289,8 +303,23 @@ export class TradeLogService {
     const actualDates = calendarDays.map(({ date: tradingDate }) => tradingDate);
     const selectedDate = date ?? actualDates.at(-1);
     const index = selectedDate ? actualDates.indexOf(selectedDate) : -1;
-    const campaigns = index >= 0 ? await this.prisma.tradeCampaign.findMany({
-      where: { ...ownerScope, tradingDate: new Date(`${selectedDate}T00:00:00.000Z`) },
+    const selectedCampaignIds = index >= 0 ? await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT tc.id
+      FROM trade_campaigns tc
+      JOIN campaign_memberships cm ON cm.campaign_id = tc.id
+      JOIN trades t ON t.id = cm.trade_id
+      WHERE tc.owner_id = ${ownerScope.ownerId}
+        AND tc.mt5_account_id = ${ownerScope.mt5AccountId}
+      GROUP BY tc.id
+      HAVING (
+        CASE
+          WHEN BOOL_AND(t.closed_at IS NOT NULL) THEN MAX(t.closed_at)
+          ELSE MIN(t.opened_at)
+        END AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'
+      )::date = ${selectedDate}::date
+    `) : [];
+    const campaigns = selectedCampaignIds.length ? await this.prisma.tradeCampaign.findMany({
+      where: { ...ownerScope, id: { in: selectedCampaignIds.map((campaign) => campaign.id) } },
       include: campaignWithRelations.include,
       orderBy: { rootTrade: { openedAt: 'asc' } },
     }) : [];
@@ -305,6 +334,7 @@ export class TradeLogService {
       nextDate: index >= 0 && index < actualDates.length - 1 ? actualDates[index + 1] : undefined,
       campaigns: await Promise.all(campaigns.map(async (campaign) => this.serializeCampaign(await this.orderCampaignForSerialization(this.prisma, {
         ...campaign,
+        tradingDate: new Date(`${selectedDate}T00:00:00.000Z`),
         conflicts: [
           ...campaign.conflicts,
           ...unresolvedConflicts.filter((conflict) => Array.isArray(conflict.candidateCampaignIds) && conflict.candidateCampaignIds.includes(campaign.id)),

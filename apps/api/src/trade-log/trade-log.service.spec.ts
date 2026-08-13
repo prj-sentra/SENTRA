@@ -26,9 +26,12 @@ const statsPreference = {
 };
 const prisma = () => ({
   trade: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
+  tradeCampaign: { findMany: jest.fn().mockResolvedValue([]) },
+  campaignConflict: { findMany: jest.fn().mockResolvedValue([]) },
   mt5Account: { findFirst: jest.fn() },
   statisticsPreference: { upsert: jest.fn().mockResolvedValue(statsPreference) },
   mt5PositionEntryBalance: { findMany: jest.fn().mockResolvedValue([]) },
+  $queryRaw: jest.fn(),
 });
 
 describe('TradeLogService owner boundary', () => {
@@ -49,6 +52,30 @@ describe('TradeLogService owner boundary', () => {
     db.mt5Account.findFirst.mockResolvedValue(null);
     await expect(service.getStats('owner-1', { accountId: 'foreign' })).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.mt5Account.findFirst).toHaveBeenCalledWith({ where: { id: 'foreign', ownerId: 'owner-1' }, select: { id: true } });
+  });
+});
+
+describe('TradeLogService journal date bucketing', () => {
+  it('builds calendar and selection dates from completed campaign close time', async () => {
+    const db = prisma();
+    db.mt5Account.findFirst.mockResolvedValue({ id: 'account-1' });
+    db.$queryRaw
+      .mockResolvedValueOnce([{ tradingDate: new Date('2026-08-03T00:00:00.000Z'), tradeCount: 2n, campaignCount: 1n, realizedPnl: 10 }])
+      .mockResolvedValueOnce([]);
+
+    await expect(new TradeLogService(db as never).listCampaigns('owner-1', '2026-08-03', 'account-1')).resolves.toMatchObject({
+      date: '2026-08-03',
+      calendarDays: [{ date: '2026-08-03', tradeCount: 2, campaignCount: 1, realizedPnl: 10 }],
+    });
+
+    const calendarSql = db.$queryRaw.mock.calls[0][0].strings.join('');
+    const selectionSql = db.$queryRaw.mock.calls[1][0].strings.join('');
+    for (const sql of [calendarSql, selectionSql]) {
+      expect(sql).toContain('BOOL_AND(t.closed_at IS NOT NULL)');
+      expect(sql).toContain('MAX(t.closed_at)');
+      expect(sql).toContain("AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'");
+    }
+    expect(db.tradeCampaign.findMany).not.toHaveBeenCalled();
   });
 });
 

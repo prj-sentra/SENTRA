@@ -8,7 +8,7 @@ interface TradeCalendarPickerProps {
   onSelectDate: (date: string) => void;
 }
 
-const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function parseDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
@@ -64,7 +64,7 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
     const year = visibleMonth.getFullYear();
     const month = visibleMonth.getMonth();
     const first = new Date(year, month, 1);
-    const leading = (first.getDay() + 6) % 7;
+    const leading = first.getDay();
     const count = new Date(year, month + 1, 0).getDate();
     const populated = [
       ...Array.from({ length: leading }, () => null),
@@ -98,16 +98,17 @@ export function TradeCalendarPicker({ days, selectedDate, disabled = false, onSe
       </header>
       <div className="trade-calendar-legend"><span>진입: 개별 단위</span><span>매매: 묶음 단위</span></div>
       <div className="trade-calendar-grid">
-        {WEEKDAYS.map((weekday) => <span className="trade-calendar-weekday" aria-hidden="true" key={weekday}>{weekday}</span>)}
+        {WEEKDAYS.map((weekday, index) => <span className={`trade-calendar-weekday${index === 0 ? ' is-sunday' : index === 6 ? ' is-saturday' : ''}`} aria-hidden="true" key={weekday}>{weekday}</span>)}
         {cells.map((date, index) => {
           if (!date) return <span className="trade-calendar-empty" aria-hidden="true" key={`empty-${index}`} />;
           const key = dateKey(date);
           const summary = daysByDate.get(key);
-          if (!summary) return <span className="trade-calendar-day is-disabled" aria-disabled="true" key={key}><span>{date.getDate()}</span></span>;
+          const weekendClass = date.getDay() === 0 ? ' is-sunday' : date.getDay() === 6 ? ' is-saturday' : '';
+          if (!summary) return <span className={`trade-calendar-day is-disabled${weekendClass}`} aria-disabled="true" key={key}><span className="trade-calendar-date">{date.getDate()}</span></span>;
           const pnlClass = summary.realizedPnl > 0 ? 'is-positive' : summary.realizedPnl < 0 ? 'is-negative' : 'is-flat';
           return <button
             type="button"
-            className={`trade-calendar-day is-enabled${selectedDate === key ? ' is-selected' : ''}`}
+            className={`trade-calendar-day is-enabled${weekendClass}${selectedDate === key ? ' is-selected' : ''}`}
             aria-label={`${key}, 매매 ${summary.campaignCount}개, 진입 ${summary.tradeCount}개, 손익 ${formatPnl(summary.realizedPnl)}`}
             aria-current={selectedDate === key ? 'date' : undefined}
             key={key}

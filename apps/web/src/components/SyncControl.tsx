@@ -122,12 +122,12 @@ export function SyncControl({ account, onSync, onFullSync, onClassificationPrevi
         <button className="secondary-button" type="button" onClick={() => { void sync(); }} disabled={unavailable || syncing}>
           {syncing ? '동기화 중…' : 'MT5 동기화'}
         </button>
-        {onFullSync ? <button className="secondary-button" type="button" onClick={() => { void fullSync(); }} disabled={unavailable || syncing || classifying}>
-          전체 다시 동기화
+        {onFullSync ? <button className="sync-reset-button" type="button" onClick={() => { void fullSync(); }} disabled={unavailable || syncing || classifying}>
+          MT5 동기화 초기화
         </button> : null}
       </div>
-      {onClassificationPreview && onReclassify ? <button className="secondary-button" type="button" onClick={() => { void reviewClassification(); }} disabled={unavailable || syncing || classifying}>
-        {classifying ? '분류 확인 중…' : '자동 분류 검토'}
+      {onClassificationPreview && onReclassify ? <button className="classification-review-button" type="button" onClick={() => { void reviewClassification(); }} disabled={unavailable || syncing || classifying}>
+        {classifying ? '분류 기준 확인 중…' : '매매 자동 분류 다시 적용'}
       </button> : null}
       {unavailable ? <span className="muted">{account ? '비활성 계정은 동기화할 수 없습니다.' : '동기화할 MT5 계정을 선택하세요.'}</span> : null}
       {result ? <span className="muted" role="status">{result}</span> : null}
