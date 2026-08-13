@@ -104,6 +104,12 @@ export class Mt5BridgeUnauthorized extends BadGatewayException {
   }
 }
 
+export class Mt5AccountAuthorizationRejected extends BadGatewayException {
+  constructor() {
+    super('MT5 account credentials were rejected');
+  }
+}
+
 export type Mt5BridgeTickErrorCategory =
   | 'BRIDGE_INCOMPATIBLE' | 'TICK_INVALID_REQUEST' | 'TICK_CURSOR_EXPIRED'
   | 'MT5_BRIDGE_UNAUTHORIZED' | 'TICK_IDENTITY_MISMATCH' | 'TICK_SOURCE_LIMIT'
@@ -168,6 +174,14 @@ export class Mt5BridgeClient {
       const text = await this.readBoundedBody(response);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Mt5BridgeUnauthorized();
+        if (response.status === 422) {
+          try {
+            const body = JSON.parse(text) as { error?: unknown };
+            if (body.error === 'sync_account_authorization_failed') throw new Mt5AccountAuthorizationRejected();
+          } catch (error) {
+            if (error instanceof Mt5AccountAuthorizationRejected) throw error;
+          }
+        }
         throw new BadGatewayException('MT5 bridge request failed');
       }
       let value: unknown;
