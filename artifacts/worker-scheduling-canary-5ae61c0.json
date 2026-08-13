@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "black-box-api-test-report",
+  "sourceHash": "sha256:50f8d80154fbcf3a29ff2333d903a8e80675e2383070551f57415df2d7a66509",
+  "commit": "5ae61c0",
+  "status": "passed",
+  "canary": {
+    "accountId": "f68c487b1af315456fef2eeb4b4dc5bf",
+    "workerAllowlistCount": 1,
+    "observedWorkerLeaseBeforeSync": true,
+    "syncElapsedMs": 1881,
+    "syncState": "completed",
+    "receivedCount": 42,
+    "balanceLedgerStatus": "verified",
+    "calculatedBalance": 1000,
+    "currentBalance": 1000,
+    "activityRowsAfter": 0,
+    "invalidProgressRanges": 0,
+    "nonCanaryWorkUpdatedDuringObservation": 0
+  },
+  "migration": {
+    "postgresVersion": 16,
+    "restoreVerified": true,
+    "migrationApplied": "20260813180000_add_mt5_bridge_activity",
+    "restoredTradeCount": 3320
+  },
+  "verification": {
+    "apiSuitesPassed": 28,
+    "apiTestsPassed": 234,
+    "webFilesPassed": 18,
+    "webTestsPassed": 73,
+    "typecheck": "passed",
+    "build": "passed"
+  }
+}
