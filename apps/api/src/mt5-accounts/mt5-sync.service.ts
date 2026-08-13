@@ -8,7 +8,7 @@ import { lockOwnedMt5Account } from './mt5-account-lock';
 import { Mt5BridgeClient, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
 import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
 
-const LEASE_MS = 60_000;
+const LEASE_MS = 5 * 60_000;
 const UNCORRECTED_TIME_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
 class StaleSyncResult extends Error {}
 const DEAL_FACT_FIELDS = ['ticket', 'order', 'positionId', 'time', 'timeMsc', 'type', 'entry', 'magic', 'reason', 'volume', 'price', 'commission', 'swap', 'profit', 'fee', 'symbol', 'comment', 'externalId'] as const;
@@ -254,7 +254,7 @@ export class Mt5SyncService {
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
         return { importedCount: projected, ledger, excursions };
-      }, { maxWait: 10_000, timeout: 45_000 });
+      }, { maxWait: 10_000, timeout: 4 * 60_000 });
         importedCount += pageResult.importedCount;
         if (payload.page.hasMore) {
           return {
