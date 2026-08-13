@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "api-package-test-report",
+  "sourceHash": "sha256:32fb343a29297ff92da3366e7b7a3e0c535bcfc3b35e56bb80bad87e56b3e6dc",
+  "status": "passed",
+  "commands": [
+    {"command":"pnpm --filter @trading-journal/api test -- mt5-sync.stateful.spec.ts","status":"passed","result":"18 tests passed including owner-scoped excursion progress and BLOCKED/STALE accounting"},
+    {"command":"pnpm test","status":"passed","result":"API 28 suites / 238 tests; web 19 files / 78 tests"},
+    {"command":"pnpm typecheck","status":"passed"},
+    {"command":"pnpm build","status":"passed"}
+  ],
+  "invariants": [
+    "Foreign account ownership is rejected before progress aggregation.",
+    "BLOCKED work remains visible in failed and total counts.",
+    "STALE prior results are diagnostic and not double-counted as a second target.",
+    "Campaign dashboard headline uses one canonical family.",
+    "Progress polling schedules only after the previous request settles."
+  ]
+}
