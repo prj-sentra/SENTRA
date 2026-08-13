@@ -117,26 +117,40 @@ export class Mt5SyncService {
     if (!this.bridgeActivity) return this.syncCoordinated(ownerId, accountId, forceFull);
     const activityLeaseId = await this.bridgeActivity.registerSyncIntent(accountId);
     let intentLost = false;
+    let heartbeatActive = true;
+    let heartbeatWork = Promise.resolve();
     const heartbeat = setInterval(() => {
-      void this.bridgeActivity?.refreshSyncIntent(activityLeaseId).then(async (owned) => {
-        if (!owned) {
-          intentLost = true;
-          await this.bridgeActivity?.haltWorker('SYNC_INTENT_LOST');
+      heartbeatWork = heartbeatWork.then(async () => {
+        if (!heartbeatActive) return;
+        try {
+          const owned = await this.bridgeActivity!.refreshSyncIntent(activityLeaseId);
+          if (heartbeatActive && !owned) {
+            intentLost = true;
+            await this.bridgeActivity!.haltWorker('SYNC_INTENT_LOST');
+          }
+        } catch {
+          if (heartbeatActive) {
+            intentLost = true;
+            await this.bridgeActivity!.haltWorker('SYNC_INTENT_HEARTBEAT_FAILED');
+          }
         }
-      }).catch(async () => {
-        intentLost = true;
-        await this.bridgeActivity?.haltWorker('SYNC_INTENT_HEARTBEAT_FAILED');
       });
     }, 30_000);
     heartbeat.unref();
+    const stopHeartbeat = async () => {
+      clearInterval(heartbeat);
+      heartbeatActive = false;
+      await heartbeatWork;
+    };
     try {
       if (!await this.bridgeActivity.waitForWorkerYield(activityLeaseId)) {
         return { state: 'in_progress', accountId, message: 'Synchronization is queued behind another synchronization' };
       }
       const result = await this.syncCoordinated(ownerId, accountId, forceFull);
+      await stopHeartbeat();
       return intentLost ? { state: 'failed', accountId, message: 'MT5 synchronization priority lease was lost' } : result;
     } finally {
-      clearInterval(heartbeat);
+      await stopHeartbeat();
       await this.bridgeActivity.releaseSyncIntent(activityLeaseId);
     }
   }

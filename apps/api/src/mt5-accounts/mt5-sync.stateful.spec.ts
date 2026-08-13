@@ -315,6 +315,34 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(activity.releaseSyncIntent).toHaveBeenCalledWith('sync-priority-1');
   });
 
+  it('drains an in-flight priority heartbeat before releasing intent without a false halt', async () => {
+    jest.useFakeTimers();
+    const { db } = statefulDb();
+    let releaseSync!: (value: any) => void;
+    let releaseHeartbeat!: (value: boolean) => void;
+    const activity = {
+      registerSyncIntent: jest.fn().mockResolvedValue('sync-priority-1'),
+      waitForWorkerYield: jest.fn().mockResolvedValue(true),
+      refreshSyncIntent: jest.fn(() => new Promise<boolean>((resolve) => { releaseHeartbeat = resolve; })),
+      releaseSyncIntent: jest.fn().mockResolvedValue(undefined),
+      haltWorker: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new Mt5SyncService(db, cipher as never, {} as never, undefined, undefined, activity as never);
+    jest.spyOn(service as any, 'syncCoordinated').mockImplementation(() => new Promise((resolve) => { releaseSync = resolve; }));
+    const running = service.sync('owner-1', 'account-1');
+    while (!releaseSync) await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(activity.refreshSyncIntent).toHaveBeenCalledTimes(1);
+    releaseSync({ state: 'completed', accountId: 'account-1' });
+    await Promise.resolve();
+    expect(activity.releaseSyncIntent).not.toHaveBeenCalled();
+    releaseHeartbeat(false);
+    await running;
+    expect(activity.haltWorker).not.toHaveBeenCalled();
+    expect(activity.releaseSyncIntent).toHaveBeenCalledWith('sync-priority-1');
+    jest.useRealTimers();
+  });
+
   it('full rebuild marks seen facts, removes only unseen raw facts, and preserves authored trade state', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([{ deals: [deposit, deal] }, { deals: [deposit, deal] }]);
