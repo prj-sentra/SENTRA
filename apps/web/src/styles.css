@@ -1167,7 +1167,7 @@ button.trade-cover { cursor: pointer; }
 @container (max-width: 719px) {
   .trade-card-summary, .trade-editor-grid { grid-template-columns: 1fr; }
   .expanded-content { grid-template-columns: 1fr; padding: 16px; }
-  .campaign-detail-layout, .trade-detail { grid-template-columns: 1fr; }
+  .campaign-detail-layout, .trade-detail { min-width: 0; grid-template-columns: 1fr; overflow-x: clip; }
   .campaign-analysis-section, .execution-analysis-heading, .trade-detail > .split-trade-navigation, .trade-detail > .desktop-trade-detail { grid-column: 1; grid-row: auto; }
   .campaign-analysis-section::before { display: none; }
   .analysis-row-3-columns .analysis-fields, .analysis-row-4-columns .analysis-fields { grid-template-columns: minmax(0, 1fr); }
