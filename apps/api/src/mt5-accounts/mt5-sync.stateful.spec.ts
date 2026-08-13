@@ -350,6 +350,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
       { state: 'PENDING', _count: 3 },
       { state: 'CLAIMED', _count: 1 },
       { state: 'RETRY_WAIT', _count: 2 },
+      { state: 'BLOCKED', _count: 2 },
     ]);
     db.tradeExcursionResult = { groupBy: jest.fn().mockResolvedValue([{ status: 'SUCCESS', _count: 4 }, { status: 'STALE', _count: 1 }]) };
     db.tradeCampaignExcursionResult = { groupBy: jest.fn().mockResolvedValue([{ status: 'UNSUPPORTED', _count: 2 }]) };
@@ -358,12 +359,12 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
 
     await expect(service.getExcursionProgress('owner-1', 'account-1')).resolves.toEqual({
       accountId: 'account-1',
-      total: 12,
+      total: 14,
       completed: 4,
       pending: 6,
       recalculationNeeded: 1,
       unsupported: 2,
-      failed: 0,
+      failed: 2,
       calculating: true,
       syncHasPriority: true,
     });

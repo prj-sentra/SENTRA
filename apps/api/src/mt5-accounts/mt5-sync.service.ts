@@ -1072,10 +1072,11 @@ export class Mt5SyncService {
     const pending = [...workCounts.entries()]
       .filter(([state]) => state === 'PENDING' || state === 'CLAIMED' || state === 'RETRY_WAIT')
       .reduce((sum, [, count]) => sum + count, 0);
+    const blocked = workCounts.get('BLOCKED') ?? 0;
     const completed = resultCounts.get('SUCCESS') ?? 0;
     const recalculationNeeded = resultCounts.get('STALE') ?? 0;
     const unsupported = resultCounts.get('UNSUPPORTED') ?? 0;
-    const failed = resultCounts.get('FAILED') ?? 0;
+    const failed = (resultCounts.get('FAILED') ?? 0) + blocked;
     return {
       accountId,
       total: completed + pending + unsupported + failed,

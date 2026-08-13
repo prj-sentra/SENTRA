@@ -65,6 +65,23 @@ describe('SyncControl', () => {
     expect(screen.getByText('백그라운드에서 계산 중입니다.')).toBeInTheDocument();
     expect(screen.getByText('최근 MT5 체결과 포지션 변경사항을 가져옵니다.')).toBeInTheDocument();
   });
+  it('waits for each calculation-progress request to settle before polling again', async () => {
+    let resolveFirst!: (value: any) => void;
+    const progress = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValue({ accountId: 'a1', total: 1, completed: 1, pending: 0, recalculationNeeded: 0, unsupported: 0, failed: 0, calculating: false, syncHasPriority: false });
+    render(<SyncControl account={account} onSync={vi.fn()} onExcursionProgress={progress} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(progress).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveFirst({ accountId: 'a1', total: 1, completed: 0, pending: 1, recalculationNeeded: 0, unsupported: 0, failed: 0, calculating: true, syncHasPriority: false });
+      await Promise.resolve();
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_999); });
+    expect(progress).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(progress).toHaveBeenCalledTimes(2);
+  });
   it('shows the safe failed response message without invented counts or time', async () => {
     render(<SyncControl account={account} onSync={async () => ({ state: 'failed', accountId: 'a1', message: 'Synchronization result expired' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });

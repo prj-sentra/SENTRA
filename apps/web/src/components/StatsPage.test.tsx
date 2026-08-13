@@ -18,6 +18,7 @@ describe('StatsPage', () => {
     expect(screen.getByText('평균 최대 손실 위험')).toBeInTheDocument();
     expect(screen.getByText('평균 수익 실현률')).toBeInTheDocument();
     expect(screen.getByText('데이터 품질 및 상세 분포')).toBeInTheDocument();
+    expect(screen.getByText('계산 완료 2건')).toBeInTheDocument();
 
   });
   it('renders redesigned metrics, selected diagnostics and populated breakdown panels', async () => { page(); expect(await screen.findByText('연속 기록')).toBeInTheDocument(); expect(screen.getByText('위험 조정 성과')).toBeInTheDocument(); expect(screen.getByText('최대 낙폭 (MDD)')).toBeInTheDocument(); expect(screen.queryByText('기대 수익')).not.toBeInTheDocument(); expect(screen.getByText('PF (Profit Factor)')).toHaveAttribute('data-tooltip', expect.stringContaining('총 수익 PnL')); expect(screen.getByText('거래당 평균 포인트')).toHaveAttribute('data-tooltip', expect.stringContaining('각 진입의 실현 PnL')); expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('seed-1'))).toBe(true); expect(screen.queryByText(/위험금액 누락\/주의/)).not.toBeInTheDocument(); expect(screen.queryByText(/미완성 캠페인 누락\/주의/)).not.toBeInTheDocument(); });

@@ -62,17 +62,19 @@ export function SyncControl({ account, onSync, onFullSync, onClassificationPrevi
   useEffect(() => {
     if (!account?.active || !onExcursionProgress) return;
     let active = true;
+    let nextTimer: number | undefined;
     const load = async () => {
       try {
         const next = await onExcursionProgress(account.id);
         if (active) setExcursionProgress(next);
       } catch {
-        if (active) setExcursionProgress(null);
+        // Keep the last known status during transient polling failures.
+      } finally {
+        if (active) nextTimer = window.setTimeout(() => { void load(); }, 5_000);
       }
     };
     void load();
-    const interval = window.setInterval(() => { void load(); }, 5_000);
-    return () => { active = false; window.clearInterval(interval); };
+    return () => { active = false; window.clearTimeout(nextTimer); };
   }, [account?.active, account?.id, onExcursionProgress]);
 
   async function sync(poll = false, full = false): Promise<void> {

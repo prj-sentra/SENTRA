@@ -157,7 +157,8 @@ function Diagnostics({ diagnostics, excursions }: { diagnostics: TradeStatsRespo
   const entries = [['시드 잔고', diagnostics.missingSeedCount, diagnostics.missingSeedIds], ['lot', diagnostics.missingLotsCount, diagnostics.missingLotsIds]] as const;
   const families = excursions?.families ?? [];
   const pnlFamily = families.find((family) => 'unrealizedPnl' in family);
-  const status = families.reduce((sum, family) => ({ success: sum.success + family.status.success, stale: sum.stale + family.status.stale, failed: sum.failed + family.status.failed, unsupported: sum.unsupported + family.status.unsupported, missing: sum.missing + family.status.missing }), { success: 0, stale: 0, failed: 0, unsupported: 0, missing: 0 });
+  const headlineFamilies = excursions?.unit === 'campaign' ? families.filter((family) => family.family === 'campaign_unrealized_pnl') : families;
+  const status = headlineFamilies.reduce((sum, family) => ({ success: sum.success + family.status.success, stale: sum.stale + family.status.stale, failed: sum.failed + family.status.failed, unsupported: sum.unsupported + family.status.unsupported, missing: sum.missing + family.status.missing }), { success: 0, stale: 0, failed: 0, unsupported: 0, missing: 0 });
   const opportunity = pnlFamily && 'unrealizedPnl' in pnlFamily ? pnlFamily.unrealizedPnl.mfe : undefined;
   const risk = pnlFamily && 'unrealizedPnl' in pnlFamily ? pnlFamily.unrealizedPnl.mae : undefined;
   const capture = pnlFamily && 'captureRate' in pnlFamily ? pnlFamily.captureRate : undefined;
