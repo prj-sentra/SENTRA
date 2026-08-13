@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { Mt5BridgeClient, Mt5BridgeUnauthorized } from './mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeTickError, Mt5BridgeUnauthorized } from './mt5-bridge.client';
 
 const request = { contractVersion: 5 as const, server: 'broker-live', accountLogin: 123, password: 'secret', mode: 'bootstrap' as const, snapshotToMsc: 1_700_000_001_000 };
 const v5 = (patch: Record<string, unknown> = {}) => ({
@@ -73,5 +73,34 @@ describe('Mt5BridgeClient', () => {
   it('rejects oversized responses before parsing', async () => {
     global.fetch = jest.fn().mockResolvedValue(new Response('', { status: 200, headers: { 'content-length': String(1024 * 1024 + 1) } })) as typeof fetch;
     await expect(new Mt5BridgeClient().sync(request)).rejects.toThrow('too large');
+  });
+
+  it('rejects incompatible capabilities and authenticates capability requests', async () => {
+    const capabilities = {
+      contractVersion: 5, sync: { bootstrap: true, incremental: true, fixedSnapshot: true },
+      ticks: {
+        available: true, cursorNamespace: 'ticks-v1', maxRequestBytes: 8192, maxCursorChars: 2048,
+        pageSize: { min: 1, max: 1000 }, maxResponseBytes: 900000, maxChunkSpanMsc: 300000,
+        maxChunkTicks: 20000, maxSnapshotBytes: 750000, snapshotTtlSeconds: 60, cacheMaxEntries: 8,
+        cacheMaxBytes: 6000000, valuationVersion: 1, supportedCalculationModes: ['FOREX'],
+      },
+    };
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify(capabilities), { status: 200 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().getCapabilities()).resolves.toMatchObject({ ticks: { cursorNamespace: 'ticks-v1' } });
+    expect(global.fetch).toHaveBeenCalledWith(new URL('http://bridge.internal:18812/capabilities'), expect.objectContaining({
+      method: 'GET', headers: { authorization: 'Bearer bridge-secret' },
+    }));
+    capabilities.ticks.cursorNamespace = 'sync-v5' as never;
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify(capabilities), { status: 200 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().getCapabilities()).rejects.toMatchObject({ category: 'BRIDGE_INCOMPATIBLE' });
+  });
+
+  it('rejects cross-namespace cursors before network I/O and categorizes expired tick cursors', async () => {
+    const ticks = { contractVersion: 5 as const, server: request.server, accountLogin: request.accountLogin, password: request.password, symbol: 'EURUSD', rawRange: { fromMsc: 0, toMsc: 1 }, snapshotToMsc: 1, pageCursor: 'sync-v5-cursor' };
+    global.fetch = jest.fn() as typeof fetch;
+    await expect(new Mt5BridgeClient().ticks({ ...ticks, pageCursor: 'x'.repeat(2049) })).rejects.toBeInstanceOf(Mt5BridgeTickError);
+    expect(global.fetch).not.toHaveBeenCalled();
+    global.fetch = jest.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_or_expired_tick_cursor' }), { status: 400 })) as typeof fetch;
+    await expect(new Mt5BridgeClient().ticks(ticks)).rejects.toMatchObject({ category: 'TICK_CURSOR_EXPIRED' });
   });
 });

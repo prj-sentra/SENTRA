@@ -151,6 +151,7 @@ function statefulDb() {
       }),
     },
     tradeCampaign: {
+      findMany: jest.fn(async () => []),
       upsert: jest.fn(async ({ create }: any) => state.campaign ??= { id: 'campaign-1', version: 1, ...create }),
       update: jest.fn(async ({ where, data }: any) => {
         if (!state.campaign || state.campaign.id !== where.id) throw new Error('campaign not found');
@@ -163,6 +164,9 @@ function statefulDb() {
     campaignMembership: {
       findUnique: jest.fn(async ({ where }: any) => state.membership?.tradeId === where.tradeId ? state.membership : null),
       create: jest.fn(async ({ data }: any) => state.membership ??= { headSource: 'AUTO', ...data }),
+    },
+    excursionWorkItem: {
+      findMany: jest.fn(async () => []),
     },
   };
   return { db, state };
@@ -186,6 +190,48 @@ const bridge = (batches: any[]) => ({
 const cipher = { decrypt: jest.fn(() => 'secret') };
 
 describe('Mt5SyncService account-scoped balance ledger', () => {
+  it('does not enqueue or wake work for a non-final v5 page', async () => {
+    const { db } = statefulDb();
+    const producer = { dirtyTargets: jest.fn() };
+    const wake = { runOne: jest.fn() };
+    const service = new Mt5SyncService(
+      db, cipher as never, bridge([{ page: { hasMore: true, nextCursor: 'next', bytes: 100 } }]) as never,
+      producer as never, wake as never,
+    );
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'in_progress' });
+    expect(producer.dirtyTargets).not.toHaveBeenCalled();
+    expect(wake.runOne).not.toHaveBeenCalled();
+  });
+
+  it('durably enqueues final closed targets before releasing the lease and isolates a failed wake', async () => {
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    const { db, state } = statefulDb();
+    db.trade.findMany.mockImplementation(async ({ where }: any) => where.closedAt
+      ? [{ id: 'closed-trade', updatedAt: new Date(1), openedAt: new Date(1), closedAt: new Date(2), status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: null, entryPrice: null, exitPrice: null, riskAmount: null, riskPercent: null, initialPlanId: null, initialPlanMetricContractVersion: null }]
+      : []);
+    const producer = {
+      dirtyTargets: jest.fn(async () => {
+        expect(state.status?.lastSuccessfulSnapshotMsc).toBeDefined();
+        expect(state.lease).toBeDefined();
+        return { queued: 1 };
+      }),
+    };
+    const wake = { runOne: jest.fn(async () => { throw new Error('crash after commit'); }) };
+    const service = new Mt5SyncService(db, cipher as never, bridge([{}]) as never, producer as never, wake as never);
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+      state: 'completed',
+      excursions: { mode: 'queued', queued: 1, deferred: 1, reasons: [{ reason: 'WORKER_WAKE_FAILED', count: 1 }] },
+    });
+    delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+    expect(producer.dirtyTargets).toHaveBeenCalledWith(
+      db, 'account-1', expect.any(BigInt), expect.arrayContaining([expect.objectContaining({ targetId: 'closed-trade', scope: 'TRADE' })]), 'SYNC_CHANGED',
+    );
+    expect(wake.runOne).toHaveBeenCalledTimes(1);
+    expect(state.lease).toBeUndefined();
+  });
+
   it('reconstructs a verified ledger from zero and projects the position entry seed', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([{ deals: [deposit, deal] }]);

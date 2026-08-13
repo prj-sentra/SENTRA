@@ -531,6 +531,15 @@ describe('TradeLogService initial-plan metric serialization', () => {
   });
 });
 describe('TradeLogService statistics helpers', () => {
+  it('conserves trade excursion statuses and bins successful and stale metrics', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const metric = { price: { mfe: { value: 4 }, mae: { value: -2 } }, percent: { mfe: { value: 2 }, mae: { value: -1 } }, unrealizedPnl: { mfe: { value: 10 }, mae: { value: -5 } }, captureRate: 50, rAvailability: 'available', r: { mfe: { value: 1 }, mae: { value: -.5 } } };
+    const samples = [{ trades: [{ id: 'current', excursion: { scope: 'trade', status: 'success', metrics: metric } }, { id: 'stale', excursion: { scope: 'trade', status: 'stale', metrics: metric } }, { id: 'failed', excursion: { scope: 'trade', status: 'failed' } }, { id: 'unsupported', excursion: { scope: 'trade', status: 'unsupported' } }, { id: 'missing' }] }];
+    const result = service.statsExcursions(samples, new Map(), 'trade');
+    expect(result.families[0].status).toEqual({ success: 1, stale: 1, failed: 1, unsupported: 1, missing: 1 });
+    expect(result.families[0].price.mfe.sampleCount).toBe(1);
+    expect(result.families[0].price.mfe.bins.reduce((sum: number, bin: any) => sum + bin.count, 0)).toBe(1);
+  });
   const preferences = {
     breakevenPercent: 0.1, timeZone: 'Asia/Seoul', tradingDayStartMinutes: 120,
     sessions: { asia: { startMinutes: 0, endMinutes: 1439 }, london: { startMinutes: 0, endMinutes: 1439 }, 'new-york': { startMinutes: 0, endMinutes: 1439 } },
@@ -699,5 +708,44 @@ describe('TradeLogService stats range and risk coverage', () => {
     expect(service.statsDrawdown([
       { id: 'loss', closedAt: '2026-01-01T00:00:00.000Z', realizedPnl: -100, seedBalance: 1000 },
     ], []).percent).toBeCloseTo(-10);
+  });
+  it('serializes only the literal persisted success DTO shape', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const at = new Date('2026-08-12T00:00:00.000Z');
+    const result = {
+      status: 'SUCCESS', attemptCalculationVersion: 3, attemptInputFingerprint: 'input', lastAttemptedAt: at,
+      successCalculationVersion: 3, successInputFingerprint: 'input', lastSucceededAt: at, rawFromMsc: 1n, rawToMsc: 2n,
+      displayFromAt: at, displayToAt: at, tickSnapshotToMsc: 2n, priceSource: 'mt5_copy_ticks_range', pathDigest: 'path', tickCount: 2, valuationVersion: 1,
+      valuationDigests: { accountCurrency: 'USD', digest: 'valuation' },
+      mfePrice: 3, mfePriceMarkPrice: 1.103, mfePriceOccurredAt: at, maePrice: -2, maePriceMarkPrice: 1.098, maePriceOccurredAt: at,
+      mfePercent: 3, mfePercentMarkPrice: 1.103, mfePercentOccurredAt: at, maePercent: -2, maePercentMarkPrice: 1.098, maePercentOccurredAt: at,
+      mfeUnrealizedPnl: 30, mfeUnrealizedPnlOccurredAt: at, maeUnrealizedPnl: -20, maeUnrealizedPnlOccurredAt: at,
+      mfeR: null, mfeROccurredAt: null, maeR: null, maeROccurredAt: null, captureRate: null,
+    };
+    expect(service.serializeExcursion(result)).toEqual({
+      scope: 'trade', status: 'success',
+      attempt: { calculationVersion: 3, inputFingerprint: 'input', attemptedAt: '2026-08-12T00:00:00.000Z' },
+      success: { calculationVersion: 3, inputFingerprint: 'input', succeededAt: '2026-08-12T00:00:00.000Z', priceSource: 'mt5_copy_ticks_range', rawRange: { fromMsc: 1, toMsc: 2 }, displayRange: { fromAt: '2026-08-12T00:00:00.000Z', toAt: '2026-08-12T00:00:00.000Z' }, tickSnapshotToMsc: 2, pathDigest: 'path', tickCount: 2, valuationVersion: 1, valuationDigest: 'valuation', accountCurrency: 'USD' },
+      metrics: { price: { mfe: { value: 3, occurredAt: '2026-08-12T00:00:00.000Z', markPrice: 1.103 }, mae: { value: -2, occurredAt: '2026-08-12T00:00:00.000Z', markPrice: 1.098 } }, percent: { mfe: { value: 3, occurredAt: '2026-08-12T00:00:00.000Z', markPrice: 1.103 }, mae: { value: -2, occurredAt: '2026-08-12T00:00:00.000Z', markPrice: 1.098 } }, unrealizedPnl: { mfe: { value: 30, occurredAt: '2026-08-12T00:00:00.000Z' }, mae: { value: -20, occurredAt: '2026-08-12T00:00:00.000Z' } }, rAvailability: 'risk_unavailable' },
+    });
+    expect(() => service.serializeExcursion({ ...result, lastSucceededAt: null })).toThrow('missing persisted provenance');
+    expect(service.serializeExcursion({
+      status: 'FAILED', attemptCalculationVersion: 4, attemptInputFingerprint: 'changed',
+      lastAttemptedAt: at, failureReason: 'MEMBERSHIP_MUTATED',
+    })).toEqual({
+      scope: 'trade', status: 'failed',
+      attempt: { calculationVersion: 4, inputFingerprint: 'changed', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'INPUT_CHANGED' },
+    });
+  });
+  it('uses only current successes and deterministic R-7 excursion distributions', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const success = (value: number, status: 'success' | 'stale' = 'success') => ({ scope: 'trade', status, attempt: {}, success: {}, metrics: { price: { mfe: { value }, mae: { value: -value } }, percent: { mfe: { value }, mae: { value: -value } }, unrealizedPnl: { mfe: { value }, mae: { value: -value } }, rAvailability: 'risk_unavailable' } });
+    const samples = [{ trades: [{ excursion: success(0) }, { excursion: success(10) }, { excursion: success(20) }, { excursion: success(30) }, { excursion: success(40) }, { excursion: success(50) }, { excursion: success(60) }, { excursion: success(70) }, { excursion: success(80) }, { excursion: success(90) }, { excursion: success(100) }, { excursion: success(999, 'stale') }] }];
+    const family = service.statsExcursions(samples, new Map(), 'trade').families[0];
+    expect(family).toMatchObject({ status: { success: 11, stale: 1, failed: 0, unsupported: 0, missing: 0 }, counts: { eligibleSuccessCount: 11 } });
+    expect(family.price.mfe).toMatchObject({ sampleCount: 11, q1: 25, q3: 75 });
+    expect(family.price.mfe.bins).toHaveLength(10);
+    const constant = service.statsExcursions([{ trades: [{ excursion: success(1) }, { excursion: success(1) }] }], new Map(), 'trade').families[0].price.mfe;
+    expect(constant.bins).toEqual([{ min: 1, max: 1, includeMax: true, count: 2 }]);
   });
 });

@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
 import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +22,38 @@ const METRIC_CONTRACT_VERSION = 1;
 const BALANCE_LEDGER_VERSION = 1;
 const FULL_HISTORY_FROM_MSC = 0;
 const INCREMENTAL_OVERLAP_MS = 72 * 60 * 60 * 1000;
+
+export const EXCURSION_WORK_PRODUCER = Symbol('EXCURSION_WORK_PRODUCER');
+export const EXCURSION_WORKER_WAKE = Symbol('EXCURSION_WORKER_WAKE');
+
+export type SyncExcursionTarget = {
+  scope: 'TRADE' | 'CAMPAIGN';
+  targetId: string;
+  generation: number;
+  baseInputFingerprint: string;
+  tickSnapshotToMsc: bigint;
+};
+
+export interface ExcursionWorkProducer {
+  dirtyTargets(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    snapshotToMsc: bigint,
+    targets: readonly SyncExcursionTarget[],
+    reason: string,
+  ): Promise<{ queued: number }>;
+}
+
+export interface ExcursionWorkerWake {
+  runOne(): Promise<Partial<{
+    processed: number;
+    succeeded: number;
+    stale: number;
+    failed: number;
+    deferred: number;
+    reasons: Array<{ reason: string; count: number }>;
+  }>>;
+}
 
 export function mt5DealReason(reason: number): TradeExitReason {
   switch (reason) {
@@ -73,6 +105,8 @@ export class Mt5SyncService {
     private readonly prisma: PrismaService,
     private readonly cipher: CredentialCipherService,
     private readonly bridge: Mt5BridgeClient,
+    @Optional() @Inject(EXCURSION_WORK_PRODUCER) private readonly excursionWorkProducer?: ExcursionWorkProducer,
+    @Optional() @Inject(EXCURSION_WORKER_WAKE) private readonly excursionWorkerWake?: ExcursionWorkerWake,
   ) {}
 
   async sync(ownerId: string, accountId: string): Promise<Mt5SyncResponse> {
@@ -204,9 +238,21 @@ export class Mt5SyncService {
           create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, lastReceivedDealCount: payload.deals.length },
           update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
+        const excursions = this.excursionWorkProducer
+          ? await this.enqueueFinalExcursionWork(tx, accountId, BigInt(snapshotToMsc), 'SYNC_CHANGED')
+          : {
+            mode: 'disabled' as const,
+            queued: 0,
+            processed: 0,
+            succeeded: 0,
+            stale: 0,
+            failed: 0,
+            deferred: 0,
+            reasons: [],
+          };
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
-        return { importedCount: projected, ledger };
+        return { importedCount: projected, ledger, excursions };
       });
         importedCount += pageResult.importedCount;
         if (payload.page.hasMore) {
@@ -219,8 +265,41 @@ export class Mt5SyncService {
           };
         }
         finalPayload = payload;
+        const queuedExcursions = pageResult.excursions ?? {
+          mode: 'disabled' as const, queued: 0, processed: 0, succeeded: 0,
+          stale: 0, failed: 0, deferred: 0, reasons: [],
+        };
+        let excursions: Mt5SyncResponse['excursions'] = queuedExcursions;
+        if (this.excursionWorkerWake && queuedExcursions.mode !== 'disabled') {
+          try {
+            const summary = await this.excursionWorkerWake.runOne();
+            excursions = {
+              mode: 'processed',
+              queued: queuedExcursions.queued,
+              processed: summary.processed ?? 0,
+              succeeded: summary.succeeded ?? 0,
+              stale: summary.stale ?? 0,
+              failed: summary.failed ?? 0,
+              deferred: summary.deferred ?? 0,
+              reasons: summary.reasons ?? [],
+            };
+          } catch {
+            // Work is durable before the lease is released; startup/periodic recovery retries it.
+            excursions = {
+              mode: 'queued',
+              queued: queuedExcursions.queued,
+              processed: 0,
+              succeeded: 0,
+              stale: 0,
+              failed: 0,
+              deferred: queuedExcursions.queued,
+              reasons: [{ reason: 'WORKER_WAKE_FAILED', count: 1 }],
+            };
+          }
+        }
         return {
           state: 'completed', accountId, importedCount, receivedCount, syncedAt: syncedAt.toISOString(),
+          excursions,
           balanceLedger: {
             status: pageResult.ledger!.verified ? 'verified' : 'diverged',
             currency: payload.account.currency, calculatedBalance: Number(pageResult.ledger!.calculatedBalance), currentBalance: Number(payload.account.currentBalance),
@@ -243,6 +322,66 @@ export class Mt5SyncService {
         : 'MT5 synchronization failed';
       return { state: 'failed', accountId, message };
     }
+  }
+
+  private async enqueueFinalExcursionWork(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    snapshotToMsc: bigint,
+    reason: string,
+  ): Promise<NonNullable<Mt5SyncResponse['excursions']>> {
+    if (process.env.MT5_EXCURSION_WRITE_ENABLED !== 'true') {
+      return { mode: 'disabled', queued: 0, processed: 0, succeeded: 0, stale: 0, failed: 0, deferred: 0, reasons: [] };
+    }
+    const trades = await tx.trade.findMany({
+      where: { mt5AccountId: accountId, closedAt: { not: null } },
+      select: {
+        id: true, updatedAt: true, openedAt: true, closedAt: true, status: true, side: true, symbol: true,
+        quantityLots: true, entryPrice: true, exitPrice: true, riskAmount: true, riskPercent: true,
+        initialPlanId: true, initialPlanMetricContractVersion: true,
+      },
+    });
+    const campaigns = await tx.tradeCampaign.findMany({
+      where: {
+        mt5AccountId: accountId,
+        memberships: { some: {}, every: { trade: { closedAt: { not: null } } } },
+      },
+      select: { id: true, version: true, updatedAt: true, rootTradeId: true },
+    });
+    const existing = await tx.excursionWorkItem.findMany({
+      where: { accountId, OR: [{ targetId: { in: trades.map((trade) => trade.id) } }, { targetId: { in: campaigns.map((campaign) => campaign.id) } }] },
+      select: { targetId: true, generation: true, baseInputFingerprint: true, tickSnapshotToMsc: true },
+    });
+    const previous = new Map(existing.map((work) => [work.targetId, work]));
+    const target = (scope: SyncExcursionTarget['scope'], targetId: string, basis: unknown): SyncExcursionTarget => {
+      const baseInputFingerprint = createHash('sha256').update(JSON.stringify(basis, (_, value) =>
+        typeof value === 'bigint' ? value.toString() : value,
+      )).digest('hex');
+      const prior = previous.get(targetId);
+      const unchanged = prior?.baseInputFingerprint === baseInputFingerprint && prior.tickSnapshotToMsc === snapshotToMsc;
+      return {
+        scope,
+        targetId,
+        generation: unchanged ? prior!.generation : (prior?.generation ?? 0) + 1,
+        baseInputFingerprint,
+        tickSnapshotToMsc: snapshotToMsc,
+      };
+    };
+    const targets = [
+      ...trades.map((trade) => target('TRADE', trade.id, trade)),
+      ...campaigns.map((campaign) => target('CAMPAIGN', campaign.id, campaign)),
+    ];
+    const result = await this.excursionWorkProducer!.dirtyTargets(tx, accountId, snapshotToMsc, targets, reason);
+    return {
+      mode: 'queued',
+      queued: result.queued,
+      processed: 0,
+      succeeded: 0,
+      stale: 0,
+      failed: 0,
+      deferred: 0,
+      reasons: [],
+    };
   }
 
   private async claim(ownerId: string, accountId: string) {
@@ -745,6 +884,15 @@ export class Mt5SyncService {
         if (remaining) continue;
         await this.mergeEmptyCampaign(tx, canonical, campaign);
         deletedCampaigns += 1;
+      }
+    }
+    if (moved && this.excursionWorkProducer) {
+      const status = await tx.mt5SyncStatus.findUnique({
+        where: { accountId },
+        select: { lastSuccessfulSnapshotMsc: true },
+      });
+      if (status?.lastSuccessfulSnapshotMsc != null) {
+        await this.enqueueFinalExcursionWork(tx, accountId, status.lastSuccessfulSnapshotMsc, 'RECLASSIFIED');
       }
     }
     return { moved, deletedCampaigns, conflicts };

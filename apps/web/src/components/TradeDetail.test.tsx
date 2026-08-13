@@ -16,6 +16,12 @@ const member = (id: string, baseTimeframe: string, complete = false) => ({
 const campaign = { id: 'campaign-1', rootTradeId: 'trade-1', analysis: { schemaVersion: 1, updatedAt: '2026-08-10T12:30:00.000Z', createdAt: '2026-08-10T11:00:00.000Z', primaryTrend: null, maTimeframes: {}, marketZoneEnabled: false, chartPatternObserved: false, retailPositionEnabled: false, fibonacciEnabled: false, economicIndicators: [] }, members: [member('trade-1', '1m'), member('trade-2', '5m', true)] } as any;
 
 describe('TradeDetail split execution ownership', () => {
+  it('labels stale excursion metrics with the failed recalculation reason', () => {
+    const excursion = { scope: 'trade', status: 'stale', attempt: { calculationVersion: 2, inputFingerprint: 'next', attemptedAt: '2026-08-11T00:00:00.000Z', failureReason: 'TICK_UNAVAILABLE' }, success: { calculationVersion: 1, inputFingerprint: 'prior', succeededAt: '2026-08-10T00:00:00.000Z', priceSource: 'mt5_copy_ticks_range', rawRange: { fromMsc: 1, toMsc: 2 }, displayRange: { fromAt: '2026-08-10T00:00:00.000Z', toAt: '2026-08-10T00:00:00.000Z' }, tickSnapshotToMsc: 2, pathDigest: 'path', tickCount: 2, valuationVersion: 1, valuationDigest: 'digest', accountCurrency: 'USD' }, metrics: { price: { mfe: { value: 3, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 3 }, mae: { value: -2, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 2 } }, percent: { mfe: { value: 3, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 3 }, mae: { value: -2, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 2 } }, unrealizedPnl: { mfe: { value: 30, occurredAt: '2026-08-10T00:00:00.000Z' }, mae: { value: -20, occurredAt: '2026-08-10T00:00:00.000Z' } }, rAvailability: 'risk_unavailable' } };
+    render(<TradeDetail campaign={{ ...campaign, members: [{ ...campaign.members[0], excursion }, campaign.members[1]] }} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
+    expect(screen.getByText(/상태: 오래됨 .* 재계산 TICK_UNAVAILABLE/)).toBeInTheDocument();
+    expect(screen.getByText(/캡처율 계산 불가/)).toBeInTheDocument();
+  });
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {
     const { container } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
     const desktop = container.querySelector('.desktop-trade-detail')!;

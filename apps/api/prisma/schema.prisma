@@ -118,6 +118,26 @@ enum Mt5BalanceLedgerStatus {
   DIVERGED
 }
 
+enum ExcursionStatus {
+  SUCCESS
+  STALE
+  FAILED
+  UNSUPPORTED
+}
+
+enum ExcursionScope {
+  TRADE
+  CAMPAIGN
+}
+
+enum ExcursionWorkState {
+  PENDING
+  CLAIMED
+  RETRY_WAIT
+  BLOCKED
+  CANCELLED
+}
+
 model Trade {
   id                        String                  @id @default(uuid())
   symbol                    String
@@ -165,6 +185,8 @@ model Trade {
   analysisArchives          TradeAnalysisArchive[]
   entry                     TradeEntry?
   exit                      TradeExit?
+  excursionResult           TradeExcursionResult?
+  excursionWorkItems        ExcursionWorkItem[]     @relation("ExcursionWorkTrade")
 
   @@unique([mt5ServerCanonical, mt5AccountLogin, mt5PositionId])
   @@index([mt5Server, mt5AccountLogin])
@@ -187,6 +209,8 @@ model TradeCampaign {
   memberships  CampaignMembership[]
   conflicts    CampaignConflict[]   @relation("ConflictResolvedCampaign")
   analysis      TradeCampaignAnalysis?
+  excursionResult TradeCampaignExcursionResult?
+  excursionWorkItems ExcursionWorkItem[] @relation("ExcursionWorkCampaign")
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
@@ -705,6 +729,7 @@ model Mt5Account {
   positionEntryPlans   Mt5PositionEntryPlan[]
   balanceEvents         Mt5AccountBalanceEvent[]
   balanceLedgerState    Mt5AccountBalanceLedgerState?
+  excursionWorkItems    ExcursionWorkItem[]
 
   @@unique([canonicalServer, accountLogin])
   @@index([ownerId, active])
@@ -720,4 +745,164 @@ model Mt5SyncLease {
 
   @@index([expiresAt])
   @@map("mt5_sync_leases")
+}
+
+model TradeExcursionResult {
+  tradeId                       String          @id @map("trade_id")
+  status                        ExcursionStatus
+  attemptCalculationVersion     Int             @map("attempt_calculation_version")
+  attemptInputFingerprint       String          @map("attempt_input_fingerprint")
+  lastAttemptedAt               DateTime        @map("last_attempted_at")
+  failureReason                 String?         @map("failure_reason")
+  successCalculationVersion     Int?            @map("success_calculation_version")
+  successInputFingerprint       String?         @map("success_input_fingerprint")
+  lastSucceededAt               DateTime?       @map("last_succeeded_at")
+  rawFromMsc                    BigInt?         @map("raw_from_msc")
+  rawToMsc                      BigInt?         @map("raw_to_msc")
+  displayFromAt                 DateTime?       @map("display_from_at")
+  displayToAt                   DateTime?       @map("display_to_at")
+  tickSnapshotToMsc             BigInt?         @map("tick_snapshot_to_msc")
+  priceSource                   String?         @map("price_source")
+  pathDigest                    String?         @map("path_digest")
+  tickCount                     Int?            @map("tick_count")
+  valuationVersion              Int?            @map("valuation_version")
+  valuationDigests              Json?           @map("valuation_digests")
+  portfolioMarkPolicy           String?         @map("portfolio_mark_policy")
+  mfePrice                      Decimal?        @map("mfe_price") @db.Decimal(65, 30)
+  mfePriceMarkPrice             Decimal?        @map("mfe_price_mark_price") @db.Decimal(65, 30)
+  mfePriceOccurredAt            DateTime?       @map("mfe_price_occurred_at")
+  maePrice                      Decimal?        @map("mae_price") @db.Decimal(65, 30)
+  maePriceMarkPrice             Decimal?        @map("mae_price_mark_price") @db.Decimal(65, 30)
+  maePriceOccurredAt            DateTime?       @map("mae_price_occurred_at")
+  mfePercent                    Decimal?        @map("mfe_percent") @db.Decimal(65, 30)
+  mfePercentMarkPrice           Decimal?        @map("mfe_percent_mark_price") @db.Decimal(65, 30)
+  mfePercentOccurredAt          DateTime?       @map("mfe_percent_occurred_at")
+  maePercent                    Decimal?        @map("mae_percent") @db.Decimal(65, 30)
+  maePercentMarkPrice           Decimal?        @map("mae_percent_mark_price") @db.Decimal(65, 30)
+  maePercentOccurredAt          DateTime?       @map("mae_percent_occurred_at")
+  mfeUnrealizedPnl              Decimal?        @map("mfe_unrealized_pnl") @db.Decimal(65, 30)
+  mfeUnrealizedPnlOccurredAt    DateTime?       @map("mfe_unrealized_pnl_occurred_at")
+  maeUnrealizedPnl              Decimal?        @map("mae_unrealized_pnl") @db.Decimal(65, 30)
+  maeUnrealizedPnlOccurredAt    DateTime?       @map("mae_unrealized_pnl_occurred_at")
+  mfeR                          Decimal?        @map("mfe_r") @db.Decimal(65, 30)
+  mfeROccurredAt                DateTime?       @map("mfe_r_occurred_at")
+  maeR                          Decimal?        @map("mae_r") @db.Decimal(65, 30)
+  maeROccurredAt                DateTime?       @map("mae_r_occurred_at")
+  captureRate                   Decimal?        @map("capture_rate") @db.Decimal(65, 30)
+  createdAt                     DateTime        @default(now()) @map("created_at")
+  updatedAt                     DateTime        @updatedAt @map("updated_at")
+  trade                         Trade           @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("trade_excursion_results")
+}
+
+model TradeCampaignExcursionResult {
+  campaignId                    String          @id @map("campaign_id")
+  status                        ExcursionStatus
+  attemptCalculationVersion     Int             @map("attempt_calculation_version")
+  attemptInputFingerprint       String          @map("attempt_input_fingerprint")
+  lastAttemptedAt               DateTime        @map("last_attempted_at")
+  failureReason                 String?         @map("failure_reason")
+  successCalculationVersion     Int?            @map("success_calculation_version")
+  successInputFingerprint       String?         @map("success_input_fingerprint")
+  lastSucceededAt               DateTime?       @map("last_succeeded_at")
+  rawFromMsc                    BigInt?         @map("raw_from_msc")
+  rawToMsc                      BigInt?         @map("raw_to_msc")
+  displayFromAt                 DateTime?       @map("display_from_at")
+  displayToAt                   DateTime?       @map("display_to_at")
+  tickSnapshotToMsc             BigInt?         @map("tick_snapshot_to_msc")
+  priceSource                   String?         @map("price_source")
+  pathDigest                    String?         @map("path_digest")
+  tickCount                     Int?            @map("tick_count")
+  valuationVersion              Int?            @map("valuation_version")
+  valuationDigests              Json?           @map("valuation_digests")
+  portfolioMarkPolicy           String?         @map("portfolio_mark_policy")
+  priceFamilyStatus             ExcursionStatus @map("price_family_status")
+  priceFamilyReason             String?         @map("price_family_reason")
+  pnlFamilyStatus               ExcursionStatus @map("pnl_family_status")
+  pnlFamilyReason               String?         @map("pnl_family_reason")
+  rAvailability                 String?         @map("r_availability")
+  mfePrice                      Decimal?        @map("mfe_price") @db.Decimal(65, 30)
+  mfePriceMarkPrice             Decimal?        @map("mfe_price_mark_price") @db.Decimal(65, 30)
+  mfePriceOccurredAt            DateTime?       @map("mfe_price_occurred_at")
+  maePrice                      Decimal?        @map("mae_price") @db.Decimal(65, 30)
+  maePriceMarkPrice             Decimal?        @map("mae_price_mark_price") @db.Decimal(65, 30)
+  maePriceOccurredAt            DateTime?       @map("mae_price_occurred_at")
+  mfePercent                    Decimal?        @map("mfe_percent") @db.Decimal(65, 30)
+  mfePercentMarkPrice           Decimal?        @map("mfe_percent_mark_price") @db.Decimal(65, 30)
+  mfePercentOccurredAt          DateTime?       @map("mfe_percent_occurred_at")
+  maePercent                    Decimal?        @map("mae_percent") @db.Decimal(65, 30)
+  maePercentMarkPrice           Decimal?        @map("mae_percent_mark_price") @db.Decimal(65, 30)
+  maePercentOccurredAt          DateTime?       @map("mae_percent_occurred_at")
+  mfeUnrealizedPnl              Decimal?        @map("mfe_unrealized_pnl") @db.Decimal(65, 30)
+  mfeUnrealizedPnlOccurredAt    DateTime?       @map("mfe_unrealized_pnl_occurred_at")
+  maeUnrealizedPnl              Decimal?        @map("mae_unrealized_pnl") @db.Decimal(65, 30)
+  maeUnrealizedPnlOccurredAt    DateTime?       @map("mae_unrealized_pnl_occurred_at")
+  mfeR                          Decimal?        @map("mfe_r") @db.Decimal(65, 30)
+  mfeROccurredAt                DateTime?       @map("mfe_r_occurred_at")
+  maeR                          Decimal?        @map("mae_r") @db.Decimal(65, 30)
+  maeROccurredAt                DateTime?       @map("mae_r_occurred_at")
+  captureRate                   Decimal?        @map("capture_rate") @db.Decimal(65, 30)
+  createdAt                     DateTime        @default(now()) @map("created_at")
+  updatedAt                     DateTime        @updatedAt @map("updated_at")
+  campaign                      TradeCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([priceFamilyStatus])
+  @@index([pnlFamilyStatus])
+  @@map("trade_campaign_excursion_results")
+}
+
+model ExcursionWorkItem {
+  id                   String             @id @default(uuid())
+  scope                ExcursionScope
+  targetId             String             @map("target_id")
+  tradeId              String?            @map("trade_id")
+  campaignId           String?            @map("campaign_id")
+  accountId            String             @map("account_id")
+  generation           Int                @default(1)
+  tickSnapshotToMsc    BigInt?            @map("tick_snapshot_to_msc")
+  baseInputFingerprint String             @map("base_input_fingerprint")
+  reason               String
+  state                ExcursionWorkState @default(PENDING)
+  notBefore            DateTime?          @map("not_before")
+  claimId              String?            @unique @map("claim_id")
+  claimExpiresAt       DateTime?          @map("claim_expires_at")
+  attemptCount         Int                @default(0) @map("attempt_count")
+  consecutiveFailures  Int                @default(0) @map("consecutive_failures")
+  manualRetryEpoch     Int                @default(0) @map("manual_retry_epoch")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  trade                Trade?             @relation("ExcursionWorkTrade", fields: [tradeId], references: [id], onDelete: Cascade)
+  campaign             TradeCampaign?     @relation("ExcursionWorkCampaign", fields: [campaignId], references: [id], onDelete: Cascade)
+  account              Mt5Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  progress             ExcursionWorkProgress?
+
+  @@unique([scope, targetId])
+  @@index([state, notBefore, claimExpiresAt])
+  @@index([accountId, state])
+  @@map("excursion_work_items")
+}
+
+model ExcursionWorkProgress {
+  workItemId             String            @id @map("work_item_id")
+  generation             Int
+  rawFromMsc             BigInt            @map("raw_from_msc")
+  rawToMsc               BigInt            @map("raw_to_msc")
+  nextRawFromMsc         BigInt            @map("next_raw_from_msc")
+  segmentNumber          Int               @default(0) @map("segment_number")
+  fifoState              Json              @map("fifo_state")
+  extremaState           Json              @map("extrema_state")
+  portfolioMarks         Json?             @map("portfolio_marks")
+  pathDigestState        String            @map("path_digest_state")
+  completedChunkCount    Int               @default(0) @map("completed_chunk_count")
+  completedPageCount     Int               @default(0) @map("completed_page_count")
+  completedTickCount     Int               @default(0) @map("completed_tick_count")
+  valuationDigests       Json              @map("valuation_digests")
+  checkpointedAt         DateTime          @default(now()) @map("checkpointed_at")
+  workItem               ExcursionWorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([generation])
+  @@map("excursion_work_progress")
 }

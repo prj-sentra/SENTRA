@@ -59,11 +59,11 @@ export interface PatchTradeCampaignMemoRequest { memo: string | null; expectedUp
 export interface TradeEntry { price: number; quantity?: number; occurredAt: string; note?: string; }
 export type TradeExitReason = 'target_hit' | 'stop_loss' | 'manual' | 'forced_liquidation' | 'automated' | 'rollover' | 'variation_margin' | 'split' | 'corporate_action' | 'other' | 'invalidated' | 'time_exit';
 export interface TradeExit { price: number; quantity?: number; occurredAt: string; reason?: TradeExitReason; note?: string; }
-export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; accountId: string; mt5Server?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: TradeExitReason; realizedPnl?: number; openedAt?: string; closedAt?: string; seedBalance?: number; plannedTakeProfitPrice?: number; plannedStopLossPrice?: number; riskAmount?: number; riskPercent?: number; returnPercent?: number; rr?: number; analysisComplete: boolean; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; createdAt: string; updatedAt: string; }
+export interface TradeRecord { id: string; symbol: string; side: TradeSide; status: TradeStatus; accountId: string; mt5Server?: string; thesis?: string; entryRationale?: string; exitRationale?: string; takeProfitCriteria?: string; stopLossCriteria?: string; note?: string; accountCurrency?: string; quantityLots?: number; entryPrice?: number; exitPrice?: number; exitReason?: TradeExitReason; realizedPnl?: number; openedAt?: string; closedAt?: string; seedBalance?: number; plannedTakeProfitPrice?: number; plannedStopLossPrice?: number; riskAmount?: number; riskPercent?: number; returnPercent?: number; rr?: number; analysisComplete: boolean; analysis: TradeAnalysis; entry?: TradeEntry; exit?: TradeExit; excursion?: TradeExcursionResult; createdAt: string; updatedAt: string; }
 export type CampaignMembershipSource = 'auto' | 'manual';
 export type CampaignHeadSource = 'AUTO' | 'MANUAL';
 export interface CampaignConflict { id: string; tradeId: string; candidateCampaignIds: string[]; status: 'unresolved' | 'resolved'; resolvedCampaignId?: string; createdAt: string; resolvedAt?: string; }
-export interface TradeCampaign { id: string; rootTradeId: string; headSource: CampaignHeadSource; campaignVersion: number; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; analysis: TradeCampaignAnalysis; members: TradeRecord[]; conflicts: CampaignConflict[]; }
+export interface TradeCampaign { id: string; rootTradeId: string; headSource: CampaignHeadSource; campaignVersion: number; tradingDate: string; accountId: string; symbol: string; side: TradeSide; status: 'open' | 'closed'; entryPrice?: number; exitPrice?: number; quantityLots: number; remainingQuantityLots: number; exitReason?: string; realizedPnl: number; openedAt: string; closedAt?: string; seedBalance?: number; images: TradeCampaignImage[]; memo?: string; updatedAt: string; analysisComplete: boolean; analysis: TradeCampaignAnalysis; members: TradeRecord[]; conflicts: CampaignConflict[]; excursion?: CampaignExcursionResult; }
 export interface SetTradeCampaignHeadRequest { tradeId: string; campaignVersion: number; }
 export interface UnsetTradeCampaignHeadRequest { campaignVersion: number; }
 export interface CampaignHeadMutationResponse { previousCampaign?: TradeCampaign; campaign: TradeCampaign; }
@@ -71,6 +71,46 @@ export interface TradeCalendarDay { date: string; tradeCount: number; campaignCo
 export interface TradeCampaignDateResponse { date?: string; previousDate?: string; nextDate?: string; campaigns: TradeCampaign[]; calendarDays: TradeCalendarDay[]; diagnostics: { missingOpenedAtTradeIds: string[] }; }
 export interface RelinkTradeCampaignRequest { accountId: string; tradeId: string; campaignId?: string; }
 export interface ResolveCampaignConflictRequest { accountId: string; campaignId: string; }
+export type ExcursionStatus = 'success' | 'stale' | 'failed' | 'unsupported';
+export type ExcursionFailureReason =
+  | 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE' | 'VALUATION_UNSUPPORTED' | 'UNSUPPORTED_DEAL_SEQUENCE'
+  | 'TICK_SOURCE_LIMIT' | 'TICK_CURSOR_EXPIRED' | 'TICK_CAPACITY' | 'TICK_DEADLINE'
+  | 'TICK_UNAVAILABLE' | 'TICK_INVALID_PAYLOAD' | 'TICK_IDENTITY_MISMATCH' | 'INPUT_CHANGED'
+  | 'ACCOUNT_DEACTIVATED' | 'NO_SYNC_SNAPSHOT';
+export type ExcursionSuccessfulAttempt = { calculationVersion: number; inputFingerprint: string; attemptedAt: string; failureReason?: never; };
+export type ExcursionFailedAttempt = { calculationVersion: number; inputFingerprint: string; attemptedAt: string; failureReason: ExcursionFailureReason; };
+export type PricedExcursionExtremum = { value: number; occurredAt: string; markPrice: number; };
+export type PortfolioExcursionExtremum = { value: number; occurredAt: string; };
+export type PricedExcursionPair = { mfe: PricedExcursionExtremum; mae: PricedExcursionExtremum; };
+export type PortfolioExcursionPair = { mfe: PortfolioExcursionExtremum; mae: PortfolioExcursionExtremum; };
+export type ExcursionSuccessProvenance = {
+  calculationVersion: number; inputFingerprint: string; succeededAt: string; priceSource: 'mt5_copy_ticks_range';
+  rawRange: { fromMsc: number; toMsc: number }; displayRange: { fromAt: string; toAt: string };
+  tickSnapshotToMsc: number; pathDigest: string; tickCount: number; valuationVersion: number;
+  valuationDigest: string; accountCurrency: string;
+};
+export type TradeExcursionMetrics =
+  | { price: PricedExcursionPair; percent: PricedExcursionPair; unrealizedPnl: PortfolioExcursionPair; captureRate?: number; rAvailability: 'available'; r: PortfolioExcursionPair; }
+  | { price: PricedExcursionPair; percent: PricedExcursionPair; unrealizedPnl: PortfolioExcursionPair; captureRate?: number; rAvailability: 'risk_unavailable'; r?: never; };
+export type ExcursionCurrent<T> = { status: 'success'; attempt: ExcursionSuccessfulAttempt; success: ExcursionSuccessProvenance; metrics: T; };
+export type ExcursionStale<T> = { status: 'stale'; attempt: ExcursionFailedAttempt; success: ExcursionSuccessProvenance; metrics: T; };
+export type ExcursionUnavailable = { status: 'failed' | 'unsupported'; attempt: ExcursionFailedAttempt; success?: never; metrics?: never; };
+export type TradeExcursionResult = { scope: 'trade' } & (ExcursionCurrent<TradeExcursionMetrics> | ExcursionStale<TradeExcursionMetrics> | ExcursionUnavailable);
+export type CampaignPriceMetrics = { price: PricedExcursionPair; percent: PricedExcursionPair; };
+export type CampaignPnlBaseMetrics = { unrealizedPnl: PortfolioExcursionPair; captureRate?: number; };
+export type CampaignPnlMetrics =
+  | (CampaignPnlBaseMetrics & { rAvailability: 'available'; r: PortfolioExcursionPair; })
+  | (CampaignPnlBaseMetrics & { rAvailability: 'risk_unavailable'; r?: never; });
+export type CampaignPriceFamily = { family: 'campaign_price' } & (ExcursionCurrent<CampaignPriceMetrics> | ExcursionStale<CampaignPriceMetrics> | ExcursionUnavailable);
+export type CampaignPnlFamily = { family: 'campaign_unrealized_pnl' } & (ExcursionCurrent<CampaignPnlMetrics> | ExcursionStale<CampaignPnlMetrics> | ExcursionUnavailable);
+export type CampaignExcursionResult = { scope: 'campaign'; price: CampaignPriceFamily; unrealizedPnl: CampaignPnlFamily; };
+export type ExcursionDistribution = { sampleCount: number; mean?: number; median?: number; q1?: number; q3?: number; bins: Array<{ min: number; max: number; includeMax: boolean; count: number }>; };
+export type ExcursionPair = { mfe: ExcursionDistribution; mae: ExcursionDistribution; };
+export type ExcursionStatusCounts = { success: number; stale: number; failed: number; missing: number; unsupported: number; };
+export type TradeExcursionStatsFamily = { family: 'trade'; status: ExcursionStatusCounts; price: ExcursionPair; percent: ExcursionPair; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; }; };
+export type CampaignPriceExcursionStatsFamily = { family: 'campaign_price'; status: ExcursionStatusCounts; price: ExcursionPair; percent: ExcursionPair; counts: { eligibleSuccessCount: number; heterogeneousUnavailableCount: number; }; };
+export type CampaignUnrealizedPnlExcursionStatsFamily = { family: 'campaign_unrealized_pnl'; status: ExcursionStatusCounts; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; valuationUnavailableCount: number; }; };
+export type TradeStatsExcursions = { unit: 'trade'; families: [TradeExcursionStatsFamily]; } | { unit: 'campaign'; families: [CampaignPriceExcursionStatsFamily, CampaignUnrealizedPnlExcursionStatsFamily]; };
 export type TradeStatsUnit = 'campaign' | 'trade';
 export type TradeStatsSession = 'asia' | 'london' | 'new-york' | 'off-session';
 export type TradeStatsOutcome = 'win' | 'loss' | 'breakeven' | 'unclassified';
@@ -96,7 +136,7 @@ export interface TradeStatsDistributionBin { key: string; min?: number; max?: nu
 export interface TradeStatsDistribution { metric: 'realizedPnl' | 'oneLotPnl' | 'r'; bins: TradeStatsDistributionBin[]; }
 export interface TradeStatsDiagnostics { missingSeedCount: number; missingSeedIds: string[]; unclassifiedCount: number; missingLotsCount: number; missingLotsIds: string[]; missingRiskCount: number; missingRiskIds: string[]; incompleteCampaignCount: number; incompleteCampaignIds: string[]; }
 export interface TradeStatsDrilldownRecord { id: string; targetId: string; type: 'campaign' | 'trade'; tradeIds: string[]; campaignId?: string; journalDate: string; accountId: string; symbol: string; side: TradeSide; openedAt: string; closedAt: string; realizedPnl: number; lots: number; outcome: TradeStatsOutcome; }
-export interface TradeStatsResponse { preferences: TradeStatsPreferences; query: TradeStatsQuery; overview: TradeStatsOverview; comparison: TradeStatsComparison; timeSeries: Record<TradeStatsGranularity, TradeStatsSeries>; breakdowns: Partial<Record<TradeStatsDimension, TradeStatsBucket[]>>; filterOptions?: Partial<Record<TradeStatsDimension, TradeStatsFilterOption[]>>; performanceGroups: TradeStatsPerformanceGroup[]; crosstab: TradeStatsCrosstab; drawdown: TradeStatsDrawdown; diagnostics: TradeStatsDiagnostics; drilldown: TradeStatsDrilldownRecord[]; }
+export interface TradeStatsResponse { preferences: TradeStatsPreferences; query: TradeStatsQuery; overview: TradeStatsOverview; comparison: TradeStatsComparison; timeSeries: Record<TradeStatsGranularity, TradeStatsSeries>; breakdowns: Partial<Record<TradeStatsDimension, TradeStatsBucket[]>>; filterOptions?: Partial<Record<TradeStatsDimension, TradeStatsFilterOption[]>>; performanceGroups: TradeStatsPerformanceGroup[]; crosstab: TradeStatsCrosstab; drawdown: TradeStatsDrawdown; diagnostics: TradeStatsDiagnostics; drilldown: TradeStatsDrilldownRecord[]; excursions?: TradeStatsExcursions; }
 export interface TradeLogAssistantActionPatchAnalysis { type: 'patch_trade_analysis'; tradeId: string; payload: PatchTradeAnalysisRequest; }
 export type TradeLogAssistantAction = TradeLogAssistantActionPatchAnalysis;
 export interface TradeLogAssistantActionsRequest { accountId: string; rawText: string; source: 'telegram' | 'manual' | 'api'; actions: TradeLogAssistantAction[]; }
@@ -162,6 +202,11 @@ export interface Mt5SyncResponse {
     mode: 'bootstrap' | 'incremental';
     snapshotToMsc: number;
     pageCursor?: string;
+  };
+  excursions?: {
+    mode: 'disabled' | 'bridge_incompatible' | 'queued' | 'processed';
+    queued: number; processed: number; succeeded: number; stale: number; failed: number; deferred: number;
+    reasons: Array<{ reason: string; count: number }>;
   };
   syncedAt?: string;
   balanceLedger?: {

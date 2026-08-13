@@ -1,0 +1,12 @@
+services:
+  api:
+    image: ${API_ROLLBACK_IMAGE:?API_ROLLBACK_IMAGE must be a digest-pinned image}
+    build: !reset null
+    environment:
+      MFE_MAE_WRITE_ENABLED: "false"
+      MT5_EXCURSION_WRITE_ENABLED: "false"
+      MT5_EXCURSION_WORKER_ENABLED: "false"
+      MFE_MAE_BACKFILL_ENABLED: "false"
+  web:
+    image: ${WEB_ROLLBACK_IMAGE:?WEB_ROLLBACK_IMAGE must be a digest-pinned image}
+    build: !reset null

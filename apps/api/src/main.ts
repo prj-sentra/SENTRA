@@ -9,6 +9,7 @@ async function bootstrap() {
     throw new Error('WEB_ORIGIN must be an exact origin and use HTTPS in production');
   }
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   if (process.env.NODE_ENV === 'production') {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
   }

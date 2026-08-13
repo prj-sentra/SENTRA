@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [[ "${1:-}" == "--rollback" ]]; then
+  echo "Use scripts/rollback-mfe-mae.sh for digest-pinned rollback." >&2
+  exit 2
+fi
+
 if [[ ! -f .env ]]; then
   echo "Production deployment requires $ROOT_DIR/.env" >&2
   exit 1

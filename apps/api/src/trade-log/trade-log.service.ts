@@ -22,6 +22,10 @@ import type {
   TradeStatsQuery,
   TradeStatsResponse,
   TradeStatsSession,
+  TradeStatsExcursions,
+  TradeExcursionResult,
+  CampaignExcursionResult,
+  ExcursionFailureReason,
   UnsetTradeCampaignHeadRequest,
 } from '@trading-journal/shared';
 import {
@@ -36,12 +40,49 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnedMt5Account } from '../mt5-accounts/mt5-account-lock';
+
+const EXCURSION_FAILURE_REASON_MAP: Record<string, ExcursionFailureReason> = {
+  HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE: 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE',
+  UNSUPPORTED_VALUATION: 'VALUATION_UNSUPPORTED',
+  UNSUPPORTED_TIMELINE: 'UNSUPPORTED_DEAL_SEQUENCE',
+  UNSUPPORTED_REVERSAL: 'UNSUPPORTED_DEAL_SEQUENCE',
+  RISK_UNAVAILABLE: 'UNSUPPORTED_DEAL_SEQUENCE',
+  INVALID_TICK_PATH: 'TICK_INVALID_PAYLOAD',
+  TICK_SOURCE_LIMIT: 'TICK_SOURCE_LIMIT',
+  TICK_CURSOR_EXPIRED: 'TICK_CURSOR_EXPIRED',
+  TICK_CAPACITY: 'TICK_CAPACITY',
+  TICK_DEADLINE: 'TICK_DEADLINE',
+  WORKER_DEADLINE: 'TICK_DEADLINE',
+  WORKER_SHUTDOWN: 'TICK_DEADLINE',
+  TICK_UNAVAILABLE: 'TICK_UNAVAILABLE',
+  TRANSIENT_BRIDGE_FAILURE: 'TICK_UNAVAILABLE',
+  TICK_INVALID_PAYLOAD: 'TICK_INVALID_PAYLOAD',
+  CALCULATION_FAILURE: 'TICK_INVALID_PAYLOAD',
+  TICK_IDENTITY_MISMATCH: 'TICK_IDENTITY_MISMATCH',
+  INPUT_CHANGED: 'INPUT_CHANGED',
+  SYNC_CHANGED: 'INPUT_CHANGED',
+  RECLASSIFIED: 'INPUT_CHANGED',
+  INPUT_MUTATED: 'INPUT_CHANGED',
+  MEMBER_INPUT_MUTATED: 'INPUT_CHANGED',
+  MEMBERSHIP_MUTATED: 'INPUT_CHANGED',
+  ACCOUNT_MUTATED: 'INPUT_CHANGED',
+  stale: 'INPUT_CHANGED',
+  ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
+  NO_SYNC_SNAPSHOT: 'NO_SYNC_SNAPSHOT',
+};
+
+function publicExcursionFailureReason(reason: unknown): ExcursionFailureReason {
+  if (typeof reason !== 'string' || !(reason in EXCURSION_FAILURE_REASON_MAP)) {
+    throw new Error('Excursion attempt has an unsupported failure reason');
+  }
+  return EXCURSION_FAILURE_REASON_MAP[reason];
+}
 import { validateTradeAnalysisPatchRequest, validateTradeCampaignAnalysisPatchRequest, validateTradeCampaignReviewPatchRequest } from './trade-log.validation';
 import { calculateExecutionBasedMetrics, calculateTradePlanMetrics } from './trade-plan-metrics';
 
 export interface TradeScopeInput { accountId?: string; }
 
-const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, initialPlan: true, analysis: true, campaignMembership: { include: { campaign: true } } } });
+const tradeWithRelations = Prisma.validator<Prisma.TradeDefaultArgs>()({ include: { entry: true, exit: true, initialPlan: true, analysis: true, excursionResult: true, campaignMembership: { include: { campaign: { include: { excursionResult: true } } } } } });
 type TradeWithRelations = Prisma.TradeGetPayload<typeof tradeWithRelations>;
 const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>()({
   include: {
@@ -50,6 +91,7 @@ const campaignWithRelations = Prisma.validator<Prisma.TradeCampaignDefaultArgs>(
     memberships: { include: { trade: { include: tradeWithRelations.include } }, orderBy: { createdAt: 'asc' } },
     conflicts: { orderBy: { createdAt: 'asc' } },
     images: { where: { publishedAt: { not: null } }, orderBy: [{ position: 'asc' }, { id: 'asc' }] },
+    excursionResult: true,
   },
 });
 type CampaignWithRelations = Prisma.TradeCampaignGetPayload<typeof campaignWithRelations>;
@@ -479,8 +521,47 @@ export class TradeLogService {
       crosstab: { rowDimension: normalized.rowDimension ?? 'symbol', columnDimension: normalized.columnDimension ?? 'session', ...crosstab },
       drawdown,
       diagnostics,
+      excursions: this.statsExcursions(filtered, new Map(allTrades.map((trade) => [trade.id, trade])), normalized.unit ?? 'campaign'),
       drilldown: filtered.map((sample) => ({ id: sample.id, targetId: sample.campaignId ?? sample.id, type: sample.type, tradeIds: sample.trades.map((trade) => trade.id), campaignId: sample.campaignId, journalDate: this.seoulDate(new Date(sample.openedAt)), accountId: sample.trades[0].accountId, symbol: sample.trades[0].symbol, side: sample.trades[0].side, openedAt: sample.openedAt, closedAt: sample.closedAt, realizedPnl: sample.realizedPnl, lots: sample.lots, outcome: this.statsOutcome(sample, preferences.breakevenPercent) })),
     };
+  }
+  private statsExcursions(samples: StatsSample[], raw: Map<string, TradeWithRelations>, unit: 'campaign' | 'trade'): TradeStatsExcursions {
+    const distribution = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const round = (value: number) => new Prisma.Decimal(value).toDecimalPlaces(8, Prisma.Decimal.ROUND_HALF_UP).toNumber();
+      const percentile = (p: number) => {
+        if (!sorted.length) return undefined;
+        const position = (sorted.length - 1) * p;
+        const lower = Math.floor(position), upper = Math.ceil(position);
+        return round(sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower));
+      };
+      if (!sorted.length) return { sampleCount: 0, bins: [] };
+      const min = sorted[0], max = sorted[sorted.length - 1];
+      if (min === max) return { sampleCount: sorted.length, mean: round(min), median: round(min), q1: round(min), q3: round(min), bins: [{ min: round(min), max: round(max), includeMax: true, count: sorted.length }] };
+      const width = (max - min) / 10;
+      const bins = Array.from({ length: 10 }, (_, index) => ({ min: round(min + width * index), max: round(index === 9 ? max : min + width * (index + 1)), includeMax: index === 9, count: 0 }));
+      for (const value of sorted) bins[Math.min(9, Math.floor((value - min) / width))].count++;
+      return { sampleCount: sorted.length, mean: round(sorted.reduce((sum, value) => sum + value, 0) / sorted.length), median: percentile(.5), q1: percentile(.25), q3: percentile(.75), bins };
+    };
+    const pair = (items: Array<{ mfe: number; mae: number }>) => ({ mfe: distribution(items.map((item) => item.mfe)), mae: distribution(items.map((item) => item.mae)) });
+    const status = (items: Array<any>) => ({ success: items.filter((item) => item?.status === 'success').length, stale: items.filter((item) => item?.status === 'stale').length, failed: items.filter((item) => item?.status === 'failed').length, unsupported: items.filter((item) => item?.status === 'unsupported').length, missing: items.filter((item) => !item).length });
+    const metricPair = (items: any[], family: string) => pair(items.filter((item) => item?.metrics?.[family]).map((item) => ({ mfe: item.metrics[family].mfe.value, mae: item.metrics[family].mae.value })));
+    const selected = unit === 'trade'
+      ? samples.flatMap((sample) => sample.trades.map((trade) => trade.excursion))
+      : samples.map((sample) => raw.get(sample.trades[0].id)?.campaignMembership?.campaign.excursionResult ? this.serializeCampaignExcursion(raw.get(sample.trades[0].id)!.campaignMembership!.campaign.excursionResult) : undefined);
+    if (unit === 'trade') {
+      const values = selected as Array<TradeExcursionResult | undefined>;
+      const current = values.filter((value): value is Extract<TradeExcursionResult, { status: 'success' }> => value?.status === 'success');
+      return { unit: 'trade', families: [{ family: 'trade', status: status(values), price: metricPair(current, 'price'), percent: metricPair(current, 'percent'), unrealizedPnl: metricPair(current, 'unrealizedPnl'), r: metricPair(current.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(current.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), counts: { eligibleSuccessCount: current.length, riskUnavailableCount: current.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: current.filter((value) => value.metrics.captureRate !== undefined).length } }] };
+    }
+    const values = selected as Array<CampaignExcursionResult | undefined>;
+    const price = values.map((value) => value?.price), pnl = values.map((value) => value?.unrealizedPnl);
+    const priceCurrent: any[] = price.filter((value) => value?.status === 'success');
+    const pnlCurrent: any[] = pnl.filter((value) => value?.status === 'success');
+    return { unit: 'campaign', families: [
+      { family: 'campaign_price', status: status(price), price: metricPair(priceCurrent, 'price'), percent: metricPair(priceCurrent, 'percent'), counts: { eligibleSuccessCount: priceCurrent.length, heterogeneousUnavailableCount: price.filter((value) => value?.attempt.failureReason === 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE').length } },
+      { family: 'campaign_unrealized_pnl', status: status(pnl), unrealizedPnl: metricPair(pnlCurrent, 'unrealizedPnl'), r: metricPair(pnlCurrent.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(pnlCurrent.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), counts: { eligibleSuccessCount: pnlCurrent.length, riskUnavailableCount: pnlCurrent.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: pnlCurrent.filter((value) => value.metrics.captureRate !== undefined).length, valuationUnavailableCount: pnl.filter((value) => value?.attempt.failureReason === 'VALUATION_UNSUPPORTED').length } },
+    ] };
   }
   async getStatsPreferences(ownerId: string): Promise<TradeStatsPreferences> {
     const preference = await this.prisma.statisticsPreference.upsert({ where: { userId: ownerId }, create: { userId: ownerId }, update: {} });
@@ -1196,7 +1277,88 @@ export class TradeLogService {
         createdAt: conflict.createdAt.toISOString(),
         resolvedAt: conflict.resolvedAt?.toISOString(),
       })),
+      excursion: campaign.excursionResult ? this.serializeCampaignExcursion(campaign.excursionResult) : undefined,
     };
+  }
+  private serializeExcursionSuccess(result: any) {
+    const required = [
+      'successCalculationVersion', 'successInputFingerprint', 'lastSucceededAt', 'rawFromMsc', 'rawToMsc',
+      'displayFromAt', 'displayToAt', 'tickSnapshotToMsc', 'priceSource', 'pathDigest', 'tickCount', 'valuationVersion', 'valuationDigests',
+    ];
+    if (required.some((key) => result[key] === null || result[key] === undefined)) throw new Error('Excursion success result is missing persisted provenance');
+    if (result.priceSource !== 'mt5_copy_ticks_range') throw new Error('Excursion success result has an unsupported persisted price source');
+    const valuationDigests = result.valuationDigests;
+    const accountCurrency = typeof valuationDigests === 'object' && valuationDigests !== null && typeof valuationDigests.accountCurrency === 'string'
+      ? valuationDigests.accountCurrency
+      : undefined;
+    if (!accountCurrency) throw new Error('Excursion success result is missing account currency provenance');
+    const valuationDigest = typeof valuationDigests === 'object' && valuationDigests !== null && typeof valuationDigests.digest === 'string'
+      ? valuationDigests.digest
+      : undefined;
+    if (!valuationDigest) throw new Error('Excursion success result is missing valuation digest provenance');
+    return {
+      calculationVersion: result.successCalculationVersion,
+      inputFingerprint: result.successInputFingerprint,
+      succeededAt: result.lastSucceededAt.toISOString(),
+      priceSource: result.priceSource,
+      rawRange: { fromMsc: Number(result.rawFromMsc), toMsc: Number(result.rawToMsc) },
+      displayRange: { fromAt: result.displayFromAt.toISOString(), toAt: result.displayToAt.toISOString() },
+      tickSnapshotToMsc: Number(result.tickSnapshotToMsc),
+      pathDigest: result.pathDigest,
+      tickCount: result.tickCount,
+      valuationVersion: result.valuationVersion,
+      valuationDigest,
+      accountCurrency,
+    };
+  }
+  private serializeExcursion(result: any): TradeExcursionResult {
+    const successfulAttempt = { calculationVersion: result.attemptCalculationVersion, inputFingerprint: result.attemptInputFingerprint, attemptedAt: result.lastAttemptedAt.toISOString() };
+    const failedAttempt = () => {
+      if (!result.failureReason) throw new Error('Excursion failed attempt is missing a failure reason');
+      return { ...successfulAttempt, failureReason: publicExcursionFailureReason(result.failureReason) };
+    };
+    const attempt = result.status === 'SUCCESS' ? successfulAttempt : failedAttempt();
+    if (result.status === 'FAILED' || result.status === 'UNSUPPORTED') return { scope: 'trade', status: result.status.toLowerCase(), attempt } as TradeExcursionResult;
+    const metricFields = ['mfePrice', 'mfePriceMarkPrice', 'mfePriceOccurredAt', 'maePrice', 'maePriceMarkPrice', 'maePriceOccurredAt', 'mfePercent', 'mfePercentMarkPrice', 'mfePercentOccurredAt', 'maePercent', 'maePercentMarkPrice', 'maePercentOccurredAt', 'mfeUnrealizedPnl', 'mfeUnrealizedPnlOccurredAt', 'maeUnrealizedPnl', 'maeUnrealizedPnlOccurredAt'];
+    if (metricFields.some((key) => result[key] === null || result[key] === undefined)) throw new Error('Excursion success result is missing persisted metrics');
+    if ((result.mfeR === null) !== (result.maeR === null) || (result.mfeR !== null && (result.mfeROccurredAt === null || result.maeROccurredAt === null))) throw new Error('Excursion success result has incomplete R metrics');
+    const extremum = (value: any, occurredAt: Date, markPrice?: any) => markPrice === undefined ? { value: Number(value), occurredAt: occurredAt.toISOString() } : { value: Number(value), occurredAt: occurredAt.toISOString(), markPrice: Number(markPrice) };
+    const priced = (mfe: any, mfeMark: any, mfeAt: Date, mae: any, maeMark: any, maeAt: Date) => ({ mfe: extremum(mfe, mfeAt, mfeMark), mae: extremum(mae, maeAt, maeMark) });
+    const portfolio = (mfe: any, mfeAt: Date, mae: any, maeAt: Date) => ({ mfe: extremum(mfe, mfeAt), mae: extremum(mae, maeAt) });
+    const metrics: any = { price: priced(result.mfePrice, result.mfePriceMarkPrice, result.mfePriceOccurredAt, result.maePrice, result.maePriceMarkPrice, result.maePriceOccurredAt), percent: priced(result.mfePercent, result.mfePercentMarkPrice, result.mfePercentOccurredAt, result.maePercent, result.maePercentMarkPrice, result.maePercentOccurredAt), unrealizedPnl: portfolio(result.mfeUnrealizedPnl, result.mfeUnrealizedPnlOccurredAt, result.maeUnrealizedPnl, result.maeUnrealizedPnlOccurredAt), ...(result.captureRate === null ? {} : { captureRate: Number(result.captureRate) }), rAvailability: result.mfeR === null || result.maeR === null ? 'risk_unavailable' : 'available' };
+    if (metrics.rAvailability === 'available') metrics.r = portfolio(result.mfeR, result.mfeROccurredAt, result.maeR, result.maeROccurredAt);
+    if (result.status !== 'SUCCESS' && result.status !== 'STALE') throw new Error(`Unsupported excursion status: ${result.status}`);
+    return { scope: 'trade', status: result.status.toLowerCase(), attempt, success: this.serializeExcursionSuccess(result), metrics } as TradeExcursionResult;
+  }
+  private serializeCampaignExcursion(result: any): CampaignExcursionResult {
+    const family = (name: 'price' | 'unrealizedPnl', status: string, reason: string | null) => {
+      const unavailable = status === 'FAILED' || status === 'UNSUPPORTED';
+      const successfulAttempt = { calculationVersion: result.attemptCalculationVersion, inputFingerprint: result.attemptInputFingerprint, attemptedAt: result.lastAttemptedAt.toISOString() };
+      if (unavailable) {
+        if (!reason) throw new Error('Campaign excursion failed family is missing a failure reason');
+        return { family: name === 'price' ? 'campaign_price' : 'campaign_unrealized_pnl', status: status.toLowerCase(), attempt: { ...successfulAttempt, failureReason: publicExcursionFailureReason(reason) } };
+      }
+      if (status !== 'SUCCESS' && status !== 'STALE') throw new Error(`Unsupported campaign excursion status: ${status}`);
+      if (status === 'STALE' && !reason) throw new Error('Campaign excursion stale family is missing a failure reason');
+      const extremum = (value: any, occurredAt: Date, markPrice?: any) => markPrice === undefined ? { value: Number(value), occurredAt: occurredAt.toISOString() } : { value: Number(value), occurredAt: occurredAt.toISOString(), markPrice: Number(markPrice) };
+      const priced = (mfe: any, mfeMark: any, mfeAt: Date, mae: any, maeMark: any, maeAt: Date) => ({ mfe: extremum(mfe, mfeAt, mfeMark), mae: extremum(mae, maeAt, maeMark) });
+      const portfolio = (mfe: any, mfeAt: Date, mae: any, maeAt: Date) => ({ mfe: extremum(mfe, mfeAt), mae: extremum(mae, maeAt) });
+      const required = name === 'price'
+        ? ['mfePrice', 'mfePriceMarkPrice', 'mfePriceOccurredAt', 'maePrice', 'maePriceMarkPrice', 'maePriceOccurredAt', 'mfePercent', 'mfePercentMarkPrice', 'mfePercentOccurredAt', 'maePercent', 'maePercentMarkPrice', 'maePercentOccurredAt']
+        : ['mfeUnrealizedPnl', 'mfeUnrealizedPnlOccurredAt', 'maeUnrealizedPnl', 'maeUnrealizedPnlOccurredAt'];
+      if (required.some((key) => result[key] === null || result[key] === undefined)) throw new Error(`Campaign excursion ${name} family is missing persisted metrics`);
+      if (name === 'unrealizedPnl' && ((result.mfeR === null) !== (result.maeR === null) || (result.mfeR !== null && (result.mfeROccurredAt === null || result.maeROccurredAt === null)))) throw new Error('Campaign excursion unrealized PnL family has incomplete R metrics');
+      const metrics = name === 'price'
+        ? { price: priced(result.mfePrice, result.mfePriceMarkPrice, result.mfePriceOccurredAt, result.maePrice, result.maePriceMarkPrice, result.maePriceOccurredAt), percent: priced(result.mfePercent, result.mfePercentMarkPrice, result.mfePercentOccurredAt, result.maePercent, result.maePercentMarkPrice, result.maePercentOccurredAt) }
+        : {
+          unrealizedPnl: portfolio(result.mfeUnrealizedPnl, result.mfeUnrealizedPnlOccurredAt, result.maeUnrealizedPnl, result.maeUnrealizedPnlOccurredAt),
+          ...(result.captureRate === null ? {} : { captureRate: Number(result.captureRate) }),
+          rAvailability: result.mfeR === null || result.maeR === null ? 'risk_unavailable' : 'available',
+          ...(result.mfeR === null || result.maeR === null ? {} : { r: portfolio(result.mfeR, result.mfeROccurredAt, result.maeR, result.maeROccurredAt) }),
+        };
+      return { family: name === 'price' ? 'campaign_price' : 'campaign_unrealized_pnl', status: status.toLowerCase(), attempt: status === 'STALE' ? { ...successfulAttempt, failureReason: publicExcursionFailureReason(reason) } : successfulAttempt, success: this.serializeExcursionSuccess(result), metrics };
+    };
+    return { scope: 'campaign', price: family('price', result.priceFamilyStatus, result.priceFamilyReason), unrealizedPnl: family('unrealizedPnl', result.pnlFamilyStatus, result.pnlFamilyReason) } as CampaignExcursionResult;
   }
   private executionAnalysisComplete(analysis: TradeWithRelations['analysis']): boolean {
     if (!analysis?.baseTimeframe) return false;
@@ -1286,6 +1448,7 @@ export class TradeLogService {
         otherViolation: optional(analysis.otherViolation),
         createdAt: analysis.createdAt.toISOString(), updatedAt: analysis.updatedAt.toISOString(),
       },
+      excursion: trade.excursionResult ? this.serializeExcursion(trade.excursionResult) : undefined,
       createdAt: trade.createdAt.toISOString(), updatedAt: trade.updatedAt.toISOString(),
     };
   }

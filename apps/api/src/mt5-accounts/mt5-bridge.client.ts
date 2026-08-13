@@ -1,4 +1,5 @@
 import { BadGatewayException, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 
 export interface Mt5BridgeRequest {
   contractVersion: 5;
@@ -90,11 +91,60 @@ const STRING_FIELDS = ['symbol', 'comment', 'externalId'] as const;
 
 const MAX_DECIMAL_PRECISION = 65;
 const MAX_DECIMAL_SCALE = 30;
+const TICK_MAX_RESPONSE_BYTES = 900_000;
+const TICK_MAX_REQUEST_BYTES = 8_192;
+const TICK_MAX_CURSOR_CHARS = 2_048;
+const TICK_MAX_PAGE_SIZE = 1_000;
+const TICK_MAX_CHUNK_SPAN_MSC = 300_000;
+const SHA256 = /^[a-f0-9]{64}$/;
 
 export class Mt5BridgeUnauthorized extends BadGatewayException {
   constructor() {
     super('MT5 bridge rejected its bearer token');
   }
+}
+
+export type Mt5BridgeTickErrorCategory =
+  | 'BRIDGE_INCOMPATIBLE' | 'TICK_INVALID_REQUEST' | 'TICK_CURSOR_EXPIRED'
+  | 'MT5_BRIDGE_UNAUTHORIZED' | 'TICK_IDENTITY_MISMATCH' | 'TICK_SOURCE_LIMIT'
+  | 'VALUATION_UNSUPPORTED' | 'TICK_CAPACITY' | 'TICK_DEADLINE'
+  | 'TICK_UNAVAILABLE' | 'TICK_INVALID_PAYLOAD';
+
+export class Mt5BridgeTickError extends BadGatewayException {
+  constructor(readonly category: Mt5BridgeTickErrorCategory, message: string) {
+    super(message);
+  }
+}
+
+export interface Mt5BridgeRequestOptions {
+  signal?: AbortSignal;
+  deadlineMsc?: number;
+}
+
+export interface Mt5BridgeCapabilities {
+  contractVersion: 5;
+  sync: { bootstrap: true; incremental: true; fixedSnapshot: true };
+  ticks: {
+    available: boolean; cursorNamespace: 'ticks-v1'; maxRequestBytes: number; maxCursorChars: number;
+    pageSize: { min: number; max: number }; maxResponseBytes: number; maxChunkSpanMsc: number;
+    maxChunkTicks: number; maxSnapshotBytes: number; snapshotTtlSeconds: number;
+    cacheMaxEntries: number; cacheMaxBytes: number; valuationVersion: 1; supportedCalculationModes: string[];
+  };
+}
+
+export interface Mt5BridgeTicksRequest {
+  contractVersion: 5; server: string; accountLogin: number; password: string; symbol: string;
+  rawRange: { fromMsc: number; toMsc: number }; snapshotToMsc: number; pageSize?: number; pageCursor?: string;
+}
+export interface Mt5BridgeTick {
+  sequence: number; timeMsc: number; bid: string; ask: string;
+}
+export interface Mt5BridgeTicksResponse {
+  contractVersion: 5; server: string; accountLogin: number; symbol: string;
+  rawRange: { fromMsc: number; toMsc: number }; snapshotToMsc: number; pageSize: number;
+  snapshot: { id: string; sha256: string; tickCount: number; expiresAtMsc: number };
+  valuation: { version: 1; calculationMode: string; accountCurrency: string; profitCurrency: string; tickSize: string; tickValueProfit: string; tickValueLoss: string; sha256: string };
+  ticks: Mt5BridgeTick[]; nextCursor?: string; complete: boolean; bytes: number;
 }
 
 @Injectable()
@@ -131,6 +181,69 @@ export class Mt5BridgeClient {
     }
   }
 
+  async getCapabilities(options: Mt5BridgeRequestOptions = {}): Promise<Mt5BridgeCapabilities> {
+    const { value } = await this.tickRequest('/capabilities', undefined, options);
+    if (!this.record(value) || !this.exactKeys(value, ['contractVersion', 'sync', 'ticks']) || value.contractVersion !== 5 || !this.record(value.sync) || !this.record(value.ticks)
+      || !this.exactKeys(value.sync, ['bootstrap', 'incremental', 'fixedSnapshot'])
+      || !this.exactKeys(value.ticks, ['available', 'cursorNamespace', 'maxRequestBytes', 'maxCursorChars', 'pageSize', 'maxResponseBytes', 'maxChunkSpanMsc', 'maxChunkTicks', 'maxSnapshotBytes', 'snapshotTtlSeconds', 'cacheMaxEntries', 'cacheMaxBytes', 'valuationVersion', 'supportedCalculationModes'])
+      || value.sync.bootstrap !== true || value.sync.incremental !== true || value.sync.fixedSnapshot !== true
+      || value.ticks.available !== true || value.ticks.cursorNamespace !== 'ticks-v1'
+      || value.ticks.valuationVersion !== 1 || !Array.isArray(value.ticks.supportedCalculationModes)
+      || value.ticks.supportedCalculationModes.some((mode) => typeof mode !== 'string' || !mode)
+      || !this.safeLimit(value.ticks.maxRequestBytes, TICK_MAX_REQUEST_BYTES)
+      || !this.safeLimit(value.ticks.maxCursorChars, TICK_MAX_CURSOR_CHARS)
+      || !this.safeLimit(value.ticks.maxResponseBytes, TICK_MAX_RESPONSE_BYTES)
+      || !this.safeLimit(value.ticks.maxChunkSpanMsc, TICK_MAX_CHUNK_SPAN_MSC)
+      || !this.positiveSafeInteger(value.ticks.maxChunkTicks) || !this.positiveSafeInteger(value.ticks.maxSnapshotBytes)
+      || !this.positiveSafeInteger(value.ticks.snapshotTtlSeconds) || !this.positiveSafeInteger(value.ticks.cacheMaxEntries)
+      || !this.positiveSafeInteger(value.ticks.cacheMaxBytes) || !this.record(value.ticks.pageSize)
+      || !this.positiveSafeInteger(value.ticks.pageSize.min) || !this.positiveSafeInteger(value.ticks.pageSize.max)
+      || value.ticks.pageSize.min > value.ticks.pageSize.max || value.ticks.pageSize.max > TICK_MAX_PAGE_SIZE) {
+      throw new Mt5BridgeTickError('BRIDGE_INCOMPATIBLE', 'MT5 bridge capabilities are incompatible');
+    }
+    return value as unknown as Mt5BridgeCapabilities;
+  }
+
+  async ticks(request: Mt5BridgeTicksRequest, options: Mt5BridgeRequestOptions = {}): Promise<Mt5BridgeTicksResponse> {
+    if (!this.validTickRequest(request)) throw new Mt5BridgeTickError('TICK_INVALID_REQUEST', 'MT5 tick request is invalid');
+    const body = JSON.stringify(request);
+    if (Buffer.byteLength(body) > TICK_MAX_REQUEST_BYTES) throw new Mt5BridgeTickError('TICK_INVALID_REQUEST', 'MT5 tick request is too large');
+    const { value, bytes } = await this.tickRequest('/ticks', body, options);
+    return this.validateTicks(value, request, bytes);
+  }
+
+  private async tickRequest(path: string, body: string | undefined, options: Mt5BridgeRequestOptions): Promise<{ value: unknown; bytes: number }> {
+    const baseUrl = process.env.MT5_BRIDGE_BASE_URL?.trim();
+    const token = process.env.MT5_BRIDGE_TOKEN?.trim();
+    if (!baseUrl || !token) throw new Mt5BridgeTickError('TICK_UNAVAILABLE', 'MT5 bridge configuration is incomplete');
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (options.signal?.aborted) throw new Mt5BridgeTickError('TICK_DEADLINE', 'MT5 tick request was aborted');
+    options.signal?.addEventListener('abort', abort, { once: true });
+    const remaining = options.deadlineMsc === undefined ? this.timeoutMs() : options.deadlineMsc - Date.now();
+    if (remaining < 1_000) throw new Mt5BridgeTickError('TICK_DEADLINE', 'MT5 tick deadline elapsed');
+    const timeout = setTimeout(abort, Math.min(this.timeoutMs(), remaining));
+    try {
+      const response = await fetch(new URL(path, baseUrl), {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? { authorization: `Bearer ${token}` } : { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        ...(body === undefined ? {} : { body }), signal: controller.signal,
+      });
+      const declaredLength = Number(response.headers.get('content-length'));
+      if (Number.isFinite(declaredLength) && declaredLength > TICK_MAX_RESPONSE_BYTES) throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 tick response is too large');
+      const { text, bytes } = await this.readTickBody(response);
+      if (!response.ok) throw this.tickHttpError(response.status, text);
+      try { return { value: JSON.parse(text), bytes }; } catch { throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned invalid tick JSON'); }
+    } catch (error) {
+      if (error instanceof Mt5BridgeTickError) throw error;
+      if (controller.signal.aborted) throw new Mt5BridgeTickError('TICK_DEADLINE', 'MT5 tick request timed out');
+      throw new Mt5BridgeTickError('TICK_UNAVAILABLE', 'MT5 bridge ticks are unavailable');
+    } finally {
+      clearTimeout(timeout);
+      options.signal?.removeEventListener('abort', abort);
+    }
+  }
+
   private validate(value: unknown, request: Mt5BridgeRequest, responseBytes: number): Mt5BridgeResponse {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
     if (value.server !== request.server || value.accountLogin !== request.accountLogin) throw new BadGatewayException('MT5 bridge identity mismatch');
@@ -144,6 +257,139 @@ export class Mt5BridgeClient {
     for (const order of value.orders) this.validateFact(order, ORDER_NUMBER_FIELDS, ORDER_BIGINT_FIELDS);
     return value as unknown as Mt5BridgeResponse;
   }
+
+  private validateTicks(value: unknown, request: Mt5BridgeTicksRequest, responseBytes: number): Mt5BridgeTicksResponse {
+    if (!this.record(value) || !this.exactKeys(value, ['contractVersion', 'cursorNamespace', 'server', 'accountLogin', 'symbol', 'rawRange', 'snapshotToMsc', 'pageSize', 'snapshot', 'valuation', 'ticks', 'complete', 'bytes'], ['nextCursor']) || value.contractVersion !== 5 || value.cursorNamespace !== 'ticks-v1' || value.server !== request.server
+      || value.accountLogin !== request.accountLogin || value.symbol !== request.symbol
+      || value.snapshotToMsc !== request.snapshotToMsc || !this.sameRange(value.rawRange, request.rawRange)
+      || !this.positiveSafeInteger(value.pageSize) || (request.pageSize !== undefined && value.pageSize !== request.pageSize) || !this.record(value.snapshot) || !this.record(value.valuation)
+      || !Array.isArray(value.ticks) || typeof value.complete !== 'boolean' || value.bytes !== responseBytes) {
+      throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned an invalid tick payload');
+    }
+    const snapshot = value.snapshot;
+    const valuation = value.valuation;
+    if (!this.exactKeys(snapshot, ['id', 'sha256', 'tickCount', 'expiresAtMsc']) || !this.exactKeys(valuation, ['version', 'calculationMode', 'accountCurrency', 'profitCurrency', 'tickSize', 'tickValueProfit', 'tickValueLoss', 'sha256']) || typeof snapshot.id !== 'string' || !snapshot.id || !this.sha(snapshot.sha256)
+      || !this.positiveOrZeroSafeInteger(snapshot.tickCount) || !this.positiveSafeInteger(snapshot.expiresAtMsc)
+      || valuation.version !== 1 || typeof valuation.calculationMode !== 'string' || !valuation.calculationMode
+      || !this.nonemptyString(valuation.accountCurrency) || !this.nonemptyString(valuation.profitCurrency)
+      || !this.canonicalPositiveDecimal(valuation.tickSize) || !this.canonicalPositiveDecimal(valuation.tickValueProfit)
+      || !this.canonicalPositiveDecimal(valuation.tickValueLoss) || !this.sha(valuation.sha256)
+      || this.digestValuation(valuation) !== valuation.sha256) {
+      throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned invalid tick provenance');
+    }
+    if ((value.complete && value.nextCursor !== undefined) || (!value.complete && (typeof value.nextCursor !== 'string' || !value.nextCursor || value.nextCursor.length > TICK_MAX_CURSOR_CHARS))) {
+      throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned invalid tick pagination');
+    }
+    const tickCount = snapshot.tickCount as number;
+    let expectedSequence: number | undefined;
+    for (const tick of value.ticks) {
+      if (!this.record(tick) || !this.exactKeys(tick, ['sequence', 'timeMsc', 'bid', 'ask']) || !this.positiveOrZeroSafeInteger(tick.sequence) || !this.positiveOrZeroSafeInteger(tick.timeMsc)
+        || tick.timeMsc < request.rawRange.fromMsc || tick.timeMsc > request.rawRange.toMsc
+        || !this.canonicalPositiveDecimal(tick.bid) || !this.canonicalPositiveDecimal(tick.ask)
+        || (expectedSequence !== undefined && tick.sequence !== expectedSequence)) {
+        throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned invalid tick data');
+      }
+      expectedSequence = tick.sequence + 1;
+    }
+    if (value.ticks.length > value.pageSize || value.ticks.some((tick) => tick.sequence >= tickCount)
+      || (value.complete && value.ticks.length > 0 && value.ticks[value.ticks.length - 1].sequence !== tickCount - 1)
+      || this.digestSnapshot(tickCount, value.ticks) !== snapshot.sha256 && tickCount === value.ticks.length) {
+      throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned an invalid tick digest');
+    }
+    return value as unknown as Mt5BridgeTicksResponse;
+  }
+
+  private validTickRequest(request: Mt5BridgeTicksRequest): boolean {
+    return request.contractVersion === 5 && this.nonemptyString(request.server) && this.positiveSafeInteger(request.accountLogin)
+      && typeof request.password === 'string' && this.nonemptyString(request.symbol) && request.symbol === request.symbol.trim()
+      && this.sameRange(request.rawRange, request.rawRange) && this.positiveOrZeroSafeInteger(request.snapshotToMsc)
+      && request.rawRange.toMsc <= request.snapshotToMsc
+      && request.rawRange.toMsc - request.rawRange.fromMsc <= TICK_MAX_CHUNK_SPAN_MSC
+      && (request.pageSize === undefined || (this.positiveSafeInteger(request.pageSize) && request.pageSize <= TICK_MAX_PAGE_SIZE))
+      && (request.pageCursor === undefined || (typeof request.pageCursor === 'string' && request.pageCursor.length > 0 && request.pageCursor.length <= TICK_MAX_CURSOR_CHARS));
+  }
+
+  private tickHttpError(status: number, body: string): Mt5BridgeTickError {
+    const error = (() => { try { return JSON.parse(body); } catch { return undefined; } })();
+    const code = this.record(error) && typeof error.error === 'string' ? error.error : '';
+    if (status === 401 || status === 403) return new Mt5BridgeTickError('MT5_BRIDGE_UNAUTHORIZED', 'MT5 bridge rejected its bearer token');
+    if (status === 400) return new Mt5BridgeTickError(code === 'invalid_or_expired_tick_cursor' ? 'TICK_CURSOR_EXPIRED' : 'TICK_INVALID_REQUEST', 'MT5 bridge rejected the tick request');
+    if (status === 409) return new Mt5BridgeTickError('TICK_IDENTITY_MISMATCH', 'MT5 bridge tick identity mismatch');
+    if (status === 422) return new Mt5BridgeTickError(code === 'tick_valuation_unsupported' ? 'VALUATION_UNSUPPORTED' : 'TICK_SOURCE_LIMIT', 'MT5 bridge cannot provide ticks');
+    if (status === 503) return new Mt5BridgeTickError('TICK_CAPACITY', 'MT5 bridge tick capacity is unavailable');
+    return new Mt5BridgeTickError('TICK_UNAVAILABLE', 'MT5 bridge tick request failed');
+  }
+
+  private async readTickBody(response: Response): Promise<{ text: string; bytes: number }> {
+    if (!response.body) return { text: '', bytes: 0 };
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > TICK_MAX_RESPONSE_BYTES) {
+          await reader.cancel();
+          throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 tick response is too large');
+        }
+        chunks.push(value);
+      }
+      try {
+        return { text: new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)), bytes };
+      } catch {
+        throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'MT5 bridge returned invalid tick encoding');
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private digestSnapshot(tickCount: number, ticks: unknown[]): string {
+    return this.digest(['ticks-v1-snapshot', tickCount, ...ticks.flatMap((tick) => {
+      const value = tick as Record<string, unknown>;
+      return [value.sequence as number, value.timeMsc as number, value.bid as string, value.ask as string];
+    })]);
+  }
+
+  private digestValuation(value: Record<string, unknown>): string {
+    return this.digest(['ticks-v1-valuation', value.version as number, value.calculationMode as string, value.accountCurrency as string,
+      value.profitCurrency as string, value.tickSize as string, value.tickValueProfit as string, value.tickValueLoss as string]);
+  }
+
+  private digest(parts: Array<string | number>): string {
+    const hash = createHash('sha256');
+    for (const part of parts) {
+      if (typeof part === 'number') {
+        const bytes = Buffer.alloc(8);
+        bytes.writeBigUInt64BE(BigInt(part));
+        hash.update(bytes);
+      } else {
+        const bytes = Buffer.from(part, 'utf8');
+        const length = Buffer.alloc(4);
+        length.writeUInt32BE(bytes.length);
+        hash.update(length).update(bytes);
+      }
+    }
+    return hash.digest('hex');
+  }
+
+  private sameRange(value: unknown, expected: { fromMsc: number; toMsc: number }): value is { fromMsc: number; toMsc: number } {
+    return this.record(value) && this.exactKeys(value, ['fromMsc', 'toMsc']) && this.positiveOrZeroSafeInteger(value.fromMsc) && this.positiveOrZeroSafeInteger(value.toMsc)
+      && value.fromMsc <= value.toMsc && value.fromMsc === expected.fromMsc && value.toMsc === expected.toMsc;
+  }
+  private exactKeys(value: Record<string, unknown>, required: string[], optional: string[] = []): boolean {
+    const allowed = new Set([...required, ...optional]);
+    return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+      && Object.keys(value).every((key) => allowed.has(key));
+  }
+  private sha(value: unknown): value is string { return typeof value === 'string' && SHA256.test(value); }
+  private nonemptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
+  private positiveSafeInteger(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) > 0; }
+  private positiveOrZeroSafeInteger(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 0; }
+  private safeLimit(value: unknown, maximum: number): value is number { return this.positiveSafeInteger(value) && (value as number) <= maximum; }
+  private canonicalPositiveDecimal(value: unknown): value is string { return typeof value === 'string' && value !== '0' && this.canonicalDecimalParts(value, false); }
 
   private validateFact(value: unknown, numberFields: readonly string[], bigintFields: readonly string[]): void {
     if (!this.record(value)) throw new BadGatewayException('MT5 bridge returned an invalid payload');
