@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 1,
   "kind": "web-automation-transcript",
   "status": "passed",
   "tool": "GJC Chromium",
