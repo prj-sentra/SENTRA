@@ -1392,7 +1392,10 @@ export class TradeLogService {
       const required = name === 'price'
         ? ['mfePrice', 'mfePriceMarkPrice', 'mfePriceOccurredAt', 'maePrice', 'maePriceMarkPrice', 'maePriceOccurredAt', 'mfePercent', 'mfePercentMarkPrice', 'mfePercentOccurredAt', 'maePercent', 'maePercentMarkPrice', 'maePercentOccurredAt']
         : ['mfeUnrealizedPnl', 'mfeUnrealizedPnlOccurredAt', 'maeUnrealizedPnl', 'maeUnrealizedPnlOccurredAt'];
-      if (required.some((key) => result[key] === null || result[key] === undefined)) throw new Error(`Campaign excursion ${name} family is missing persisted metrics`);
+      if (required.some((key) => result[key] === null || result[key] === undefined)) {
+        if (status !== 'STALE' || !reason) throw new Error(`Campaign excursion ${name} family is missing persisted metrics`);
+        return { family: name === 'price' ? 'campaign_price' : 'campaign_unrealized_pnl', status: 'failed', attempt: { ...successfulAttempt, failureReason: publicExcursionFailureReason(reason) } };
+      }
       if (name === 'unrealizedPnl' && ((result.mfeR === null) !== (result.maeR === null) || (result.mfeR !== null && (result.mfeROccurredAt === null || result.maeROccurredAt === null)))) throw new Error('Campaign excursion unrealized PnL family has incomplete R metrics');
       const metrics = name === 'price'
         ? { price: priced(result.mfePrice, result.mfePriceMarkPrice, result.mfePriceOccurredAt, result.maePrice, result.maePriceMarkPrice, result.maePriceOccurredAt), percent: priced(result.mfePercent, result.mfePercentMarkPrice, result.mfePercentOccurredAt, result.maePercent, result.maePercentMarkPrice, result.maePercentOccurredAt) }

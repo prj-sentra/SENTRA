@@ -67,15 +67,19 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
     if (scope === 'TRADE') {
       await this.prisma.tradeExcursionResult.updateMany({ where: { tradeId: targetId, successCalculationVersion: { not: null } }, data });
     } else {
-      await this.prisma.tradeCampaignExcursionResult.updateMany({
-        where: { campaignId: targetId, successCalculationVersion: { not: null } },
-        data: {
-          ...data,
-          priceFamilyStatus: 'STALE',
-          priceFamilyReason: reason,
-          pnlFamilyStatus: 'STALE',
-          pnlFamilyReason: reason,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.tradeCampaignExcursionResult.updateMany({
+          where: { campaignId: targetId, successCalculationVersion: { not: null } },
+          data,
+        });
+        await tx.tradeCampaignExcursionResult.updateMany({
+          where: { campaignId: targetId, priceFamilyStatus: { in: ['SUCCESS', 'STALE'] } },
+          data: { priceFamilyStatus: 'STALE', priceFamilyReason: reason },
+        });
+        await tx.tradeCampaignExcursionResult.updateMany({
+          where: { campaignId: targetId, pnlFamilyStatus: { in: ['SUCCESS', 'STALE'] } },
+          data: { pnlFamilyStatus: 'STALE', pnlFamilyReason: reason },
+        });
       });
     }
   }
@@ -272,12 +276,16 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
       } else {
         const family = result.ok && result.price ? 'SUCCESS' : 'UNSUPPORTED';
         const familyReason = result.ok ? (result.price ? null : 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE') : result.code;
-        const previous = await tx.tradeCampaignExcursionResult.findUnique({ where: { campaignId: item.campaignId! }, select: { successCalculationVersion: true } });
+        const previous = await tx.tradeCampaignExcursionResult.findUnique({ where: { campaignId: item.campaignId! }, select: { successCalculationVersion: true, priceFamilyStatus: true, pnlFamilyStatus: true } });
         await tx.tradeCampaignExcursionResult.upsert({
           where: { campaignId: item.campaignId! },
           create: { campaignId: item.campaignId!, ...base, priceFamilyStatus: family, priceFamilyReason: familyReason, pnlFamilyStatus: result.ok ? 'SUCCESS' : 'UNSUPPORTED', pnlFamilyReason: result.ok ? null : result.code },
           update: !result.ok && previous?.successCalculationVersion != null
-            ? { status: 'STALE', attemptCalculationVersion: CALCULATION_VERSION, attemptInputFingerprint: claim.baseInputFingerprint, lastAttemptedAt: attemptedAt, failureReason: result.code, priceFamilyStatus: 'STALE', priceFamilyReason: result.code, pnlFamilyStatus: 'STALE', pnlFamilyReason: result.code }
+            ? {
+              status: 'STALE', attemptCalculationVersion: CALCULATION_VERSION, attemptInputFingerprint: claim.baseInputFingerprint, lastAttemptedAt: attemptedAt, failureReason: result.code,
+              ...(previous.priceFamilyStatus === 'SUCCESS' || previous.priceFamilyStatus === 'STALE' ? { priceFamilyStatus: 'STALE' as const, priceFamilyReason: result.code } : {}),
+              ...(previous.pnlFamilyStatus === 'SUCCESS' || previous.pnlFamilyStatus === 'STALE' ? { pnlFamilyStatus: 'STALE' as const, pnlFamilyReason: result.code } : {}),
+            }
             : { ...base, priceFamilyStatus: family, priceFamilyReason: familyReason, pnlFamilyStatus: result.ok ? 'SUCCESS' : 'UNSUPPORTED', pnlFamilyReason: result.ok ? null : result.code },
         });
       }

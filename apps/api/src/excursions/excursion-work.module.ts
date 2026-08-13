@@ -45,13 +45,15 @@ import { ExcursionWorkService } from './excursion-work.service';
               } else {
                 await tx.tradeCampaignExcursionResult.updateMany({
                   where: { campaignId: target.targetId, successCalculationVersion: { not: null } },
-                  data: {
-                    ...attempted,
-                    priceFamilyStatus: 'STALE',
-                    priceFamilyReason: reason,
-                    pnlFamilyStatus: 'STALE',
-                    pnlFamilyReason: reason,
-                  },
+                  data: attempted,
+                });
+                await tx.tradeCampaignExcursionResult.updateMany({
+                  where: { campaignId: target.targetId, priceFamilyStatus: { in: ['SUCCESS', 'STALE'] } },
+                  data: { priceFamilyStatus: 'STALE', priceFamilyReason: reason },
+                });
+                await tx.tradeCampaignExcursionResult.updateMany({
+                  where: { campaignId: target.targetId, pnlFamilyStatus: { in: ['SUCCESS', 'STALE'] } },
+                  data: { pnlFamilyStatus: 'STALE', pnlFamilyReason: reason },
                 });
               }
             }

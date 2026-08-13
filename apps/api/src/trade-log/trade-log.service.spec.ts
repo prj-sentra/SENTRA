@@ -783,6 +783,28 @@ describe('TradeLogService stats range and risk coverage', () => {
       attempt: { calculationVersion: 4, inputFingerprint: 'changed', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'INPUT_CHANGED' },
     });
   });
+  it('does not fail statistics when a legacy stale campaign family has no prior metrics', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const result = service.serializeCampaignExcursion({
+      attemptCalculationVersion: 1,
+      attemptInputFingerprint: 'changed',
+      lastAttemptedAt: new Date('2026-08-12T00:00:00.000Z'),
+      priceFamilyStatus: 'STALE',
+      priceFamilyReason: 'MEMBER_INPUT_MUTATED',
+      pnlFamilyStatus: 'UNSUPPORTED',
+      pnlFamilyReason: 'UNSUPPORTED_VALUATION',
+    });
+    expect(result.price).toEqual({
+      family: 'campaign_price',
+      status: 'failed',
+      attempt: { calculationVersion: 1, inputFingerprint: 'changed', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'INPUT_CHANGED' },
+    });
+    expect(result.unrealizedPnl).toEqual({
+      family: 'campaign_unrealized_pnl',
+      status: 'unsupported',
+      attempt: { calculationVersion: 1, inputFingerprint: 'changed', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'VALUATION_UNSUPPORTED' },
+    });
+  });
   it('uses only current successes and deterministic R-7 excursion distributions', () => {
     const service = new TradeLogService(prisma() as never) as any;
     const success = (value: number, status: 'success' | 'stale' = 'success') => ({ scope: 'trade', status, attempt: {}, success: {}, metrics: { price: { mfe: { value }, mae: { value: -value } }, percent: { mfe: { value }, mae: { value: -value } }, unrealizedPnl: { mfe: { value }, mae: { value: -value } }, rAvailability: 'risk_unavailable' } });
