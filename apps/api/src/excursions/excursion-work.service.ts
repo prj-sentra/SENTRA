@@ -29,6 +29,8 @@ export type ExcursionWork = ExcursionTarget & {
 export type ExcursionProgress = {
   workItemId: string;
   generation: number;
+  rawFromMsc: bigint;
+  rawToMsc: bigint;
   nextRawFromMsc: bigint;
   completedChunkCount: number;
   completedPageCount: number;

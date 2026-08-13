@@ -93,8 +93,8 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
       if (!active.count) return false;
       await tx.excursionWorkProgress.upsert({
         where: { workItemId: claim.id },
-        create: { ...progress, rawFromMsc: progress.nextRawFromMsc, rawToMsc: progress.nextRawFromMsc, fifoState: (progress.fifoState ?? {}) as Prisma.InputJsonValue, extremaState: (progress.extremaState ?? {}) as Prisma.InputJsonValue, portfolioMarks: progress.portfolioMarks as Prisma.InputJsonValue | undefined, pathDigestState: progress.pathDigestState ?? '', valuationDigests: (progress.valuationDigests ?? {}) as Prisma.InputJsonValue },
-        update: { nextRawFromMsc: progress.nextRawFromMsc, completedChunkCount: progress.completedChunkCount, completedPageCount: progress.completedPageCount, completedTickCount: progress.completedTickCount, fifoState: progress.fifoState as Prisma.InputJsonValue | undefined, extremaState: progress.extremaState as Prisma.InputJsonValue | undefined, portfolioMarks: progress.portfolioMarks as Prisma.InputJsonValue | undefined, pathDigestState: progress.pathDigestState, valuationDigests: progress.valuationDigests as Prisma.InputJsonValue | undefined, checkpointedAt: progress.checkpointedAt },
+        create: { ...progress, fifoState: (progress.fifoState ?? {}) as Prisma.InputJsonValue, extremaState: (progress.extremaState ?? {}) as Prisma.InputJsonValue, portfolioMarks: progress.portfolioMarks as Prisma.InputJsonValue | undefined, pathDigestState: progress.pathDigestState ?? '', valuationDigests: (progress.valuationDigests ?? {}) as Prisma.InputJsonValue },
+        update: { rawFromMsc: progress.rawFromMsc, rawToMsc: progress.rawToMsc, nextRawFromMsc: progress.nextRawFromMsc, completedChunkCount: progress.completedChunkCount, completedPageCount: progress.completedPageCount, completedTickCount: progress.completedTickCount, fifoState: progress.fifoState as Prisma.InputJsonValue | undefined, extremaState: progress.extremaState as Prisma.InputJsonValue | undefined, portfolioMarks: progress.portfolioMarks as Prisma.InputJsonValue | undefined, pathDigestState: progress.pathDigestState, valuationDigests: progress.valuationDigests as Prisma.InputJsonValue | undefined, checkpointedAt: progress.checkpointedAt },
       });
       return true;
     });
@@ -186,6 +186,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
       return {
         complete: false,
         progress: {
+          rawFromMsc: BigInt(from), rawToMsc: BigInt(to),
           nextRawFromMsc: BigInt(state.nextRawFromMsc), completedChunkCount: (progress?.completedChunkCount ?? 0) + chunks,
           completedPageCount: (progress?.completedPageCount ?? 0) + pagesUsed,
           completedTickCount: (progress?.completedTickCount ?? 0) + ticksUsed,

@@ -93,7 +93,7 @@ describe('ExcursionWorkerService', () => {
   });
 
   it('continues immediately after checkpointing a complete chunk', async () => {
-    const adapter = port({ execute: jest.fn().mockResolvedValue({ complete: false, progress: { nextRawFromMsc: 2n, completedChunkCount: 1, completedPageCount: 1, completedTickCount: 10 } }) });
+    const adapter = port({ execute: jest.fn().mockResolvedValue({ complete: false, progress: { rawFromMsc: 1n, rawToMsc: 3n, nextRawFromMsc: 2n, completedChunkCount: 1, completedPageCount: 1, completedTickCount: 10 } }) });
     const worker = new ExcursionWorkerService(new ExcursionWorkService(), adapter);
     await expect((worker as any).run()).resolves.toBe(true);
     expect(adapter.checkpoint).toHaveBeenCalled();

@@ -144,7 +144,7 @@ export function advanceMfeMaeCalculator(state: MfeMaeCalculatorState, input: Exc
       || page.response.rawRange.fromMsc !== input.rawFromMsc || page.response.rawRange.toMsc !== input.rawToMsc
       || !validValuation(page.response) || !validTicks(page.response.ticks, input.rawFromMsc, input.rawToMsc)) return failure('INVALID_TICK_PATH');
     if (!SUPPORTED_CALCULATION_MODES.has(page.response.valuation.calculationMode)) return failure('UNSUPPORTED_VALUATION');
-    const digestKey = `${page.symbol}\u0000${input.rawFromMsc}\u0000${input.rawToMsc}`;
+    const digestKey = pageDigestKey(page.symbol, input.rawFromMsc, input.rawToMsc);
     const digest = state.pageDigests[digestKey];
     if (digest && (digest.snapshotSha256 !== page.response.snapshot.sha256 || digest.valuationSha256 !== page.response.valuation.sha256 || digest.accountCurrency !== page.response.valuation.accountCurrency)) return failure('INVALID_TICK_PATH');
     pages.set(page.symbol, page);
@@ -200,7 +200,7 @@ export function advanceMfeMaeCalculator(state: MfeMaeCalculatorState, input: Exc
       if (!fills.some((fill) => fill.symbol === deal.symbol)) marks.delete(deal.symbol);
     }
   }
-  for (const [symbol, page] of pages) state.pageDigests[`${symbol}\u0000${input.rawFromMsc}\u0000${input.rawToMsc}`] = { snapshotSha256: page.response.snapshot.sha256, valuationSha256: page.response.valuation.sha256, accountCurrency: page.response.valuation.accountCurrency };
+  for (const [symbol, page] of pages) state.pageDigests[pageDigestKey(symbol, input.rawFromMsc, input.rawToMsc)] = { snapshotSha256: page.response.snapshot.sha256, valuationSha256: page.response.valuation.sha256, accountCurrency: page.response.valuation.accountCurrency };
   return { ok: true, state: { ...state, nextRawFromMsc: input.rawToMsc + 1, fills: fills.map((fill) => ({ ...fill, volume: fill.volume.toString(), entry: fill.entry.toString() })), marks: Object.fromEntries([...marks].map(([symbol, mark]) => [symbol, { price: mark.price.toString(), timeMsc: mark.timeMsc }])), extrema: state.extrema } };
 }
 
@@ -212,7 +212,7 @@ export function finalizeMfeMaeCalculator(state: MfeMaeCalculatorState, input: Pi
   if (!pnl) return failure('INVALID_TICK_PATH');
   const risk = decimal(input.riskAmount);
   const realized = decimal(input.realizedPnl);
-  const pages = Object.entries(state.pageDigests).map(([symbol, digest]) => ({ symbol, response: { snapshot: { sha256: digest.snapshotSha256 }, valuation: { version: 1, sha256: digest.valuationSha256 } } })) as ExcursionTickPage[];
+  const pages = Object.entries(state.pageDigests).map(([key, digest]) => ({ symbol: pageDigestProvenanceLabel(key), response: { snapshot: { sha256: digest.snapshotSha256 }, valuation: { version: 1, sha256: digest.valuationSha256 } } })) as ExcursionTickPage[];
   const result: ExcursionSuccess = { ok: true, provenance: provenanceFor(input as ExcursionInput, pages), unrealizedPnl: pnl, portfolioMarkPolicy: 'all-active-symbols-last-valid-since-entry-v1' };
   if (risk && risk.gt(0)) result.r = scaleMetrics(pnl, risk);
   if (risk === null && input.riskAmount !== undefined) return failure('RISK_UNAVAILABLE');
@@ -223,6 +223,14 @@ export function finalizeMfeMaeCalculator(state: MfeMaeCalculatorState, input: Pi
 }
 
 function failure(code: ExcursionFailureCode): ExcursionFailure { return { ok: false, code }; }
+function pageDigestKey(symbol: string, rawFromMsc: number, rawToMsc: number): string {
+  return JSON.stringify([symbol, rawFromMsc, rawToMsc]);
+}
+function pageDigestProvenanceLabel(key: string): string {
+  const value: unknown = JSON.parse(key);
+  if (!Array.isArray(value) || value.length !== 3 || typeof value[0] !== 'string' || !Number.isSafeInteger(value[1]) || !Number.isSafeInteger(value[2])) throw new Error('Invalid persisted page digest key');
+  return `${value[0]}\u0000${value[1]}\u0000${value[2]}`;
+}
 function decimal(value: string | number | undefined): Prisma.Decimal | null { try { const result = value === undefined ? null : new Decimal(value); return result?.isFinite() ? result : null; } catch { return null; } }
 function rounded(value: Prisma.Decimal): string { return value.toDecimalPlaces(EIGHT_PLACES, ROUNDING).toFixed(EIGHT_PLACES); }
 function dealOrder(a: RawDealForExcursion, b: RawDealForExcursion): number {

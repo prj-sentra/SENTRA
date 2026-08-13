@@ -72,7 +72,9 @@ describe('calculateMfeMae', () => {
       const advanced = advanceMfeMaeCalculator(state, { ...whole, tickPages: chunkPages, rawFromMsc: fromMsc, rawToMsc: toMsc });
       expect(advanced.ok).toBe(true);
       if (!advanced.ok) return;
-      state = JSON.parse(JSON.stringify(advanced.state)); // literal persisted interruption/resume boundary
+      const serialized = JSON.stringify(advanced.state);
+      expect(serialized).not.toContain('\\u0000');
+      state = JSON.parse(serialized); // literal PostgreSQL JSON persisted interruption/resume boundary
     }
     const resumed = finalizeMfeMaeCalculator(state, whole);
     expect(resumed).toMatchObject({

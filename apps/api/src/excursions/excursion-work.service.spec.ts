@@ -87,7 +87,7 @@ describe('ExcursionWorkService', () => {
     await service.dirtyTargets(port, 'account-1', [target()], 'SYNC_CHANGED', now);
     const claim = await service.claim(port, now);
     expect(claim).not.toBeNull();
-    port.progress.set(claim!.id, { workItemId: claim!.id, generation: 1, nextRawFromMsc: 10n, completedChunkCount: 1, completedPageCount: 1, completedTickCount: 1, checkpointedAt: now });
+    port.progress.set(claim!.id, { workItemId: claim!.id, generation: 1, rawFromMsc: 1n, rawToMsc: 20n, nextRawFromMsc: 10n, completedChunkCount: 1, completedPageCount: 1, completedTickCount: 1, checkpointedAt: now });
 
     await service.dirtyTargets(port, 'account-1', [target(2)], 'INPUT_DRIFT', now);
     expect(port.progress.has(claim!.id)).toBe(false);
@@ -99,7 +99,7 @@ describe('ExcursionWorkService', () => {
     await service.dirtyTargets(port, 'account-1', [target()], 'SYNC_CHANGED', now);
     const claim = (await service.claim(port, now))!;
 
-    await expect(service.checkpoint(port, claim, { nextRawFromMsc: 301_000n, completedChunkCount: 1, completedPageCount: 2, completedTickCount: 20 }, now)).resolves.toBe(true);
+    await expect(service.checkpoint(port, claim, { rawFromMsc: 1n, rawToMsc: 600_000n, nextRawFromMsc: 301_000n, completedChunkCount: 1, completedPageCount: 2, completedTickCount: 20 }, now)).resolves.toBe(true);
     expect(port.progress.get(claim.id)).toMatchObject({ generation: 1, completedChunkCount: 1, nextRawFromMsc: 301_000n });
   });
 
