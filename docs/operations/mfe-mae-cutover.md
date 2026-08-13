@@ -13,7 +13,8 @@ authenticated `/capabilities` and `/ticks` endpoints with an independent
 4. Deploy the journal migration with all three feature gates `false`.
 5. Verify ordinary v5 synchronization and cursor/watermark behavior.
 6. Set `MT5_EXCURSION_WRITE_ENABLED=true` and
-   `MT5_EXCURSION_WORKER_ENABLED=true` for one account.
+   `MT5_EXCURSION_WORKER_ENABLED=true` with
+   `MT5_EXCURSION_WORKER_ACCOUNT_IDS=<one-approved-account-id>`.
 7. Observe at least 100 completed targets or 24 hours, whichever is later.
 8. Run `pnpm --filter @trading-journal/api backfill:mfe-mae:dry-run`, review
    the exact selected manifest, then use the confirmed apply command.
@@ -61,3 +62,17 @@ result outside an approved unsupported symbol, or worker unit overrun. Disable
 all gates first. Schema-compatible application rollback uses
 `scripts/rollback-mfe-mae.sh`; it never builds the current checkout. Restore the
 database only for confirmed schema/data corruption.
+
+The worker uses `mt5_bridge_activity` as a cross-replica bridge slot. An
+interactive sync records intent before waiting for the current worker unit;
+the worker checks that intent before every new tick request and requeues from
+its last durable checkpoint. Defaults are one global tick request, 10-second
+units, 5 chunks, 20 pages, 20,000 ticks, and a 150 ms minimum page interval.
+Transient bridge outages back off for five minutes, capacity for two minutes,
+and deadlines for one minute. Tick identity or invalid-payload faults create a
+durable `HALT` row and fail closed. Investigate the bridge and retained work
+before explicitly clearing that row:
+
+```sql
+DELETE FROM mt5_bridge_activity WHERE kind = 'HALT';
+```

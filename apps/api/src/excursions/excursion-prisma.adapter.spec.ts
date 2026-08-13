@@ -1,4 +1,4 @@
-import { ExcursionPrismaAdapter } from './excursion-prisma.adapter';
+import { ExcursionPrismaAdapter, SyncPriorityYieldError } from './excursion-prisma.adapter';
 
 describe('ExcursionPrismaAdapter checkpoints', () => {
   it('persists the complete raw range on both checkpoint creation and resume', async () => {
@@ -24,5 +24,14 @@ describe('ExcursionPrismaAdapter checkpoints', () => {
       create: expect.objectContaining({ rawFromMsc: 100n, rawToMsc: 1_000n, nextRawFromMsc: 401n }),
       update: expect.objectContaining({ rawFromMsc: 100n, rawToMsc: 1_000n, nextRawFromMsc: 401n }),
     }));
+  });
+
+  it('does not start a bridge capability request after sync intent is visible', async () => {
+    const bridge = { getCapabilities: jest.fn() };
+    const activity = { syncRequested: jest.fn().mockResolvedValue(true) };
+    const adapter = new ExcursionPrismaAdapter({} as never, bridge as never, {} as never, activity as never);
+
+    await expect(adapter.getCapabilities(new AbortController().signal, Date.now() + 1_000)).rejects.toBeInstanceOf(SyncPriorityYieldError);
+    expect(bridge.getCapabilities).not.toHaveBeenCalled();
   });
 });

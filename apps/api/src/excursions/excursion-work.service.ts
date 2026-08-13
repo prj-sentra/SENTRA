@@ -57,7 +57,7 @@ export type ExcursionWorkTransactionPort = {
   staleResult(scope: ExcursionScope, targetId: string, reason: string, attemptedAt: Date): Promise<void>;
   cancelWork(scope: ExcursionScope, targetId: string, reason: string): Promise<void>;
   recoverExpiredClaims(now: Date): Promise<number>;
-  claimNext(now: Date, claimId: string, expiresAt: Date): Promise<ExcursionClaim | null>;
+  claimNext(now: Date, claimId: string, expiresAt: Date, accountIds?: string[]): Promise<ExcursionClaim | null>;
   checkpoint(claim: ExcursionClaim, progress: ExcursionProgress, now: Date): Promise<boolean>;
   finalize(claim: ExcursionClaim, now: Date): Promise<boolean>;
 };
@@ -137,9 +137,9 @@ export class ExcursionWorkService {
     await tx.cancelWork(scope, targetId, reason);
   }
 
-  async claim(tx: ExcursionWorkTransactionPort, now = new Date(), leaseMs = 45_000): Promise<ExcursionClaim | null> {
+  async claim(tx: ExcursionWorkTransactionPort, now = new Date(), leaseMs = 45_000, accountIds?: string[]): Promise<ExcursionClaim | null> {
     await tx.recoverExpiredClaims(now);
-    return tx.claimNext(now, randomUUID(), new Date(now.getTime() + leaseMs));
+    return tx.claimNext(now, randomUUID(), new Date(now.getTime() + leaseMs), accountIds);
   }
 
   async checkpoint(

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
 import { lockOwnedMt5Account } from './mt5-account-lock';
 import { Mt5AccountAuthorizationRejected, Mt5BridgeClient, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
+import { Mt5BridgeActivityService } from './mt5-bridge-activity.service';
 import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
 
 const LEASE_MS = 5 * 60_000;
@@ -109,9 +110,23 @@ export class Mt5SyncService {
     private readonly bridge: Mt5BridgeClient,
     @Optional() @Inject(EXCURSION_WORK_PRODUCER) private readonly excursionWorkProducer?: ExcursionWorkProducer,
     @Optional() @Inject(EXCURSION_WORKER_WAKE) private readonly excursionWorkerWake?: ExcursionWorkerWake,
+    @Optional() private readonly bridgeActivity?: Mt5BridgeActivityService,
   ) {}
 
   async sync(ownerId: string, accountId: string, forceFull = false): Promise<Mt5SyncResponse> {
+    if (!this.bridgeActivity) return this.syncCoordinated(ownerId, accountId, forceFull);
+    const activityLeaseId = await this.bridgeActivity.registerSyncIntent(accountId);
+    try {
+      if (!await this.bridgeActivity.waitForWorkerYield(activityLeaseId)) {
+        return { state: 'failed', accountId, message: 'MT5 분석 작업이 동기화 우선권을 양보하지 못했습니다.' };
+      }
+      return await this.syncCoordinated(ownerId, accountId, forceFull);
+    } finally {
+      await this.bridgeActivity.releaseSyncIntent(activityLeaseId);
+    }
+  }
+
+  private async syncCoordinated(ownerId: string, accountId: string, forceFull: boolean): Promise<Mt5SyncResponse> {
     const claimed = await this.claim(ownerId, accountId, forceFull);
     if (!claimed) {
       const status = await this.prisma.mt5SyncStatus.findUnique({ where: { accountId }, select: { mode: true, snapshotToMsc: true, pageCursor: true } });

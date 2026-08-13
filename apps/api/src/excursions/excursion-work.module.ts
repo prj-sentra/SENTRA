@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { EXCURSION_WORK_PRODUCER, EXCURSION_WORKER_WAKE } from '../mt5-accounts/mt5-sync.service';
 import { CredentialCipherService } from '../mt5-accounts/credential-cipher.service';
 import { Mt5BridgeClient } from '../mt5-accounts/mt5-bridge.client';
+import { Mt5BridgeActivityService } from '../mt5-accounts/mt5-bridge-activity.service';
 import { EXCURSION_WORKER_PORT } from './excursion-worker.service';
 import { ExcursionPrismaAdapter } from './excursion-prisma.adapter';
 import { ExcursionWorkerService } from './excursion-worker.service';
@@ -13,6 +14,7 @@ import { ExcursionWorkService } from './excursion-work.service';
     ExcursionWorkService,
     ExcursionWorkerService,
     Mt5BridgeClient,
+    Mt5BridgeActivityService,
     CredentialCipherService,
     ExcursionPrismaAdapter,
     { provide: EXCURSION_WORKER_PORT, useExisting: ExcursionPrismaAdapter },

@@ -299,6 +299,22 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     }));
   });
 
+  it('registers sync priority before the bridge call and releases it after completion', async () => {
+    const { db } = statefulDb();
+    const upstream = bridge([{ deals: [deposit, deal] }]);
+    const activity = {
+      registerSyncIntent: jest.fn().mockResolvedValue('sync-priority-1'),
+      waitForWorkerYield: jest.fn().mockResolvedValue(true),
+      releaseSyncIntent: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new Mt5SyncService(db, cipher as never, upstream as never, undefined, undefined, activity as never);
+
+    await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
+    expect(activity.registerSyncIntent.mock.invocationCallOrder[0]).toBeLessThan(upstream.sync.mock.invocationCallOrder[0]);
+    expect(activity.waitForWorkerYield).toHaveBeenCalledWith('sync-priority-1');
+    expect(activity.releaseSyncIntent).toHaveBeenCalledWith('sync-priority-1');
+  });
+
   it('full rebuild marks seen facts, removes only unseen raw facts, and preserves authored trade state', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([{ deals: [deposit, deal] }, { deals: [deposit, deal] }]);

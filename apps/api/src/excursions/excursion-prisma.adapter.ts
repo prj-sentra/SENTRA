@@ -4,11 +4,16 @@ import { Prisma } from '@prisma/client';
 import { CredentialCipherService } from '../mt5-accounts/credential-cipher.service';
 import { advanceMfeMaeCalculator, createMfeMaeCalculator, finalizeMfeMaeCalculator, MfeMaeCalculatorState } from '../mt5-accounts/mfe-mae.service';
 import { Mt5BridgeClient } from '../mt5-accounts/mt5-bridge.client';
+import { Mt5BridgeActivityService } from '../mt5-accounts/mt5-bridge-activity.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExcursionWorkerLimits, ExcursionWorkerPort, ExcursionWorkerUnitResult } from './excursion-worker.service';
 import { ExcursionClaim, ExcursionProgress, ExcursionScope, ExcursionWork, ExcursionWorkTransactionPort } from './excursion-work.service';
 
 const CALCULATION_VERSION = 1;
+const TICK_REQUEST_INTERVAL_MS = 150;
+export class SyncPriorityYieldError extends Error {
+  constructor() { super('MT5 sync priority yield'); }
+}
 
 type TickSnapshot = { id: string; sha256: string; tickCount: number };
 
@@ -36,7 +41,18 @@ function work(row: any): ExcursionWork {
 /** Durable Prisma implementation of the work queue and MT5 tick calculation boundary. */
 @Injectable()
 export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
-  constructor(private readonly prisma: PrismaService, private readonly bridge: Mt5BridgeClient, private readonly cipher: CredentialCipherService) {}
+  private lastTickRequestAt = 0;
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bridge: Mt5BridgeClient,
+    private readonly cipher: CredentialCipherService,
+    private readonly bridgeActivity?: Mt5BridgeActivityService,
+  ) {}
+
+  async acquireWorkerLease(leaseMs: number): Promise<string | null> { return this.bridgeActivity?.acquireWorkerLease(leaseMs) ?? 'uncoordinated-test-worker'; }
+  async releaseWorkerLease(leaseId: string): Promise<void> { await this.bridgeActivity?.releaseWorkerLease(leaseId); }
+  async syncRequested(): Promise<boolean> { return this.bridgeActivity?.syncRequested() ?? false; }
+  async haltWorker(reason: string): Promise<void> { await this.bridgeActivity?.haltWorker(reason); }
 
   async findWork(scope: ExcursionScope, targetId: string): Promise<ExcursionWork | null> { const row = await this.prisma.excursionWorkItem.findUnique({ where: { scope_targetId: { scope, targetId } } }); return row ? work(row) : null; }
   async upsertWork(input: ExcursionWork): Promise<ExcursionWork> {
@@ -65,12 +81,22 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
   }
   async cancelWork(scope: ExcursionScope, targetId: string, reason: string): Promise<void> { await this.prisma.excursionWorkItem.updateMany({ where: { scope, targetId }, data: { state: 'CANCELLED', reason, claimId: null, claimExpiresAt: null } }); }
   async recoverExpiredClaims(now: Date): Promise<number> { const result = await this.prisma.excursionWorkItem.updateMany({ where: { state: 'CLAIMED', claimExpiresAt: { lte: now } }, data: { state: 'RETRY_WAIT', notBefore: now, claimId: null, claimExpiresAt: null } }); return result.count; }
-  async claimNext(now: Date, claimId: string, expiresAt: Date): Promise<ExcursionClaim | null> {
+  async claimNext(now: Date, claimId: string, expiresAt: Date, accountIds?: string[]): Promise<ExcursionClaim | null> {
     return this.prisma.$transaction(async (tx) => {
       const candidates = await tx.$queryRaw<Array<Pick<ExcursionWork, 'id' | 'generation' | 'baseInputFingerprint' | 'tickSnapshotToMsc'>>>(
-        Prisma.sql`SELECT id, generation, base_input_fingerprint AS "baseInputFingerprint", tick_snapshot_to_msc AS "tickSnapshotToMsc"
+        Prisma.sql`WITH eligible_accounts AS (
+            SELECT account_id, MIN(updated_at) AS queue_age
+            FROM excursion_work_items
+            WHERE state IN ('PENDING', 'RETRY_WAIT') AND claim_id IS NULL AND (not_before IS NULL OR not_before <= ${now})
+              ${accountIds?.length ? Prisma.sql`AND account_id IN (${Prisma.join(accountIds)})` : Prisma.empty}
+            GROUP BY account_id
+          ), selected_account AS (
+            SELECT account_id FROM eligible_accounts ORDER BY queue_age ASC, account_id ASC LIMIT 1
+          )
+          SELECT id, generation, base_input_fingerprint AS "baseInputFingerprint", tick_snapshot_to_msc AS "tickSnapshotToMsc"
           FROM excursion_work_items
-          WHERE state IN ('PENDING', 'RETRY_WAIT') AND claim_id IS NULL AND (not_before IS NULL OR not_before <= ${now})
+          WHERE account_id = (SELECT account_id FROM selected_account)
+            AND state IN ('PENDING', 'RETRY_WAIT') AND claim_id IS NULL AND (not_before IS NULL OR not_before <= ${now})
           ORDER BY not_before ASC NULLS FIRST, created_at ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1`,
@@ -106,13 +132,18 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
     await this.staleResult(current.scope, current.targetId, reason, now);
     const calculationFailure = reason === 'CALCULATION_FAILURE';
     const failures = calculationFailure ? current.consecutiveFailures + 1 : 0;
-    const blocked = calculationFailure && failures >= 3;
+    const terminalUnsupported = reason === 'UNSUPPORTED_VALUATION';
+    const blocked = terminalUnsupported || calculationFailure && failures >= 3;
+    const retryDelay = this.retryDelay(reason, failures);
     await this.prisma.excursionWorkItem.updateMany({
       where: { id: claim.id, claimId: claim.claimId, generation: claim.generation, state: 'CLAIMED' },
-      data: { state: blocked ? 'BLOCKED' : 'RETRY_WAIT', reason, notBefore: blocked ? null : new Date(now.getTime() + Math.min(300_000, 5_000 * 2 ** Math.max(0, failures - 1))), claimId: null, claimExpiresAt: null, consecutiveFailures: failures },
+      data: { state: blocked ? 'BLOCKED' : 'RETRY_WAIT', reason, notBefore: blocked ? null : new Date(now.getTime() + retryDelay), claimId: null, claimExpiresAt: null, consecutiveFailures: failures },
     });
   }
-  async getCapabilities(signal: AbortSignal, deadlineMsc: number): Promise<unknown> { return this.bridge.getCapabilities({ signal, deadlineMsc }); }
+  async getCapabilities(signal: AbortSignal, deadlineMsc: number): Promise<unknown> {
+    if (await this.syncRequested()) throw new SyncPriorityYieldError();
+    return this.bridge.getCapabilities({ signal, deadlineMsc });
+  }
   async execute(claim: ExcursionClaim, limits: ExcursionWorkerLimits, signal: AbortSignal): Promise<ExcursionWorkerUnitResult> {
     const item = await this.prisma.excursionWorkItem.findUnique({
       where: { id: claim.id },
@@ -150,6 +181,8 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
         let valuationSha256: string | undefined;
         const originalTicks: Array<{ sequence: number; timeMsc: number; bid: string; ask: string }> = [];
         do {
+          if (await this.syncRequested()) throw new SyncPriorityYieldError();
+          await this.paceTickRequest();
           const response = await this.bridge.ticks({ contractVersion: 5, server: account.server, accountLogin: Number(account.accountLogin), password, symbol, rawRange: { fromMsc: chunkFrom, toMsc: chunkTo }, snapshotToMsc: Number(item.tickSnapshotToMsc), pageCursor: cursor }, { signal, deadlineMsc: limits.deadlineMsc });
           pagesUsed++; ticksUsed += response.ticks.length;
           if (pagesUsed > limits.maxPages || ticksUsed > limits.maxTicks) throw new Error('Excursion worker limits exceeded');
@@ -243,5 +276,21 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
     });
     if (!published) throw new Error('Excursion target became stale before publication');
     return { complete: true, finalized: true };
+  }
+
+  private retryDelay(reason: string, failures: number): number {
+    const base = reason === 'SYNC_PRIORITY_YIELD' ? 1_000
+      : reason === 'TICK_CAPACITY' ? 120_000
+        : reason === 'TICK_UNAVAILABLE' || reason === 'TRANSIENT_BRIDGE_FAILURE' ? 300_000
+          : reason === 'TICK_DEADLINE' ? 60_000
+            : reason === 'WORKER_DEADLINE' ? 10_000
+              : Math.min(300_000, 5_000 * 2 ** Math.max(0, failures - 1));
+    return Math.round(base * (0.9 + Math.random() * 0.2));
+  }
+
+  private async paceTickRequest(): Promise<void> {
+    const wait = this.lastTickRequestAt + TICK_REQUEST_INTERVAL_MS - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    this.lastTickRequestAt = Date.now();
   }
 }
