@@ -85,7 +85,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
       const candidates = await tx.$queryRaw<Array<Pick<ExcursionWork, 'id' | 'accountId' | 'generation' | 'baseInputFingerprint' | 'tickSnapshotToMsc'>>>(
         Prisma.sql`WITH eligible_accounts AS (
             SELECT wi.account_id, schedule.last_served_at
-            FROM excursion_work_items
+            FROM excursion_work_items wi
             LEFT JOIN mt5_excursion_account_schedule schedule ON schedule.account_id = wi.account_id
             WHERE wi.state IN ('PENDING', 'RETRY_WAIT') AND wi.claim_id IS NULL AND (wi.not_before IS NULL OR wi.not_before <= ${now})
               ${accountIds?.length ? Prisma.sql`AND wi.account_id IN (${Prisma.join(accountIds)})` : Prisma.sql`AND FALSE`}
