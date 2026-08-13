@@ -343,6 +343,32 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     jest.useRealTimers();
   });
 
+  it('reports account-scoped excursion calculation progress', async () => {
+    const { db } = statefulDb();
+    db.mt5Account.findFirst.mockResolvedValue({ id: 'account-1' });
+    db.excursionWorkItem.groupBy = jest.fn().mockResolvedValue([
+      { state: 'PENDING', _count: 3 },
+      { state: 'CLAIMED', _count: 1 },
+      { state: 'RETRY_WAIT', _count: 2 },
+    ]);
+    db.tradeExcursionResult = { groupBy: jest.fn().mockResolvedValue([{ status: 'SUCCESS', _count: 4 }, { status: 'STALE', _count: 1 }]) };
+    db.tradeCampaignExcursionResult = { groupBy: jest.fn().mockResolvedValue([{ status: 'UNSUPPORTED', _count: 2 }]) };
+    db.mt5BridgeActivity = { count: jest.fn().mockResolvedValue(1) };
+    const service = new Mt5SyncService(db, cipher as never, {} as never);
+
+    await expect(service.getExcursionProgress('owner-1', 'account-1')).resolves.toEqual({
+      accountId: 'account-1',
+      total: 13,
+      completed: 4,
+      pending: 6,
+      recalculationNeeded: 1,
+      unsupported: 2,
+      failed: 0,
+      calculating: true,
+      syncHasPriority: true,
+    });
+  });
+
   it('full rebuild marks seen facts, removes only unseen raw facts, and preserves authored trade state', async () => {
     const { db, state } = statefulDb();
     const upstream = bridge([{ deals: [deposit, deal] }, { deals: [deposit, deal] }]);

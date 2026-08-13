@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CampaignClassificationApplyResponse, CampaignClassificationPreview, Mt5SyncResponse, SafeMt5AccountRef } from '@trading-journal/shared';
+import type { CampaignClassificationApplyResponse, CampaignClassificationPreview, Mt5ExcursionProgress, Mt5SyncResponse, SafeMt5AccountRef } from '@trading-journal/shared';
 
 export interface SyncControlProps {
   account: SafeMt5AccountRef | null;
@@ -7,6 +7,7 @@ export interface SyncControlProps {
   onFullSync?: (accountId: string) => Promise<Mt5SyncResponse>;
   onClassificationPreview?: (accountId: string) => Promise<CampaignClassificationPreview>;
   onReclassify?: (accountId: string, classificationFingerprint: string) => Promise<CampaignClassificationApplyResponse>;
+  onExcursionProgress?: (accountId: string) => Promise<Mt5ExcursionProgress>;
   onCompleted?: (response: Mt5SyncResponse) => Promise<void> | void;
 }
 
@@ -30,10 +31,11 @@ export function formatSyncResult(response: Mt5SyncResponse, account: SafeMt5Acco
   return `동기화 완료\n계정: ${account.nickname}\n반영 ${imported}건 / 수신 ${received}건\n동기화 시각: ${syncedAt}${ledgerSummary}${rebuild}`;
 }
 
-export function SyncControl({ account, onSync, onFullSync, onClassificationPreview, onReclassify, onCompleted }: SyncControlProps) {
+export function SyncControl({ account, onSync, onFullSync, onClassificationPreview, onReclassify, onExcursionProgress, onCompleted }: SyncControlProps) {
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [excursionProgress, setExcursionProgress] = useState<Mt5ExcursionProgress | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const pollTimer = useRef<number | undefined>(undefined);
   const generation = useRef(0);
@@ -55,7 +57,23 @@ export function SyncControl({ account, onSync, onFullSync, onClassificationPrevi
     window.clearTimeout(pollTimer.current);
     setSyncing(false);
     setResult(null);
+    setExcursionProgress(null);
   }, [account?.id]);
+  useEffect(() => {
+    if (!account?.active || !onExcursionProgress) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const next = await onExcursionProgress(account.id);
+        if (active) setExcursionProgress(next);
+      } catch {
+        if (active) setExcursionProgress(null);
+      }
+    };
+    void load();
+    const interval = window.setInterval(() => { void load(); }, 5_000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [account?.active, account?.id, onExcursionProgress]);
 
   async function sync(poll = false, full = false): Promise<void> {
     if (!account?.active || (!poll && syncing)) return;
@@ -122,13 +140,22 @@ export function SyncControl({ account, onSync, onFullSync, onClassificationPrevi
         <button className="secondary-button" type="button" onClick={() => { void sync(); }} disabled={unavailable || syncing}>
           {syncing ? '동기화 중…' : 'MT5 동기화'}
         </button>
+        <p className="sync-action-help">최근 MT5 체결과 포지션 변경사항을 가져옵니다.</p>
         {onFullSync ? <button className="sync-reset-button" type="button" onClick={() => { void fullSync(); }} disabled={unavailable || syncing || classifying}>
           MT5 동기화 초기화
         </button> : null}
+        {onFullSync ? <p className="sync-action-help">MT5 기록을 처음부터 다시 확인합니다. 작성한 분석과 메모는 유지됩니다.</p> : null}
       </div>
       {onClassificationPreview && onReclassify ? <button className="classification-review-button" type="button" onClick={() => { void reviewClassification(); }} disabled={unavailable || syncing || classifying}>
         {classifying ? '분류 기준 확인 중…' : '매매 자동 분류 다시 적용'}
       </button> : null}
+      {onClassificationPreview && onReclassify ? <p className="sync-action-help">현재 기준으로 매매 묶음을 다시 계산하고, 적용 전에 변경 내용을 보여줍니다.</p> : null}
+      {excursionProgress ? <section className="excursion-progress" aria-label="시장 진행 분석 계산 상태">
+        <header><strong>시장 진행 분석</strong><span>{excursionProgress.completed} / {excursionProgress.total}</span></header>
+        <progress max={Math.max(excursionProgress.total, 1)} value={excursionProgress.completed} />
+        <p>{excursionProgress.syncHasPriority || syncing ? 'MT5 동기화를 우선 처리하고 있습니다. 분석은 이후 자동으로 계속됩니다.' : excursionProgress.calculating ? '백그라운드에서 계산 중입니다.' : excursionProgress.pending > 0 ? '계산 대기 중입니다.' : '현재 계산 작업이 완료되었습니다.'}</p>
+        {(excursionProgress.recalculationNeeded > 0 || excursionProgress.unsupported > 0 || excursionProgress.failed > 0) ? <details><summary>데이터 상태</summary><p>재계산 필요 {excursionProgress.recalculationNeeded} · 계산 불가 {excursionProgress.unsupported} · 확인 필요 {excursionProgress.failed}</p></details> : null}
+      </section> : null}
       {unavailable ? <span className="muted">{account ? '비활성 계정은 동기화할 수 없습니다.' : '동기화할 MT5 계정을 선택하세요.'}</span> : null}
       {result ? <span className="muted" role="status">{result}</span> : null}
     </div>

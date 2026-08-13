@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import type { CampaignClassificationPreview, Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
+import type { CampaignClassificationPreview, Mt5ExcursionProgress, Mt5SyncResponse, TradeExitReason } from '@trading-journal/shared';
 import { Prisma, TradeSide, TradeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CredentialCipherService } from './credential-cipher.service';
@@ -1055,6 +1055,38 @@ export class Mt5SyncService {
     const account = await this.prisma.mt5Account.findFirst({ where: { id: accountId, ownerId }, select: { id: true } });
     if (!account) throw new NotFoundException('MT5 account not found');
     return this.buildCampaignClassificationPreview(this.prisma as unknown as Prisma.TransactionClient, ownerId, accountId);
+  }
+
+  async getExcursionProgress(ownerId: string, accountId: string): Promise<Mt5ExcursionProgress> {
+    const account = await this.prisma.mt5Account.findFirst({ where: { id: accountId, ownerId }, select: { id: true } });
+    if (!account) throw new NotFoundException('MT5 account not found');
+    const [workByState, tradeByStatus, campaignByStatus, syncHasPriority] = await Promise.all([
+      this.prisma.excursionWorkItem.groupBy({ by: ['state'], where: { accountId }, _count: true }),
+      this.prisma.tradeExcursionResult.groupBy({ by: ['status'], where: { trade: { mt5AccountId: accountId } }, _count: true }),
+      this.prisma.tradeCampaignExcursionResult.groupBy({ by: ['status'], where: { campaign: { mt5AccountId: accountId } }, _count: true }),
+      this.prisma.mt5BridgeActivity.count({ where: { kind: 'SYNC', accountId, expiresAt: { gt: new Date() } } }),
+    ]);
+    const resultCounts = new Map<string, number>();
+    for (const row of [...tradeByStatus, ...campaignByStatus]) resultCounts.set(row.status, (resultCounts.get(row.status) ?? 0) + row._count);
+    const workCounts = new Map(workByState.map((row) => [row.state, row._count]));
+    const pending = [...workCounts.entries()]
+      .filter(([state]) => state === 'PENDING' || state === 'CLAIMED' || state === 'RETRY_WAIT')
+      .reduce((sum, [, count]) => sum + count, 0);
+    const completed = resultCounts.get('SUCCESS') ?? 0;
+    const recalculationNeeded = resultCounts.get('STALE') ?? 0;
+    const unsupported = resultCounts.get('UNSUPPORTED') ?? 0;
+    const failed = resultCounts.get('FAILED') ?? 0;
+    return {
+      accountId,
+      total: completed + pending + recalculationNeeded + unsupported + failed,
+      completed,
+      pending,
+      recalculationNeeded,
+      unsupported,
+      failed,
+      calculating: (workCounts.get('CLAIMED') ?? 0) > 0,
+      syncHasPriority: syncHasPriority > 0,
+    };
   }
 
   private async buildCampaignClassificationPreview(

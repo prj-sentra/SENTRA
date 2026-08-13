@@ -847,6 +847,12 @@ h3 {
 .classification-review-button { border: 1px solid #8a3ffc; color: #6929c4; background: #f6f2ff; }
 .classification-review-button:hover:not(:disabled) { border-color: #6929c4; color: #fff; background: #8a3ffc; }
 .sync-reset-button:disabled, .classification-review-button:disabled { opacity: .5; cursor: not-allowed; }
+.sync-action-help { margin: -3px 0 2px; color: var(--text-muted); font-size: .7rem; line-height: 1.35; }
+.excursion-progress { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--border); background: var(--layer-01); }
+.excursion-progress header { display: flex; justify-content: space-between; gap: 8px; font-size: .75rem; }
+.excursion-progress progress { width: 100%; height: 6px; accent-color: var(--blue); }
+.excursion-progress p, .excursion-progress details { margin: 0; color: var(--text-muted); font-size: .68rem; line-height: 1.4; }
+.excursion-progress summary { cursor: pointer; }
 .sync-control [role='status'] { white-space: pre-line; overflow-wrap: anywhere; font-size: .75rem; line-height: 1.55; }
 .sidebar-sync { display: grid; align-self: start; min-width: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .sidebar-sync .secondary-button { height: 40px; min-height: 40px; padding-block: 0; }
@@ -1309,6 +1315,41 @@ button.trade-calendar-day:hover, button.trade-calendar-day.is-selected { border-
 .trade-calendar-day.is-saturday { background: #f7f9ff; }
 button.trade-calendar-day.is-selected { background: #edf5ff; }
 .trade-calendar-date { font-weight: 600; }
+.excursion-panel, .excursion-summary { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
+.campaign-excursion { border-top: 3px solid #8a3ffc; background: linear-gradient(180deg, #fdfbff 0, var(--surface) 82px); }
+.entry-excursion { margin-top: 14px; border-top: 3px solid var(--blue); background: linear-gradient(180deg, #f7faff 0, var(--surface) 82px); }
+.excursion-panel > header, .excursion-summary > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.excursion-panel h3, .excursion-summary h2 { margin: 0; font-size: 1rem; }
+.excursion-panel header p, .excursion-summary header p { margin: 4px 0 0; color: var(--text-muted); font-size: .75rem; }
+.excursion-summary header > span { color: var(--text-secondary); font-size: .78rem; font-weight: 650; }
+.excursion-status { flex: 0 0 auto; padding: 4px 8px; border: 1px solid currentColor; font-size: .68rem; font-weight: 700; }
+.excursion-status.is-success { color: #0e6027; background: #defbe6; }
+.excursion-status.is-stale, .excursion-status.is-pending { color: #8a3800; background: #fff2cc; }
+.excursion-status.is-failed { color: #a2191f; background: #fff1f1; }
+.excursion-status.is-unsupported { color: #525252; background: #f4f4f4; }
+.excursion-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.excursion-card-grid article { display: grid; min-width: 0; gap: 5px; padding: 14px; border: 1px solid var(--border); background: var(--surface); }
+.excursion-card-grid article > span { color: var(--text-secondary); font-size: .72rem; font-weight: 650; }
+.excursion-card-grid strong { overflow: hidden; font: 600 1.35rem 'IBM Plex Mono', ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.excursion-card-grid small { color: var(--text-muted); font-size: .65rem; line-height: 1.35; }
+.excursion-card-grid .is-positive { color: #198038; }
+.excursion-card-grid .is-negative { color: var(--danger); }
+.excursion-interpretation { margin: 0; padding: 10px 12px; border-left: 3px solid var(--blue); background: var(--layer-01); font-size: .8rem; }
+.excursion-interpretation.is-warning { border-left-color: #f1c21b; }
+.excursion-panel details, .excursion-summary details { border-top: 1px solid var(--border); padding-top: 10px; color: var(--text-secondary); font-size: .75rem; }
+.excursion-panel summary, .excursion-summary summary { cursor: pointer; font-weight: 650; }
+.excursion-panel dl { display: grid; gap: 8px; margin: 12px 0 0; }
+.excursion-panel dl div { display: flex; justify-content: space-between; gap: 16px; }
+.excursion-panel dt { color: var(--text-muted); }
+.excursion-panel dd { margin: 0; text-align: right; }
+.excursion-diagnostic-family { margin-top: 12px; }
+.excursion-diagnostic-family h3, .excursion-diagnostic-family p { margin: 4px 0; }
+@media (max-width: 700px) {
+  .excursion-panel, .excursion-summary { padding: 14px; }
+  .excursion-card-grid { grid-template-columns: 1fr; }
+  .excursion-panel > header, .excursion-summary > header { align-items: stretch; flex-direction: column; }
+  .excursion-status { align-self: flex-start; }
+}
 .trade-calendar-counts { align-self: end; color: var(--text-secondary); font-size: .62rem; white-space: nowrap; }
 .trade-calendar-pnl { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 .74rem 'IBM Plex Mono', monospace; }
 .trade-calendar-pnl.is-positive { color: #198038; }
@@ -1394,13 +1435,12 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .stats-note { margin: 0; padding: 12px 14px; border-left: 3px solid var(--blue); background: #edf5ff; color: var(--text-secondary); }
 .stats-series, .stats-breakdown, .stats-preferences { min-width: 0; padding: 18px; border: 1px solid var(--border); background: var(--surface); }
 .stats-series { display: grid; gap: 14px; }
-.stats-series > header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.stats-chart-panel { display: grid; min-width: 0; gap: 8px; }
-.stats-chart-panel h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
-.stats-chart-description { margin: 0; color: var(--text-muted); font-size: .72rem; }
-.stats-chart-spacing { margin-left: auto; }
+.stats-series > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.stats-chart-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.stats-chart-stack > section { display: grid; min-width: 0; gap: 8px; }
+.stats-chart-stack h3 { margin: 0; color: var(--text-secondary); font-size: .78rem; }
 .stats-line-chart-shell { min-width: 0; height: clamp(330px, 40vh, 430px); border: 1px solid var(--border); background: var(--surface); }
-.stats-line-chart { display: block; width: 100%; height: calc(100% - 30px); overflow: visible; touch-action: pan-y; }
+.stats-line-chart { display: block; width: 100%; height: calc(100% - 30px); overflow: visible; touch-action: none; }
 .stats-line-chart:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .stats-line-chart-legend { display: flex; height: 30px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; color: var(--text-muted); font: .68rem 'IBM Plex Mono', ui-monospace, monospace; }
 .stats-line-chart-legend strong { color: var(--text-primary); font-size: .76rem; }
@@ -1496,7 +1536,7 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
   .preferences-general-grid, .preferences-session-grid { grid-template-columns: 1fr; }
   .settings-card-heading { flex-wrap: wrap; }
   .stats-series > header { align-items: stretch; flex-direction: column; }
-  .stats-chart-spacing { margin-left: 0; }
+  .stats-chart-stack { grid-template-columns: 1fr; }
   .stats-toolbar { flex-wrap: wrap; }
   .stats-toolbar-actions { width: 100%; }
   .stats-toolbar-actions .secondary-button { flex: 1; }

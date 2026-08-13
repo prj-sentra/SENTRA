@@ -223,6 +223,18 @@ export interface Mt5SyncResponse {
   message?: string;
 }
 
+export interface Mt5ExcursionProgress {
+  accountId: string;
+  total: number;
+  completed: number;
+  pending: number;
+  recalculationNeeded: number;
+  unsupported: number;
+  failed: number;
+  calculating: boolean;
+  syncHasPriority: boolean;
+}
+
 export interface CampaignClassificationPreview {
   accountId: string;
   classificationFingerprint: string;

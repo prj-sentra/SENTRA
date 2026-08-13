@@ -19,8 +19,10 @@ describe('TradeDetail split execution ownership', () => {
   it('labels stale excursion metrics with the failed recalculation reason', () => {
     const excursion = { scope: 'trade', status: 'stale', attempt: { calculationVersion: 2, inputFingerprint: 'next', attemptedAt: '2026-08-11T00:00:00.000Z', failureReason: 'TICK_UNAVAILABLE' }, success: { calculationVersion: 1, inputFingerprint: 'prior', succeededAt: '2026-08-10T00:00:00.000Z', priceSource: 'mt5_copy_ticks_range', rawRange: { fromMsc: 1, toMsc: 2 }, displayRange: { fromAt: '2026-08-10T00:00:00.000Z', toAt: '2026-08-10T00:00:00.000Z' }, tickSnapshotToMsc: 2, pathDigest: 'path', tickCount: 2, valuationVersion: 1, valuationDigest: 'digest', accountCurrency: 'USD' }, metrics: { price: { mfe: { value: 3, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 3 }, mae: { value: -2, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 2 } }, percent: { mfe: { value: 3, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 3 }, mae: { value: -2, occurredAt: '2026-08-10T00:00:00.000Z', markPrice: 2 } }, unrealizedPnl: { mfe: { value: 30, occurredAt: '2026-08-10T00:00:00.000Z' }, mae: { value: -20, occurredAt: '2026-08-10T00:00:00.000Z' } }, rAvailability: 'risk_unavailable' } };
     render(<TradeDetail campaign={{ ...campaign, members: [{ ...campaign.members[0], excursion }, campaign.members[1]] }} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
-    expect(screen.getByText(/상태: 오래됨 .* 재계산 TICK_UNAVAILABLE/)).toBeInTheDocument();
-    expect(screen.getByText(/캡처율 계산 불가/)).toBeInTheDocument();
+    expect(screen.getAllByText('재계산 필요').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/MT5에서 해당 기간의 가격 기록을 가져오지 못했습니다/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/수익 실현률/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/TICK_UNAVAILABLE/, { selector: 'summary' })).not.toBeInTheDocument();
   });
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {
     const { container } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);

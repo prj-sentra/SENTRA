@@ -13,11 +13,12 @@ describe('StatsPage', () => {
   it('renders the selected-unit excursion summary and distributions', async () => {
     const request = vi.fn(() => Promise.resolve({ ...stats, excursions: { unit: 'campaign', families: [{ family: 'campaign_price', status: { success: 2, stale: 1, failed: 1, unsupported: 1, missing: 3 }, price: { mfe: { sampleCount: 2, mean: 3, bins: [] }, mae: { sampleCount: 2, mean: -2, bins: [] } }, percent: { mfe: { sampleCount: 2, bins: [] }, mae: { sampleCount: 2, bins: [] } }, counts: { eligibleSuccessCount: 2, heterogeneousUnavailableCount: 1 } }, { family: 'campaign_unrealized_pnl', status: { success: 2, stale: 0, failed: 0, unsupported: 0, missing: 0 }, unrealizedPnl: { mfe: { sampleCount: 2, mean: 10, bins: [] }, mae: { sampleCount: 2, mean: -5, bins: [] } }, r: { mfe: { sampleCount: 0, bins: [] }, mae: { sampleCount: 0, bins: [] } }, captureRate: { sampleCount: 1, mean: 50, bins: [] }, counts: { eligibleSuccessCount: 2, riskUnavailableCount: 0, captureEligibleCount: 1, valuationUnavailableCount: 0 } }] } } as TradeStatsResponse));
     page(request);
-    expect(await screen.findByText('매매 가격 MFE/MAE')).toBeInTheDocument();
-    expect(screen.getByText(/성공 2 · 오래됨 1 · 실패 1 · 미지원 1 · 누락 3/)).toBeInTheDocument();
-    expect(screen.getByText(/캡처율 평균 50%/)).toBeInTheDocument();
-    expect(screen.getByText('R 가능 2 · 위험금액 없음 0')).toBeInTheDocument();
-    expect(screen.getByText('캡처율 평균 50% · 가능 1 · 불가 1')).toBeInTheDocument();
+    expect(await screen.findByText('시장 진행 분석')).toBeInTheDocument();
+    expect(screen.getByText('평균 최대 수익 기회')).toBeInTheDocument();
+    expect(screen.getByText('평균 최대 손실 위험')).toBeInTheDocument();
+    expect(screen.getByText('평균 수익 실현률')).toBeInTheDocument();
+    expect(screen.getByText('데이터 품질 및 상세 분포')).toBeInTheDocument();
+
   });
   it('renders redesigned metrics, selected diagnostics and populated breakdown panels', async () => { page(); expect(await screen.findByText('연속 기록')).toBeInTheDocument(); expect(screen.getByText('위험 조정 성과')).toBeInTheDocument(); expect(screen.getByText('최대 낙폭 (MDD)')).toBeInTheDocument(); expect(screen.queryByText('기대 수익')).not.toBeInTheDocument(); expect(screen.getByText('PF (Profit Factor)')).toHaveAttribute('data-tooltip', expect.stringContaining('총 수익 PnL')); expect(screen.getByText('거래당 평균 포인트')).toHaveAttribute('data-tooltip', expect.stringContaining('각 진입의 실현 PnL')); expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('seed-1'))).toBe(true); expect(screen.queryByText(/위험금액 누락\/주의/)).not.toBeInTheDocument(); expect(screen.queryByText(/미완성 캠페인 누락\/주의/)).not.toBeInTheDocument(); });
   it('shows win, loss, and breakeven shares in the trade-count equation', async () => { page(); await screen.findByLabelText('총 거래 횟수 계산'); expect(screen.getByText('(50%)')).toBeInTheDocument(); expect(screen.getByText('(42%)')).toBeInTheDocument(); expect(screen.getByText('(8%)')).toBeInTheDocument(); });

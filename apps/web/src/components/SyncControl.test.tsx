@@ -53,6 +53,18 @@ describe('SyncControl', () => {
     expect(reclassify).toHaveBeenCalledWith('a1', 'a'.repeat(64));
     expect(screen.getByRole('status')).toHaveTextContent('자동 분류 적용 완료 거래 이동 2건');
   });
+  it('shows plain-language background calculation progress and sync priority', async () => {
+    vi.useRealTimers();
+    const progress = vi.fn().mockResolvedValue({
+      accountId: 'a1', total: 100, completed: 44, pending: 50, recalculationNeeded: 4,
+      unsupported: 2, failed: 0, calculating: true, syncHasPriority: false,
+    });
+    render(<SyncControl account={account} onSync={vi.fn()} onExcursionProgress={progress} />);
+    expect(await screen.findByText('시장 진행 분석')).toBeInTheDocument();
+    expect(screen.getByText('44 / 100')).toBeInTheDocument();
+    expect(screen.getByText('백그라운드에서 계산 중입니다.')).toBeInTheDocument();
+    expect(screen.getByText('최근 MT5 체결과 포지션 변경사항을 가져옵니다.')).toBeInTheDocument();
+  });
   it('shows the safe failed response message without invented counts or time', async () => {
     render(<SyncControl account={account} onSync={async () => ({ state: 'failed', accountId: 'a1', message: 'Synchronization result expired' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /MT5 동기화/i })); });

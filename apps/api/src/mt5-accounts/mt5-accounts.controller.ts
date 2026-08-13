@@ -69,6 +69,11 @@ export class Mt5AccountsController {
     return this.syncService.previewCampaignReclassification(request.user.id, id);
   }
 
+  @Get(':id/excursion-progress')
+  excursionProgress(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.syncService.getExcursionProgress(request.user.id, id);
+  }
+
   @Post(':id/reclassify')
   reclassify(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {
     if (!body || typeof body !== 'object' || typeof (body as { classificationFingerprint?: unknown }).classificationFingerprint !== 'string'
