@@ -3,14 +3,13 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { CredentialCipherService } from '../mt5-accounts/credential-cipher.service';
 import { advanceMfeMaeCalculator, createMfeMaeCalculator, finalizeMfeMaeCalculator, MfeMaeCalculatorState } from '../mt5-accounts/mfe-mae.service';
-import { Mt5BridgeClient } from '../mt5-accounts/mt5-bridge.client';
+import { Mt5BridgeClient, Mt5BridgeTickError } from '../mt5-accounts/mt5-bridge.client';
 import { Mt5BridgeActivityService } from '../mt5-accounts/mt5-bridge-activity.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExcursionWorkerLimits, ExcursionWorkerPort, ExcursionWorkerUnitResult } from './excursion-worker.service';
 import { ExcursionClaim, ExcursionProgress, ExcursionScope, ExcursionWork, ExcursionWorkTransactionPort } from './excursion-work.service';
 
 const CALCULATION_VERSION = 1;
-const TICK_REQUEST_INTERVAL_MS = 150;
 export class SyncPriorityYieldError extends Error {
   constructor() { super('MT5 sync priority yield'); }
 }
@@ -41,7 +40,6 @@ function work(row: any): ExcursionWork {
 /** Durable Prisma implementation of the work queue and MT5 tick calculation boundary. */
 @Injectable()
 export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
-  private lastTickRequestAt = 0;
   constructor(
     private readonly prisma: PrismaService,
     private readonly bridge: Mt5BridgeClient,
@@ -53,6 +51,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
   async releaseWorkerLease(leaseId: string): Promise<void> { await this.bridgeActivity?.releaseWorkerLease(leaseId); }
   async syncRequested(): Promise<boolean> { return this.bridgeActivity?.syncRequested() ?? false; }
   async haltWorker(reason: string): Promise<void> { await this.bridgeActivity?.haltWorker(reason); }
+  async backoffWorker(reason: string, delayMs: number): Promise<void> { await this.bridgeActivity?.backoffWorker(reason, delayMs); }
 
   async findWork(scope: ExcursionScope, targetId: string): Promise<ExcursionWork | null> { const row = await this.prisma.excursionWorkItem.findUnique({ where: { scope_targetId: { scope, targetId } } }); return row ? work(row) : null; }
   async upsertWork(input: ExcursionWork): Promise<ExcursionWork> {
@@ -83,17 +82,18 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
   async recoverExpiredClaims(now: Date): Promise<number> { const result = await this.prisma.excursionWorkItem.updateMany({ where: { state: 'CLAIMED', claimExpiresAt: { lte: now } }, data: { state: 'RETRY_WAIT', notBefore: now, claimId: null, claimExpiresAt: null } }); return result.count; }
   async claimNext(now: Date, claimId: string, expiresAt: Date, accountIds?: string[]): Promise<ExcursionClaim | null> {
     return this.prisma.$transaction(async (tx) => {
-      const candidates = await tx.$queryRaw<Array<Pick<ExcursionWork, 'id' | 'generation' | 'baseInputFingerprint' | 'tickSnapshotToMsc'>>>(
+      const candidates = await tx.$queryRaw<Array<Pick<ExcursionWork, 'id' | 'accountId' | 'generation' | 'baseInputFingerprint' | 'tickSnapshotToMsc'>>>(
         Prisma.sql`WITH eligible_accounts AS (
-            SELECT account_id, MIN(updated_at) AS queue_age
+            SELECT wi.account_id, schedule.last_served_at
             FROM excursion_work_items
-            WHERE state IN ('PENDING', 'RETRY_WAIT') AND claim_id IS NULL AND (not_before IS NULL OR not_before <= ${now})
-              ${accountIds?.length ? Prisma.sql`AND account_id IN (${Prisma.join(accountIds)})` : Prisma.empty}
-            GROUP BY account_id
+            LEFT JOIN mt5_excursion_account_schedule schedule ON schedule.account_id = wi.account_id
+            WHERE wi.state IN ('PENDING', 'RETRY_WAIT') AND wi.claim_id IS NULL AND (wi.not_before IS NULL OR wi.not_before <= ${now})
+              ${accountIds?.length ? Prisma.sql`AND wi.account_id IN (${Prisma.join(accountIds)})` : Prisma.sql`AND FALSE`}
+            GROUP BY wi.account_id, schedule.last_served_at
           ), selected_account AS (
-            SELECT account_id FROM eligible_accounts ORDER BY queue_age ASC, account_id ASC LIMIT 1
+            SELECT account_id FROM eligible_accounts ORDER BY last_served_at ASC NULLS FIRST, account_id ASC LIMIT 1
           )
-          SELECT id, generation, base_input_fingerprint AS "baseInputFingerprint", tick_snapshot_to_msc AS "tickSnapshotToMsc"
+          SELECT id, account_id AS "accountId", generation, base_input_fingerprint AS "baseInputFingerprint", tick_snapshot_to_msc AS "tickSnapshotToMsc"
           FROM excursion_work_items
           WHERE account_id = (SELECT account_id FROM selected_account)
             AND state IN ('PENDING', 'RETRY_WAIT') AND claim_id IS NULL AND (not_before IS NULL OR not_before <= ${now})
@@ -107,7 +107,13 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
         where: { id: candidate.id },
         data: { state: 'CLAIMED', claimId, claimExpiresAt: expiresAt, attemptCount: { increment: 1 } },
       });
-      return { ...candidate, claimId, claimExpiresAt: expiresAt };
+      await tx.mt5ExcursionAccountSchedule.upsert({
+        where: { accountId: candidate.accountId },
+        create: { accountId: candidate.accountId, lastServedAt: now },
+        update: { lastServedAt: now },
+      });
+      const { accountId: _accountId, ...claim } = candidate;
+      return { ...claim, claimId, claimExpiresAt: expiresAt };
     });
   }
   async checkpoint(claim: ExcursionClaim, progress: ExcursionProgress): Promise<boolean> {
@@ -132,16 +138,18 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
     await this.staleResult(current.scope, current.targetId, reason, now);
     const calculationFailure = reason === 'CALCULATION_FAILURE';
     const failures = calculationFailure ? current.consecutiveFailures + 1 : 0;
-    const terminalUnsupported = reason === 'UNSUPPORTED_VALUATION';
-    const blocked = terminalUnsupported || calculationFailure && failures >= 3;
+    const deterministicUnsupported = reason === 'UNSUPPORTED_VALUATION' || reason === 'TICK_SOURCE_LIMIT';
+    const boundedFailure = calculationFailure || reason === 'TICK_CURSOR_EXPIRED';
+    const countedFailures = boundedFailure ? current.consecutiveFailures + 1 : failures;
+    const blocked = deterministicUnsupported || boundedFailure && countedFailures >= 3;
     const retryDelay = this.retryDelay(reason, failures);
     await this.prisma.excursionWorkItem.updateMany({
       where: { id: claim.id, claimId: claim.claimId, generation: claim.generation, state: 'CLAIMED' },
-      data: { state: blocked ? 'BLOCKED' : 'RETRY_WAIT', reason, notBefore: blocked ? null : new Date(now.getTime() + retryDelay), claimId: null, claimExpiresAt: null, consecutiveFailures: failures },
+      data: { state: blocked ? 'BLOCKED' : 'RETRY_WAIT', reason, notBefore: blocked ? null : new Date(now.getTime() + retryDelay), claimId: null, claimExpiresAt: null, consecutiveFailures: countedFailures },
     });
   }
-  async getCapabilities(signal: AbortSignal, deadlineMsc: number): Promise<unknown> {
-    if (await this.syncRequested()) throw new SyncPriorityYieldError();
+  async getCapabilities(signal: AbortSignal, deadlineMsc: number, workerLeaseId: string, workerLeaseMs: number): Promise<unknown> {
+    if (!await this.admitWorkerRequest({ deadlineMsc, workerLeaseId, workerLeaseMs, maxChunks: 1, maxPages: 1, maxTicks: 1 })) throw new SyncPriorityYieldError();
     return this.bridge.getCapabilities({ signal, deadlineMsc });
   }
   async execute(claim: ExcursionClaim, limits: ExcursionWorkerLimits, signal: AbortSignal): Promise<ExcursionWorkerUnitResult> {
@@ -181,8 +189,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
         let valuationSha256: string | undefined;
         const originalTicks: Array<{ sequence: number; timeMsc: number; bid: string; ask: string }> = [];
         do {
-          if (await this.syncRequested()) throw new SyncPriorityYieldError();
-          await this.paceTickRequest();
+          if (!await this.admitWorkerRequest(limits)) throw new SyncPriorityYieldError();
           const response = await this.bridge.ticks({ contractVersion: 5, server: account.server, accountLogin: Number(account.accountLogin), password, symbol, rawRange: { fromMsc: chunkFrom, toMsc: chunkTo }, snapshotToMsc: Number(item.tickSnapshotToMsc), pageCursor: cursor }, { signal, deadlineMsc: limits.deadlineMsc });
           pagesUsed++; ticksUsed += response.ticks.length;
           if (pagesUsed > limits.maxPages || ticksUsed > limits.maxTicks) throw new Error('Excursion worker limits exceeded');
@@ -191,16 +198,16 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
             snapshot = { id: receivedSnapshot.id, sha256: receivedSnapshot.sha256, tickCount: receivedSnapshot.tickCount };
             valuationSha256 = response.valuation.sha256;
           } else if (snapshot.id !== receivedSnapshot.id || snapshot.sha256 !== receivedSnapshot.sha256 || snapshot.tickCount !== receivedSnapshot.tickCount || valuationSha256 !== response.valuation.sha256) {
-            throw new Error('Excursion tick snapshot or valuation drift');
+            throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'Excursion tick snapshot or valuation drift');
           }
           const expectedSequence = originalTicks.length;
-          if (response.ticks.some((tick, index) => tick.sequence !== expectedSequence + index)) throw new Error('Excursion tick sequence drift');
+          if (response.ticks.some((tick, index) => tick.sequence !== expectedSequence + index)) throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'Excursion tick sequence drift');
           originalTicks.push(...response.ticks);
           tickPages.push({ symbol, response });
           cursor = response.nextCursor;
         } while (cursor);
         if (!tickPages.at(-1)?.response.complete || !snapshot || originalTicks.length !== snapshot.tickCount || (snapshot.tickCount > 0 && originalTicks.at(-1)?.sequence !== snapshot.tickCount - 1) || digestSnapshot(snapshot.tickCount, originalTicks) !== snapshot.sha256) {
-          throw new Error('Excursion tick snapshot incomplete or corrupt');
+          throw new Mt5BridgeTickError('TICK_INVALID_PAYLOAD', 'Excursion tick snapshot incomplete or corrupt');
         }
       }
       const merged = tickPages.reduce((result: any[], page) => {
@@ -288,9 +295,9 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
     return Math.round(base * (0.9 + Math.random() * 0.2));
   }
 
-  private async paceTickRequest(): Promise<void> {
-    const wait = this.lastTickRequestAt + TICK_REQUEST_INTERVAL_MS - Date.now();
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-    this.lastTickRequestAt = Date.now();
+  private async admitWorkerRequest(limits: ExcursionWorkerLimits): Promise<boolean> {
+    if (Date.now() >= limits.deadlineMsc) return false;
+    if (!this.bridgeActivity) return !await this.syncRequested();
+    return this.bridgeActivity.admitWorkerRequest(limits.workerLeaseId, limits.workerLeaseMs);
   }
 }

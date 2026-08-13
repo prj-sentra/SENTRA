@@ -13,6 +13,7 @@ function port(overrides: Partial<ExcursionWorkerPort> = {}): ExcursionWorkerPort
     releaseWorkerLease: jest.fn(),
     syncRequested: jest.fn().mockResolvedValue(false),
     haltWorker: jest.fn(),
+    backoffWorker: jest.fn(),
     getCapabilities: jest.fn().mockResolvedValue({}), execute: jest.fn().mockResolvedValue({ complete: true }), requeueClaim: jest.fn(),
     findWork: jest.fn(), upsertWork: jest.fn(), updateWork: jest.fn(), deleteProgress: jest.fn(), staleResult: jest.fn(), cancelWork: jest.fn(),
     recoverExpiredClaims: jest.fn().mockResolvedValue(0), claimNext: jest.fn().mockResolvedValue(claim), checkpoint: jest.fn().mockResolvedValue(true), finalize: jest.fn().mockResolvedValue(true),
@@ -22,8 +23,11 @@ function port(overrides: Partial<ExcursionWorkerPort> = {}): ExcursionWorkerPort
 
 describe('ExcursionWorkerService', () => {
   const enabled = process.env.MT5_EXCURSION_WORKER_ENABLED;
+  const accounts = process.env.MT5_EXCURSION_WORKER_ACCOUNT_IDS;
+  beforeEach(() => { process.env.MT5_EXCURSION_WORKER_ACCOUNT_IDS = 'account-1'; });
   afterEach(() => {
     process.env.MT5_EXCURSION_WORKER_ENABLED = enabled;
+    process.env.MT5_EXCURSION_WORKER_ACCOUNT_IDS = accounts;
     jest.useRealTimers();
   });
 
@@ -34,6 +38,15 @@ describe('ExcursionWorkerService', () => {
     new ExcursionWorkerService(new ExcursionWorkService(), adapter).onApplicationBootstrap();
     jest.runOnlyPendingTimers();
     expect(adapter.getCapabilities).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when enabled without an account allowlist', async () => {
+    process.env.MT5_EXCURSION_WORKER_ACCOUNT_IDS = '  ';
+    const adapter = port();
+    const worker = new ExcursionWorkerService(new ExcursionWorkService(), adapter);
+    await expect((worker as any).run()).resolves.toBe(false);
+    expect(adapter.acquireWorkerLease).not.toHaveBeenCalled();
+    expect(adapter.claimNext).not.toHaveBeenCalled();
   });
 
   it('does not start enabled work without a bound worker port', () => {

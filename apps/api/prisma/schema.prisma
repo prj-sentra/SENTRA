@@ -922,3 +922,11 @@ model Mt5BridgeActivity {
   @@index([kind, expiresAt])
   @@map("mt5_bridge_activity")
 }
+
+model Mt5ExcursionAccountSchedule {
+  accountId    String   @id @map("account_id")
+  lastServedAt DateTime @map("last_served_at")
+
+  @@index([lastServedAt])
+  @@map("mt5_excursion_account_schedule")
+}

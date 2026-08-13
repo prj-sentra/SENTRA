@@ -28,10 +28,10 @@ describe('ExcursionPrismaAdapter checkpoints', () => {
 
   it('does not start a bridge capability request after sync intent is visible', async () => {
     const bridge = { getCapabilities: jest.fn() };
-    const activity = { syncRequested: jest.fn().mockResolvedValue(true) };
+    const activity = { admitWorkerRequest: jest.fn().mockResolvedValue(false) };
     const adapter = new ExcursionPrismaAdapter({} as never, bridge as never, {} as never, activity as never);
 
-    await expect(adapter.getCapabilities(new AbortController().signal, Date.now() + 1_000)).rejects.toBeInstanceOf(SyncPriorityYieldError);
+    await expect(adapter.getCapabilities(new AbortController().signal, Date.now() + 1_000, 'worker-1', 45_000)).rejects.toBeInstanceOf(SyncPriorityYieldError);
     expect(bridge.getCapabilities).not.toHaveBeenCalled();
   });
 });

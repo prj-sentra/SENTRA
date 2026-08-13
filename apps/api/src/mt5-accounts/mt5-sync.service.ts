@@ -116,12 +116,15 @@ export class Mt5SyncService {
   async sync(ownerId: string, accountId: string, forceFull = false): Promise<Mt5SyncResponse> {
     if (!this.bridgeActivity) return this.syncCoordinated(ownerId, accountId, forceFull);
     const activityLeaseId = await this.bridgeActivity.registerSyncIntent(accountId);
+    const heartbeat = setInterval(() => { void this.bridgeActivity?.refreshSyncIntent(activityLeaseId); }, 30_000);
+    heartbeat.unref();
     try {
       if (!await this.bridgeActivity.waitForWorkerYield(activityLeaseId)) {
         return { state: 'failed', accountId, message: 'MT5 분석 작업이 동기화 우선권을 양보하지 못했습니다.' };
       }
       return await this.syncCoordinated(ownerId, accountId, forceFull);
     } finally {
+      clearInterval(heartbeat);
       await this.bridgeActivity.releaseSyncIntent(activityLeaseId);
     }
   }

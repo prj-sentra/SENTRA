@@ -9,6 +9,8 @@ export type ExcursionWorkerLimits = {
   maxChunks: number;
   maxPages: number;
   maxTicks: number;
+  workerLeaseId: string;
+  workerLeaseMs: number;
 };
 
 export type ExcursionWorkerUnitResult = {
@@ -29,7 +31,8 @@ export interface ExcursionWorkerPort extends ExcursionWorkTransactionPort {
   releaseWorkerLease(leaseId: string): Promise<void>;
   syncRequested(): Promise<boolean>;
   haltWorker(reason: string): Promise<void>;
-  getCapabilities(signal: AbortSignal, deadlineMsc: number): Promise<unknown>;
+  backoffWorker(reason: string, delayMs: number): Promise<void>;
+  getCapabilities(signal: AbortSignal, deadlineMsc: number, workerLeaseId: string, workerLeaseMs: number): Promise<unknown>;
   execute(claim: ExcursionClaim, limits: ExcursionWorkerLimits, signal: AbortSignal): Promise<ExcursionWorkerUnitResult>;
   requeueClaim(claim: ExcursionClaim, reason: string, now: Date): Promise<void>;
 }
@@ -119,6 +122,8 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
     const port = this.port;
     if (!port || this.stopping) return 'idle';
     if (Date.now() < this.bridgeBackoffUntilMsc) return 'idle';
+    const accountIds = this.accountAllowlist();
+    if (!accountIds.length) return 'idle';
     const workerLeaseId = await port.acquireWorkerLease(CLAIM_LEASE_MS);
     if (!workerLeaseId) return 'idle';
     this.workerLeaseId = workerLeaseId;
@@ -131,12 +136,12 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
     try {
       if (await port.syncRequested()) return 'idle';
       if (!this.capabilitiesReady) {
-        await port.getCapabilities(controller.signal, deadlineMsc);
+        await port.getCapabilities(controller.signal, deadlineMsc, workerLeaseId, CLAIM_LEASE_MS);
         this.capabilitiesReady = true;
       }
       if (await port.syncRequested()) return 'idle';
       if (controller.signal.aborted || this.stopping) return 'idle';
-      claim = await this.work.claim(port, new Date(), CLAIM_LEASE_MS, this.accountAllowlist());
+      claim = await this.work.claim(port, new Date(), CLAIM_LEASE_MS, accountIds);
       if (!claim || controller.signal.aborted || this.stopping) return 'idle';
 
       const result = await port.execute(claim, {
@@ -144,6 +149,8 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
         maxChunks: this.intEnv('MT5_EXCURSION_MAX_CHUNKS', DEFAULT_MAX_CHUNKS, 1, 20),
         maxPages: this.intEnv('MT5_EXCURSION_MAX_PAGES', DEFAULT_MAX_PAGES, 1, 50),
         maxTicks: this.intEnv('MT5_EXCURSION_MAX_TICKS', DEFAULT_MAX_TICKS, 1_000, 50_000),
+        workerLeaseId,
+        workerLeaseMs: CLAIM_LEASE_MS,
       }, controller.signal);
       if (controller.signal.aborted || this.stopping) {
         await port.requeueClaim(claim, this.stopping ? 'WORKER_SHUTDOWN' : 'WORKER_DEADLINE', new Date());
@@ -165,6 +172,7 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
           : reason === 'TICK_UNAVAILABLE' || reason === 'TRANSIENT_BRIDGE_FAILURE' ? 300_000
             : 0;
       if (globalBackoff) this.bridgeBackoffUntilMsc = Date.now() + globalBackoff;
+      if (globalBackoff && globalBackoff !== Number.MAX_SAFE_INTEGER) await port.backoffWorker(reason, globalBackoff);
       if (claim) await port.requeueClaim(claim, reason, new Date());
       return reason;
     } finally {
@@ -177,9 +185,9 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
     return 'complete';
   }
 
-  private accountAllowlist(): string[] | undefined {
+  private accountAllowlist(): string[] {
     const ids = process.env.MT5_EXCURSION_WORKER_ACCOUNT_IDS?.split(',').map((id) => id.trim()).filter(Boolean);
-    return ids?.length ? [...new Set(ids)] : undefined;
+    return ids?.length ? [...new Set(ids)] : [];
   }
 
   private intEnv(name: string, fallback: number, min: number, max: number): number {
