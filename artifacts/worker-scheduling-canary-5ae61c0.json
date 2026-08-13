@@ -1,18 +1,19 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "kind": "black-box-api-test-report",
-  "sourceHash": "sha256:5223af14af47c4c9e6307abc3989ef555b0dbb6e56f26f59bbb60afd94091195",
-  "commit": "445650f",
+  "sourceHashMethod": "git archive --format=tar HEAD apps packages docker-compose.yml docs infra",
+  "sourceHash": "sha256:37ba23d860dc1f7f92c6ff715e9a901392ad9b78e279d15b78109d77cdf56bf8",
+  "sourceCommit": "cd94f82",
   "status": "passed",
   "canary": {
     "accountId": "f68c487b1af315456fef2eeb4b4dc5bf",
     "workerAllowlistCount": 1,
-    "syncRunsWithObservedWorkerLease": 3,
-    "syncElapsedMs": [1664, 1530, 1487],
-    "syncStates": ["completed", "completed", "completed"],
-    "balanceLedgerStatuses": ["verified", "verified", "verified"],
+    "workerLeaseObservedBeforeSync": true,
+    "syncElapsedMs": 1969,
+    "syncState": "completed",
+    "balanceLedgerStatus": "verified",
+    "persistentScheduleRows": 1,
     "invalidProgressRanges": 0,
-    "nonCanaryWorkUpdatedDuringObservation": 0,
     "durableHaltRows": 0
   },
   "migration": {
@@ -26,11 +27,11 @@
   },
   "verification": {
     "apiSuitesPassed": 28,
-    "apiTestsPassed": 234,
+    "apiTestsPassed": 235,
     "webFilesPassed": 18,
     "webTestsPassed": 73,
-    "focusedSchedulingTestsPassed": 38,
     "typecheck": "passed",
-    "build": "passed"
+    "build": "passed",
+    "health": "passed"
   }
 }
