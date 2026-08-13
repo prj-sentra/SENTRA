@@ -1,20 +1,20 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "web-automation-transcript",
   "status": "passed",
   "tool": "GJC Chromium",
   "sourceHashMethod": "sha256 of newline-delimited git tree/blob IDs for apps, packages, docker-compose.yml",
-  "sourceCommit": "fea83026aa96826f516185156d28b2fdcb866b35",
-  "sourceHash": "sha256:f12e0cad5056820a9a92274f44bf00e34c3df4301e8ac846dd82ad797ecda286",
+  "sourceCommit": "a5dea0fafc7c4144ecb4b04339709a23c76e75fc",
+  "sourceHash": "sha256:32fb343a29297ff92da3366e7b7a3e0c535bcfc3b35e56bb80bad87e56b3e6dc",
   "events": [
-    {"action":"assert-progress","viewport":{"width":1440,"height":1000},"copy":"시장 진행 분석 97 / 147 · 백그라운드에서 계산 중입니다. · 재계산 필요 54","result":"passed"},
-    {"action":"assert-trade-detail","viewport":{"width":1440,"height":1000},"copy":"매매 전체 시장 진행 · 최대 수익 기회 · 최대 손실 위험 · 수익 실현률 · 재계산 필요","result":"passed"},
-    {"action":"assert-mobile-dashboard","viewport":{"width":390,"height":844},"bodyScrollWidth":375,"copy":"시장 진행 분석 · 계산 완료 20건 · 데이터 품질 및 상세 분포","result":"passed"},
-    {"action":"assert-canonical-campaign-count","priceFamilySuccess":20,"pnlFamilySuccess":20,"visibleCompleted":20,"result":"passed"}
+    {"action":"assert-progress","viewport":{"width":1440,"height":1000},"copy":"시장 진행 분석 144 / 147 · 백그라운드에서 계산 중입니다. · 재계산 필요 7","result":"passed"},
+    {"action":"assert-trade-detail","viewport":{"width":1440,"height":1000},"copy":"매매 전체 시장 진행 · 최대 수익 기회 · 최대 손실 위험 · 수익 실현률","result":"passed"},
+    {"action":"assert-mobile-dashboard","viewport":{"width":390,"height":844},"bodyScrollWidth":375,"copy":"시장 진행 분석 · 계산 완료 41건 · 데이터 품질 및 상세 분포","result":"passed"},
+    {"action":"assert-chart-regression","copy":"selectable chart metric panel styles preserved from origin/main","result":"passed"}
   ],
   "screenshots": [
-    {"path":"artifacts/mfe-mae-ui-desktop.png","sha256":"c0ce2a804ea8d7d707a1c413b6304f3b7923e19e83efce15e85bb20c31d51255","width":1440,"height":1000,"nonUniform":true},
-    {"path":"artifacts/mfe-mae-ui-mobile.png","sha256":"42e00242f686267b6a1ed9b1d3efc340f6ee209b8e6ef5a77159485bb7e207b5","width":390,"height":844,"nonUniform":true}
+    {"path":"artifacts/mfe-mae-ui-desktop.png","sha256":"4010d0601c2374a6650266b4f67fffd97972f74af346e34ae8fd3362f03afd61","width":1440,"height":1000,"nonUniform":true},
+    {"path":"artifacts/mfe-mae-ui-mobile.png","sha256":"e11b71a733651d41630dc0e5281b958cc07a3d889742964c7b95ce126c3336e4","width":390,"height":844,"nonUniform":true}
   ],
   "runtimeDiagnostics": []
 }
