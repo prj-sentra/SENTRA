@@ -1,21 +1,20 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "kind": "web-automation-transcript",
   "status": "passed",
   "tool": "GJC Chromium",
   "sourceHashMethod": "sha256 of newline-delimited git tree/blob IDs for apps, packages, docker-compose.yml",
-  "sourceCommit": "10176061ae1d5ce04e6f223648151701877c5b12",
-  "sourceHash": "sha256:8de047bfb513924a4772d8542221187019f5d01002b5c928d21f63f79e098d24",
+  "sourceCommit": "fea83026aa96826f516185156d28b2fdcb866b35",
+  "sourceHash": "sha256:f12e0cad5056820a9a92274f44bf00e34c3df4301e8ac846dd82ad797ecda286",
   "events": [
-    {"action":"authenticate-and-navigate","url":"http://127.0.0.1/journal","result":"passed"},
-    {"action":"assert-progress","viewport":{"width":1440,"height":1000},"copy":"시장 진행 분석 · 백그라운드에서 계산 중입니다.","result":"passed"},
+    {"action":"assert-progress","viewport":{"width":1440,"height":1000},"copy":"시장 진행 분석 97 / 147 · 백그라운드에서 계산 중입니다. · 재계산 필요 54","result":"passed"},
     {"action":"assert-trade-detail","viewport":{"width":1440,"height":1000},"copy":"매매 전체 시장 진행 · 최대 수익 기회 · 최대 손실 위험 · 수익 실현률 · 재계산 필요","result":"passed"},
-    {"action":"assert-mobile-detail","viewport":{"width":390,"height":844},"bodyScrollWidth":375,"copy":"plain-language cards stack vertically; technical MFE/MAE remains collapsed","result":"passed"},
-    {"action":"assert-mobile-dashboard","viewport":{"width":390,"height":844},"bodyScrollWidth":375,"copy":"시장 진행 분석 · 데이터 품질 및 상세 분포","result":"passed"}
+    {"action":"assert-mobile-dashboard","viewport":{"width":390,"height":844},"bodyScrollWidth":375,"copy":"시장 진행 분석 · 계산 완료 20건 · 데이터 품질 및 상세 분포","result":"passed"},
+    {"action":"assert-canonical-campaign-count","priceFamilySuccess":20,"pnlFamilySuccess":20,"visibleCompleted":20,"result":"passed"}
   ],
   "screenshots": [
-    {"path":"artifacts/mfe-mae-ui-desktop.png","sha256":"60bf0102a405d4fd4692e0d4bf028c63fcab1402d4b8eb2288bbb2f374f0d948","width":1440,"height":1000,"nonUniform":true},
-    {"path":"artifacts/mfe-mae-ui-mobile.png","sha256":"1c96d80eafe137436e3131e6bc405b28224e3033175b9be3d8bdf532e68cf772","width":390,"height":844,"nonUniform":true}
+    {"path":"artifacts/mfe-mae-ui-desktop.png","sha256":"c0ce2a804ea8d7d707a1c413b6304f3b7923e19e83efce15e85bb20c31d51255","width":1440,"height":1000,"nonUniform":true},
+    {"path":"artifacts/mfe-mae-ui-mobile.png","sha256":"42e00242f686267b6a1ed9b1d3efc340f6ee209b8e6ef5a77159485bb7e207b5","width":390,"height":844,"nonUniform":true}
   ],
   "runtimeDiagnostics": []
 }
