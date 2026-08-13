@@ -261,6 +261,7 @@ export class TradeLogService {
   async listCampaigns(ownerId: string, date?: string, accountId?: string): Promise<TradeCampaignDateResponse> {
     if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException('date must be YYYY-MM-DD');
     const ownerScope = await this.ownerScope(ownerId, { accountId });
+    const preferences = await this.getStatsPreferences(ownerId);
     const calendarRows = await this.prisma.$queryRaw<Array<{
       tradingDate: Date;
       tradeCount: bigint;
@@ -274,7 +275,8 @@ export class TradeLogService {
             CASE
               WHEN BOOL_AND(t.closed_at IS NOT NULL) THEN MAX(t.closed_at)
               ELSE MIN(t.opened_at)
-            END AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'
+            END AT TIME ZONE 'UTC' AT TIME ZONE ${preferences.timeZone}
+              - make_interval(mins => ${preferences.tradingDayStartMinutes}::int)
           )::date AS journal_date
         FROM trade_campaigns tc
         JOIN campaign_memberships cm ON cm.campaign_id = tc.id
@@ -315,7 +317,8 @@ export class TradeLogService {
         CASE
           WHEN BOOL_AND(t.closed_at IS NOT NULL) THEN MAX(t.closed_at)
           ELSE MIN(t.opened_at)
-        END AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'
+        END AT TIME ZONE 'UTC' AT TIME ZONE ${preferences.timeZone}
+          - make_interval(mins => ${preferences.tradingDayStartMinutes}::int)
       )::date = ${selectedDate}::date
     `) : [];
     const campaigns = selectedCampaignIds.length ? await this.prisma.tradeCampaign.findMany({
@@ -334,12 +337,11 @@ export class TradeLogService {
       nextDate: index >= 0 && index < actualDates.length - 1 ? actualDates[index + 1] : undefined,
       campaigns: await Promise.all(campaigns.map(async (campaign) => this.serializeCampaign(await this.orderCampaignForSerialization(this.prisma, {
         ...campaign,
-        tradingDate: new Date(`${selectedDate}T00:00:00.000Z`),
         conflicts: [
           ...campaign.conflicts,
           ...unresolvedConflicts.filter((conflict) => Array.isArray(conflict.candidateCampaignIds) && conflict.candidateCampaignIds.includes(campaign.id)),
         ],
-      }), provenBalances))),
+      }), provenBalances, selectedDate))),
       calendarDays,
       diagnostics: { missingOpenedAtTradeIds },
     };
@@ -1091,7 +1093,12 @@ export class TradeLogService {
   private async serializedCampaign(tx: Tx, campaignId: string): Promise<TradeCampaign> {
     const campaign = await tx.tradeCampaign.findUniqueOrThrow({ where: { id: campaignId }, include: campaignWithRelations.include });
     const ordered = await this.orderCampaignForSerialization(tx, campaign);
-    return this.serializeCampaign(ordered, await this.loadProvenEntryBalanceMap([campaign.rootTrade, ...campaign.memberships.map((member) => member.trade)]));
+    const preferences = this.serializeStatsPreferences(await tx.statisticsPreference.upsert({ where: { userId: campaign.ownerId }, create: { userId: campaign.ownerId }, update: {} }));
+    return this.serializeCampaign(
+      ordered,
+      await this.loadProvenEntryBalanceMap([campaign.rootTrade, ...campaign.memberships.map((member) => member.trade)]),
+      this.campaignJournalDate(ordered, preferences),
+    );
   }
 
   private async orderCampaignForSerialization(client: Tx | PrismaService, campaign: CampaignWithRelations): Promise<CampaignWithRelations> {
@@ -1210,7 +1217,14 @@ export class TradeLogService {
     if (analysis.marketZoneEnabled && Number(analysis.marketZoneHigh) <= Number(analysis.marketZoneLow)) throw new BadRequestException('marketZoneHigh must exceed marketZoneLow');
     if (analysis.fibonacciEnabled && Number(analysis.fibonacciStartPrice) === Number(analysis.fibonacciEndPrice)) throw new BadRequestException('fibonacci endpoints must differ');
   }
-  private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>()): TradeCampaign {
+  private campaignJournalDate(campaign: CampaignWithRelations, preferences: TradeStatsPreferences): string {
+    const closedAt = campaign.memberships.map((membership) => membership.trade.closedAt);
+    const timestamp = closedAt.every((value): value is Date => value !== null)
+      ? new Date(Math.max(...closedAt.map((value) => value.getTime())))
+      : new Date(Math.min(...campaign.memberships.map((membership) => membership.trade.openedAt?.getTime() ?? Number.POSITIVE_INFINITY)));
+    return this.statsPeriodKey(timestamp.toISOString(), preferences, 'day');
+  }
+  private serializeCampaign(campaign: CampaignWithRelations, provenBalances = new Map<string, Prisma.Decimal>(), journalDate?: string): TradeCampaign {
     if (!campaign.analysis) throw new Error(`Campaign ${campaign.id} lacks analysis`);
     const headSource = campaign.memberships.find((membership) => membership.tradeId === campaign.rootTradeId)?.headSource ?? 'AUTO';
     const root = this.serialize(campaign.rootTrade, provenBalances);
@@ -1241,7 +1255,7 @@ export class TradeLogService {
       rootTradeId: campaign.rootTradeId,
       campaignVersion: campaign.version,
       headSource,
-      tradingDate: this.seoulDate(campaign.tradingDate),
+      tradingDate: journalDate ?? this.seoulDate(campaign.tradingDate),
       accountId: campaign.mt5AccountId!,
       symbol: root.symbol,
       side: root.side,

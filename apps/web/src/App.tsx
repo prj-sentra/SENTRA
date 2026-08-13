@@ -92,7 +92,7 @@ export function App() {
     activeAccountLoad.current = refresh;
     return refresh;
   }, [loadAccountData]);
-  useEffect(() => { void loadAccounts(); }, [loadAccounts]); useEffect(() => { void refreshAccountData(); }, [refreshAccountData]);
+  useEffect(() => { void loadAccounts(); }, [loadAccounts]); useEffect(() => { if (view === 'trade-log') void refreshAccountData(); }, [refreshAccountData, view]);
   const selectedAccount = useMemo(() => accounts.find((account) => account.id === accountId) ?? null, [accounts, accountId]);
   async function mutate(path: string, init: RequestInit): Promise<void> { await apiRequest(path, init); await loadAccountData(); }
   async function changeCampaignHead(campaign: TradeCampaign, tradeId: string): Promise<void> {

@@ -81,14 +81,14 @@ export function StatsPreferences({ preferences, request, onSaved }: StatsPrefere
   };
 
   return <section className="settings-card stats-preferences">
-    <div className="settings-card-heading"><h2>분석 환경설정</h2><span aria-hidden="true">·</span><p className="muted">통계의 거래일, 세션, 손익분기 분류 기준을 설정합니다.</p></div>
+    <div className="settings-card-heading"><h2>분석 환경설정</h2><span aria-hidden="true">·</span><p className="muted">매매일지와 통계의 거래일, 세션, 손익분기 분류 기준을 설정합니다.</p></div>
     <div className="stats-preferences-groups">
       <section className="preferences-group">
         <h3>통계 기준</h3>
         <div className="preferences-general-grid">
           <label>시드 대비 본절 기준 (%)<input aria-label="시드 대비 본절 기준" type="number" min="0" max="100" step="0.01" value={draft.breakevenPercent} onChange={(event) => setDraft({ ...draft, breakevenPercent: Number(event.target.value) })} /></label>
           <label><span className="metric-label has-tooltip" tabIndex={0} data-tooltip="거래일과 세션을 계산할 때 기준으로 사용하는 IANA 표준 시간대입니다. 예: Asia/Seoul, America/New_York">IANA 분석 시간대<span aria-hidden="true">?</span></span><input aria-label="분석 시간대" value={draft.timeZone} onChange={(event) => setDraft({ ...draft, timeZone: event.target.value })} placeholder="Asia/Seoul" /></label>
-          <label>거래일 시작 시간<input aria-label="거래일 시작 시간" type="time" value={minuteLabel(draft.tradingDayStartMinutes)} onChange={(event) => { const value = labelMinute(event.target.value); if (value !== undefined) setDraft({ ...draft, tradingDayStartMinutes: value }); }} /></label>
+          <label><span className="metric-label has-tooltip" tabIndex={0} data-tooltip="설정한 분석 시간대에서 이 시각부터 다음 날 시작 직전까지를 같은 매매일로 묶습니다. 예: 06:00이면 06:00부터 다음 날 05:59까지입니다.">거래일 시작 시간<span aria-hidden="true">?</span></span><input aria-label="거래일 시작 시간" type="time" value={minuteLabel(draft.tradingDayStartMinutes)} onChange={(event) => { const value = labelMinute(event.target.value); if (value !== undefined) setDraft({ ...draft, tradingDayStartMinutes: value }); }} /></label>
         </div>
       </section>
       <section className="preferences-group">

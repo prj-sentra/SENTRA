@@ -73,9 +73,23 @@ describe('TradeLogService journal date bucketing', () => {
     for (const sql of [calendarSql, selectionSql]) {
       expect(sql).toContain('BOOL_AND(t.closed_at IS NOT NULL)');
       expect(sql).toContain('MAX(t.closed_at)');
-      expect(sql).toContain("AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Seoul'");
+      expect(sql).toContain("AT TIME ZONE 'UTC' AT TIME ZONE ");
+      expect(sql).toContain('make_interval(mins => ');
+    }
+    for (const query of db.$queryRaw.mock.calls.map(([value]) => value)) {
+      expect(query.values).toEqual(expect.arrayContaining(['Asia/Seoul', 120]));
     }
     expect(db.tradeCampaign.findMany).not.toHaveBeenCalled();
+  });
+
+  it('assigns close times before the configured day start to the preceding journal date', () => {
+    const service = new TradeLogService({} as never) as any;
+    const preferences = { ...statsPreference, tradingDayStartMinutes: 360 };
+    const campaign = (closedAt: string) => ({
+      memberships: [{ trade: { openedAt: new Date('2026-08-13T00:00:00.000Z'), closedAt: new Date(closedAt) } }],
+    });
+    expect(service.campaignJournalDate(campaign('2026-08-13T20:59:59.999Z'), preferences)).toBe('2026-08-13');
+    expect(service.campaignJournalDate(campaign('2026-08-13T21:00:00.000Z'), preferences)).toBe('2026-08-14');
   });
 });
 
@@ -353,6 +367,7 @@ describe('TradeLogService calendar summaries', () => {
   it('groups campaign members and realized PnL by owner-scoped trading date', async () => {
     const db = {
       mt5Account: { findFirst: jest.fn().mockResolvedValue({ id: 'account-1' }) },
+      statisticsPreference: { upsert: jest.fn().mockResolvedValue(statsPreference) },
       $queryRaw: jest.fn().mockResolvedValue([
         { tradingDate: new Date('2026-08-03T00:00:00.000Z'), tradeCount: 3n, campaignCount: 2n, realizedPnl: 75 },
         { tradingDate: new Date('2026-08-05T00:00:00.000Z'), tradeCount: 1n, campaignCount: 1n, realizedPnl: 10.5 },
@@ -367,8 +382,8 @@ describe('TradeLogService calendar summaries', () => {
       { date: '2026-08-05', tradeCount: 1, campaignCount: 1, realizedPnl: 10.5 },
     ]);
     expect(response.date).toBe('2026-08-05');
-    expect(db.$queryRaw).toHaveBeenCalledWith(expect.objectContaining({
-      values: ['owner-1', 'account-1'],
+    expect(db.$queryRaw.mock.calls[0][0]).toEqual(expect.objectContaining({
+      values: ['Asia/Seoul', 120, 'owner-1', 'account-1'],
     }));
   });
 });

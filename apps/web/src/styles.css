@@ -841,7 +841,7 @@ h3 {
 .sync-control { display: grid; gap: 8px; min-width: 0; }
 .sync-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .sync-control .secondary-button, .sync-control .sync-reset-button, .sync-control .classification-review-button { width: 100%; }
-.sync-reset-button, .classification-review-button { min-height: 40px; border-radius: 4px; padding: 0 12px; font-weight: 650; cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease; }
+.sync-reset-button, .classification-review-button { min-height: 40px; border-radius: 0; padding: 0 12px; font-weight: 650; cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease; }
 .sync-reset-button { border: 1px solid #da1e28; color: #a2191f; background: #fff1f1; }
 .sync-reset-button:hover:not(:disabled) { border-color: #a2191f; color: #fff; background: #da1e28; }
 .classification-review-button { border: 1px solid #8a3ffc; color: #6929c4; background: #f6f2ff; }
