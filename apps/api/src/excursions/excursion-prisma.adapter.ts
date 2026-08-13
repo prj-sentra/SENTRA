@@ -49,6 +49,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
 
   async acquireWorkerLease(leaseMs: number): Promise<string | null> { return this.bridgeActivity?.acquireWorkerLease(leaseMs) ?? 'uncoordinated-test-worker'; }
   async releaseWorkerLease(leaseId: string): Promise<void> { await this.bridgeActivity?.releaseWorkerLease(leaseId); }
+  async refreshWorkerLease(leaseId: string, leaseMs: number): Promise<boolean> { return this.bridgeActivity?.refreshWorkerLease(leaseId, leaseMs) ?? true; }
   async syncRequested(): Promise<boolean> { return this.bridgeActivity?.syncRequested() ?? false; }
   async haltWorker(reason: string): Promise<void> { await this.bridgeActivity?.haltWorker(reason); }
   async backoffWorker(reason: string, delayMs: number): Promise<void> { await this.bridgeActivity?.backoffWorker(reason, delayMs); }
@@ -150,6 +151,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
   }
   async getCapabilities(signal: AbortSignal, deadlineMsc: number, workerLeaseId: string, workerLeaseMs: number): Promise<unknown> {
     if (!await this.admitWorkerRequest({ deadlineMsc, workerLeaseId, workerLeaseMs, maxChunks: 1, maxPages: 1, maxTicks: 1 })) throw new SyncPriorityYieldError();
+    if (signal.aborted || Date.now() >= deadlineMsc) throw new SyncPriorityYieldError();
     return this.bridge.getCapabilities({ signal, deadlineMsc });
   }
   async execute(claim: ExcursionClaim, limits: ExcursionWorkerLimits, signal: AbortSignal): Promise<ExcursionWorkerUnitResult> {
@@ -190,6 +192,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
         const originalTicks: Array<{ sequence: number; timeMsc: number; bid: string; ask: string }> = [];
         do {
           if (!await this.admitWorkerRequest(limits)) throw new SyncPriorityYieldError();
+          if (signal.aborted || Date.now() >= limits.deadlineMsc) throw new SyncPriorityYieldError();
           const response = await this.bridge.ticks({ contractVersion: 5, server: account.server, accountLogin: Number(account.accountLogin), password, symbol, rawRange: { fromMsc: chunkFrom, toMsc: chunkTo }, snapshotToMsc: Number(item.tickSnapshotToMsc), pageCursor: cursor }, { signal, deadlineMsc: limits.deadlineMsc });
           pagesUsed++; ticksUsed += response.ticks.length;
           if (pagesUsed > limits.maxPages || ticksUsed > limits.maxTicks) throw new Error('Excursion worker limits exceeded');
@@ -298,6 +301,7 @@ export class ExcursionPrismaAdapter implements ExcursionWorkerPort {
   private async admitWorkerRequest(limits: ExcursionWorkerLimits): Promise<boolean> {
     if (Date.now() >= limits.deadlineMsc) return false;
     if (!this.bridgeActivity) return !await this.syncRequested();
-    return this.bridgeActivity.admitWorkerRequest(limits.workerLeaseId, limits.workerLeaseMs);
+    const admitted = await this.bridgeActivity.admitWorkerRequest(limits.workerLeaseId, limits.workerLeaseMs);
+    return admitted && Date.now() < limits.deadlineMsc;
   }
 }

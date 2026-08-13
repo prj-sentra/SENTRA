@@ -27,11 +27,12 @@ export class Mt5BridgeActivityService {
     return leaseId;
   }
 
-  async refreshSyncIntent(leaseId: string, leaseMs = 6 * 60_000): Promise<void> {
-    await this.prisma.mt5BridgeActivity.updateMany({
+  async refreshSyncIntent(leaseId: string, leaseMs = 6 * 60_000): Promise<boolean> {
+    const updated = await this.prisma.mt5BridgeActivity.updateMany({
       where: { kind: 'SYNC', leaseId },
       data: { expiresAt: new Date(Date.now() + leaseMs) },
     });
+    return updated.count === 1;
   }
 
   async releaseSyncIntent(leaseId: string): Promise<void> {
@@ -71,6 +72,14 @@ export class Mt5BridgeActivityService {
 
   async releaseWorkerLease(leaseId: string): Promise<void> {
     await this.prisma.mt5BridgeActivity.deleteMany({ where: { id: WORKER_SLOT_ID, kind: 'WORKER', leaseId } });
+  }
+
+  async refreshWorkerLease(leaseId: string, leaseMs: number): Promise<boolean> {
+    const updated = await this.prisma.mt5BridgeActivity.updateMany({
+      where: { id: WORKER_SLOT_ID, kind: 'WORKER', leaseId },
+      data: { expiresAt: new Date(Date.now() + leaseMs) },
+    });
+    return updated.count === 1;
   }
 
   async admitWorkerRequest(leaseId: string, leaseMs: number): Promise<boolean> {
@@ -118,6 +127,6 @@ export class Mt5BridgeActivityService {
   }
 
   private async cleanupExpired(db: Db, now: Date): Promise<void> {
-    await db.mt5BridgeActivity.deleteMany({ where: { kind: { in: ['SYNC', 'WORKER'] }, expiresAt: { lte: now } } });
+    await db.mt5BridgeActivity.deleteMany({ where: { kind: { in: ['SYNC', 'WORKER', 'BACKOFF'] }, expiresAt: { lte: now } } });
   }
 }

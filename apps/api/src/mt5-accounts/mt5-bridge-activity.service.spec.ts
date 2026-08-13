@@ -66,4 +66,14 @@ describe('Mt5BridgeActivityService', () => {
     expect(rows).toEqual([expect.objectContaining({ kind: 'HALT', reason: 'TICK_INVALID_PAYLOAD' })]);
     await expect(service.acquireWorkerLease(45_000)).resolves.toBeNull();
   });
+
+  it('blocks every replica during backoff and resumes after expiry', async () => {
+    const { db, rows } = database();
+    const service = new Mt5BridgeActivityService(db);
+    await service.backoffWorker('TICK_CAPACITY', 60_000);
+    await expect(service.acquireWorkerLease(45_000)).resolves.toBeNull();
+    rows[0].expiresAt = new Date(0);
+    await expect(service.acquireWorkerLease(45_000)).resolves.toEqual(expect.any(String));
+    expect(rows.some((row) => row.kind === 'BACKOFF')).toBe(false);
+  });
 });

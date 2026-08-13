@@ -29,6 +29,7 @@ export type ExcursionWorkerUnitResult = {
 export interface ExcursionWorkerPort extends ExcursionWorkTransactionPort {
   acquireWorkerLease(leaseMs: number): Promise<string | null>;
   releaseWorkerLease(leaseId: string): Promise<void>;
+  refreshWorkerLease(leaseId: string, leaseMs: number): Promise<boolean>;
   syncRequested(): Promise<boolean>;
   haltWorker(reason: string): Promise<void>;
   backoffWorker(reason: string, delayMs: number): Promise<void>;
@@ -128,6 +129,12 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
     if (!workerLeaseId) return 'idle';
     this.workerLeaseId = workerLeaseId;
     const controller = new AbortController();
+    const leaseHeartbeat = setInterval(() => {
+      void port.refreshWorkerLease(workerLeaseId, CLAIM_LEASE_MS).then((owned) => {
+        if (!owned) controller.abort();
+      }).catch(() => controller.abort());
+    }, 10_000);
+    leaseHeartbeat.unref();
     this.activeController = controller;
     const unitMs = this.intEnv('MT5_EXCURSION_UNIT_MS', DEFAULT_UNIT_MS, 1_000, 20_000);
     const deadlineMsc = Date.now() + unitMs;
@@ -177,6 +184,7 @@ export class ExcursionWorkerService implements OnApplicationBootstrap, OnApplica
       return reason;
     } finally {
       clearTimeout(timeout);
+      clearInterval(leaseHeartbeat);
       this.activeController = undefined;
       await port.releaseWorkerLease(workerLeaseId);
       this.workerLeaseId = undefined;

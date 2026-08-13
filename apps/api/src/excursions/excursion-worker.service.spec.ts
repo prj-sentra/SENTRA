@@ -11,6 +11,7 @@ function port(overrides: Partial<ExcursionWorkerPort> = {}): ExcursionWorkerPort
   return {
     acquireWorkerLease: jest.fn().mockResolvedValue('worker-lease'),
     releaseWorkerLease: jest.fn(),
+    refreshWorkerLease: jest.fn().mockResolvedValue(true),
     syncRequested: jest.fn().mockResolvedValue(false),
     haltWorker: jest.fn(),
     backoffWorker: jest.fn(),

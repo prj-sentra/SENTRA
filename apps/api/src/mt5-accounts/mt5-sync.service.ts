@@ -116,13 +116,25 @@ export class Mt5SyncService {
   async sync(ownerId: string, accountId: string, forceFull = false): Promise<Mt5SyncResponse> {
     if (!this.bridgeActivity) return this.syncCoordinated(ownerId, accountId, forceFull);
     const activityLeaseId = await this.bridgeActivity.registerSyncIntent(accountId);
-    const heartbeat = setInterval(() => { void this.bridgeActivity?.refreshSyncIntent(activityLeaseId); }, 30_000);
+    let intentLost = false;
+    const heartbeat = setInterval(() => {
+      void this.bridgeActivity?.refreshSyncIntent(activityLeaseId).then(async (owned) => {
+        if (!owned) {
+          intentLost = true;
+          await this.bridgeActivity?.haltWorker('SYNC_INTENT_LOST');
+        }
+      }).catch(async () => {
+        intentLost = true;
+        await this.bridgeActivity?.haltWorker('SYNC_INTENT_HEARTBEAT_FAILED');
+      });
+    }, 30_000);
     heartbeat.unref();
     try {
       if (!await this.bridgeActivity.waitForWorkerYield(activityLeaseId)) {
-        return { state: 'failed', accountId, message: 'MT5 분석 작업이 동기화 우선권을 양보하지 못했습니다.' };
+        return { state: 'in_progress', accountId, message: 'Synchronization is queued behind another synchronization' };
       }
-      return await this.syncCoordinated(ownerId, accountId, forceFull);
+      const result = await this.syncCoordinated(ownerId, accountId, forceFull);
+      return intentLost ? { state: 'failed', accountId, message: 'MT5 synchronization priority lease was lost' } : result;
     } finally {
       clearInterval(heartbeat);
       await this.bridgeActivity.releaseSyncIntent(activityLeaseId);
