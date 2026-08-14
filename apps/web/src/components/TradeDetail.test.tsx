@@ -46,6 +46,17 @@ describe('TradeDetail split execution ownership', () => {
     expect(container.innerHTML).not.toContain('NaN');
     expect(container.innerHTML).not.toContain('Infinity');
   });
+  it('aligns exact MAE and MFE endpoint labels inward without calling them out of range', () => {
+    const props = { opportunity: 10, risk: -5, currency: 'USD', openedAt: '2026-08-10T12:00:00.000Z', opportunityAt: '2026-08-10T12:20:00.000Z', riskAt: '2026-08-10T12:10:00.000Z' };
+    const { container, rerender } = render(<ExcursionRange {...props} realizedPnl={-5} />);
+    let marker = container.querySelector<HTMLElement>('.range-realized')!;
+    expect(marker).toHaveClass('is-before');
+    expect(marker).not.toHaveClass('is-outside');
+    rerender(<ExcursionRange {...props} realizedPnl={10} />);
+    marker = container.querySelector<HTMLElement>('.range-realized')!;
+    expect(marker).toHaveClass('is-after');
+    expect(marker).not.toHaveClass('is-outside');
+  });
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {
     const { container } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);
     const desktop = container.querySelector('.desktop-trade-detail')!;
