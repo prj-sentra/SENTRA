@@ -37,7 +37,7 @@ describe('TradeDetail split execution ownership', () => {
     const { container } = render(<ExcursionRange opportunity={10} risk={-5} realizedPnl={20} currency="USD" openedAt="2026-08-10T12:00:00.000Z" closedAt="2026-08-10T13:00:00.000Z" opportunityAt="2026-08-10T12:20:00.000Z" riskAt="2026-08-10T12:10:00.000Z" />);
     const marker = container.querySelector<HTMLElement>('.range-realized')!;
     expect(marker).toHaveStyle({ left: '100%' });
-    expect(marker).toHaveClass('is-outside');
+    expect(marker).toHaveClass('is-outside', 'is-after');
     expect(screen.getByText('실제 20 USD · 범위 밖')).toBeInTheDocument();
   });
   it('keeps a zero-span range finite', () => {

@@ -1375,6 +1375,8 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .excursion-range-track .range-realized.is-positive { background: #198038; }
 .excursion-range-track .range-realized.is-negative { background: var(--danger); }
 .excursion-range-track .range-realized.is-outside { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px currentColor; }
+.excursion-range-track .range-realized.is-before > span { transform: translateX(0); }
+.excursion-range-track .range-realized.is-after > span { transform: translateX(-100%); }
 .excursion-range p, .excursion-range small { margin: 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.4; }
 .excursion-panel details, .excursion-summary details { border-top: 1px solid var(--border); padding-top: 10px; color: var(--text-secondary); font-size: .75rem; }
 .excursion-panel summary, .excursion-summary summary { cursor: pointer; font-weight: 650; }

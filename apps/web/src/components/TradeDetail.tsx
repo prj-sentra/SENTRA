@@ -95,7 +95,7 @@ export function ExcursionRange({ opportunity, risk, realizedPnl, currency, opene
       <i className="range-zero" style={{ left: position(0) }}><span>0</span></i>
       <i className="range-risk" style={{ left: position(risk) }} title={`MAE ${money(risk, currency)}`} />
       <i className="range-opportunity" style={{ left: position(opportunity) }} title={`MFE ${money(opportunity, currency)}`} />
-      <i className={`range-realized ${realizedPnl >= 0 ? 'is-positive' : 'is-negative'} ${realizedOutside ? 'is-outside' : ''}`} style={{ left: position(realizedPnl) }}><span>실제 {money(realizedPnl, currency)}{realizedOutside ? ' · 범위 밖' : ''}</span></i>
+      <i className={`range-realized ${realizedPnl >= 0 ? 'is-positive' : 'is-negative'} ${realizedOutside ? 'is-outside' : ''} ${realizedPnl < min ? 'is-before' : realizedPnl > max ? 'is-after' : ''}`} style={{ left: position(realizedPnl) }}><span>실제 {money(realizedPnl, currency)}{realizedOutside ? ' · 범위 밖' : ''}</span></i>
     </div>
     <p>경로: {eventGroups.map((group) => group.labels.join(' + ')).join(' → ')}</p>
     <small>수익 기회 {elapsedLabel(openedAt, opportunityAt)} · 손실 위험 {elapsedLabel(openedAt, riskAt)}</small>
