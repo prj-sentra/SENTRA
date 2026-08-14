@@ -783,6 +783,13 @@ describe('TradeLogService stats range and risk coverage', () => {
       scope: 'trade', status: 'failed',
       attempt: { calculationVersion: 4, inputFingerprint: 'changed', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'INPUT_CHANGED' },
     });
+    expect(service.serializeExcursion({
+      status: 'FAILED', attemptCalculationVersion: 4, attemptInputFingerprint: 'sync-yield',
+      lastAttemptedAt: at, failureReason: 'SYNC_PRIORITY_YIELD',
+    })).toEqual({
+      scope: 'trade', status: 'failed',
+      attempt: { calculationVersion: 4, inputFingerprint: 'sync-yield', attemptedAt: '2026-08-12T00:00:00.000Z', failureReason: 'SYNC_PRIORITY_YIELD' },
+    });
   });
   it('does not fail statistics when a legacy stale campaign family has no prior metrics', () => {
     const service = new TradeLogService(prisma() as never) as any;

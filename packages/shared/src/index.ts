@@ -76,7 +76,7 @@ export type ExcursionFailureReason =
   | 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE' | 'VALUATION_UNSUPPORTED' | 'UNSUPPORTED_DEAL_SEQUENCE'
   | 'TICK_SOURCE_LIMIT' | 'TICK_CURSOR_EXPIRED' | 'TICK_CAPACITY' | 'TICK_DEADLINE'
   | 'TICK_UNAVAILABLE' | 'TICK_INVALID_PAYLOAD' | 'TICK_IDENTITY_MISMATCH' | 'INPUT_CHANGED'
-  | 'ACCOUNT_DEACTIVATED' | 'NO_SYNC_SNAPSHOT';
+  | 'SYNC_PRIORITY_YIELD' | 'ACCOUNT_DEACTIVATED' | 'NO_SYNC_SNAPSHOT';
 export type ExcursionSuccessfulAttempt = { calculationVersion: number; inputFingerprint: string; attemptedAt: string; failureReason?: never; };
 export type ExcursionFailedAttempt = { calculationVersion: number; inputFingerprint: string; attemptedAt: string; failureReason: ExcursionFailureReason; };
 export type PricedExcursionExtremum = { value: number; occurredAt: string; markPrice: number; };

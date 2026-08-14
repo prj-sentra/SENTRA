@@ -32,6 +32,7 @@ const failureCopy: Record<ExcursionFailureReason, string> = {
   TICK_UNAVAILABLE: 'MT5에서 해당 기간의 가격 기록을 가져오지 못했습니다.',
   TICK_INVALID_PAYLOAD: '가격 기록 검증에 실패해 계산을 중단했습니다.',
   TICK_IDENTITY_MISMATCH: '다른 계정 또는 종목의 가격 기록이 감지되어 계산을 중단했습니다.',
+  SYNC_PRIORITY_YIELD: 'MT5 동기화를 우선 처리한 뒤 자동으로 다시 계산합니다.',
   INPUT_CHANGED: '거래 정보가 변경되어 다시 계산해야 합니다.',
   ACCOUNT_DEACTIVATED: '비활성 계정은 계산하지 않습니다.',
   NO_SYNC_SNAPSHOT: '먼저 MT5 동기화가 필요합니다.',
