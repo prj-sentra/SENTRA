@@ -39,7 +39,7 @@ const failureCopy: Record<ExcursionFailureReason, string> = {
 const statusCopy: Record<ExcursionStatus, string> = {
   success: '계산 완료',
   stale: '재계산 필요',
-  failed: '가격 데이터 확인 필요',
+  failed: '자동 계산 중단',
   unsupported: '계산할 수 없음',
 };
 function ExcursionStatusBadge({ status }: { status: ExcursionStatus }) {

@@ -156,7 +156,7 @@ export function SyncControl({ account, onSync, onFullSync, onClassificationPrevi
         <header><strong>시장 진행 분석</strong><span>{excursionProgress.completed} / {excursionProgress.total}</span></header>
         <progress max={Math.max(excursionProgress.total, 1)} value={excursionProgress.completed} />
         <p>{excursionProgress.syncHasPriority || syncing ? 'MT5 동기화를 우선 처리하고 있습니다. 분석은 이후 자동으로 계속됩니다.' : excursionProgress.calculating ? '백그라운드에서 계산 중입니다.' : excursionProgress.pending > 0 ? '계산 대기 중입니다.' : '현재 계산 작업이 완료되었습니다.'}</p>
-        {(excursionProgress.recalculationNeeded > 0 || excursionProgress.unsupported > 0 || excursionProgress.failed > 0) ? <details><summary>데이터 상태</summary><p>재계산 필요 {excursionProgress.recalculationNeeded} · 계산 불가 {excursionProgress.unsupported} · 확인 필요 {excursionProgress.failed}</p></details> : null}
+        {(excursionProgress.recalculationNeeded > 0 || excursionProgress.unsupported > 0 || excursionProgress.failed > 0) ? <details><summary>데이터 상태</summary><p>재계산 필요 {excursionProgress.recalculationNeeded} · 계산 불가 {excursionProgress.unsupported} · 자동 계산 중단 {excursionProgress.failed}</p>{excursionProgress.failed > 0 ? <p>거래 기록에는 영향이 없으며, 시장 진행 분석 계산만 중단된 상태입니다.</p> : null}</details> : null}
       </section> : null}
       {unavailable ? <span className="muted">{account ? '비활성 계정은 동기화할 수 없습니다.' : '동기화할 MT5 계정을 선택하세요.'}</span> : null}
       {result ? <span className="muted" role="status">{result}</span> : null}

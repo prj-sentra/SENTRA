@@ -57,13 +57,16 @@ describe('SyncControl', () => {
     vi.useRealTimers();
     const progress = vi.fn().mockResolvedValue({
       accountId: 'a1', total: 100, completed: 44, pending: 50, recalculationNeeded: 4,
-      unsupported: 2, failed: 0, calculating: true, syncHasPriority: false,
+      unsupported: 2, failed: 1, calculating: true, syncHasPriority: false,
     });
     render(<SyncControl account={account} onSync={vi.fn()} onExcursionProgress={progress} />);
     expect(await screen.findByText('시장 진행 분석')).toBeInTheDocument();
     expect(screen.getByText('44 / 100')).toBeInTheDocument();
     expect(screen.getByText('백그라운드에서 계산 중입니다.')).toBeInTheDocument();
     expect(screen.getByText('최근 MT5 체결과 포지션 변경사항을 가져옵니다.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('데이터 상태'));
+    expect(screen.getByText(/자동 계산 중단 1/)).toBeInTheDocument();
+    expect(screen.getByText('거래 기록에는 영향이 없으며, 시장 진행 분석 계산만 중단된 상태입니다.')).toBeInTheDocument();
   });
   it('waits for each calculation-progress request to settle before polling again', async () => {
     let resolveFirst!: (value: any) => void;
