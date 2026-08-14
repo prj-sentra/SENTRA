@@ -293,6 +293,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
       where: expect.objectContaining({
         ownerId: 'owner-1',
         mt5AccountId: 'account-1',
+        symbol: 'XAUUSD',
         side: 'LONG',
         campaignMembership: { isNot: null },
       }),

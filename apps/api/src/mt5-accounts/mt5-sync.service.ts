@@ -829,6 +829,7 @@ export class Mt5SyncService {
           where: {
             ownerId,
             mt5AccountId: accountId,
+            symbol: data.symbol,
             side: data.side,
             id: { not: trade.id },
             openedAt: { lte: opened.timeMscUtc },
@@ -841,7 +842,7 @@ export class Mt5SyncService {
           },
         });
         const manualHeads = await tx.trade.findMany({
-          where: { ownerId, mt5AccountId: accountId, side: data.side, openedAt: { not: null }, campaignMembership: { headSource: 'MANUAL' } },
+          where: { ownerId, mt5AccountId: accountId, symbol: data.symbol, side: data.side, openedAt: { not: null }, campaignMembership: { headSource: 'MANUAL' } },
           select: { mt5PositionId: true, campaignMembership: { select: { campaignId: true } } },
         });
         const openingIds = [...overlapping, ...manualHeads].map((row) => row.mt5PositionId).filter((id): id is bigint => id !== null);
@@ -943,21 +944,23 @@ export class Mt5SyncService {
       return compared || left.id.localeCompare(right.id);
     });
     const components: typeof trades[] = [];
-    for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
-      let component: typeof trades = [];
-      let componentEnd = Number.NEGATIVE_INFINITY;
-      for (const trade of trades.filter((row) => row.side === side)) {
-        const openedAt = trade.openedAt!.getTime();
-        // A manual head is a durable boundary, even where intervals overlap.
-        if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
-          components.push(component);
-          component = [];
-          componentEnd = Number.NEGATIVE_INFINITY;
+    for (const symbol of [...new Set(trades.map((trade) => trade.symbol))].sort()) {
+      for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
+        let component: typeof trades = [];
+        let componentEnd = Number.NEGATIVE_INFINITY;
+        for (const trade of trades.filter((row) => row.symbol === symbol && row.side === side)) {
+          const openedAt = trade.openedAt!.getTime();
+          // A manual head is a durable boundary, even where intervals overlap.
+          if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
+            components.push(component);
+            component = [];
+            componentEnd = Number.NEGATIVE_INFINITY;
+          }
+          component.push(trade);
+          componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
         }
-        component.push(trade);
-        componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+        if (component.length) components.push(component);
       }
-      if (component.length) components.push(component);
     }
     components.sort((left, right) => compareCampaignOpeningKey(
       openingKeyForTrade(left[0]!),
@@ -1139,20 +1142,22 @@ export class Mt5SyncService {
       return compared || left.id.localeCompare(right.id);
     });
     const components: typeof trades[] = [];
-    for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
-      let component: typeof trades = [];
-      let componentEnd = Number.NEGATIVE_INFINITY;
-      for (const trade of trades.filter((row) => row.side === side)) {
-        const openedAt = trade.openedAt!.getTime();
-        if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
-          components.push(component);
-          component = [];
-          componentEnd = Number.NEGATIVE_INFINITY;
+    for (const symbol of [...new Set(trades.map((trade) => trade.symbol))].sort()) {
+      for (const side of [TradeSide.LONG, TradeSide.SHORT]) {
+        let component: typeof trades = [];
+        let componentEnd = Number.NEGATIVE_INFINITY;
+        for (const trade of trades.filter((row) => row.symbol === symbol && row.side === side)) {
+          const openedAt = trade.openedAt!.getTime();
+          if (component.length && (trade.campaignMembership?.headSource === 'MANUAL' || openedAt > componentEnd)) {
+            components.push(component);
+            component = [];
+            componentEnd = Number.NEGATIVE_INFINITY;
+          }
+          component.push(trade);
+          componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
         }
-        component.push(trade);
-        componentEnd = trade.closedAt ? Math.max(componentEnd, trade.closedAt.getTime()) : Number.POSITIVE_INFINITY;
+        if (component.length) components.push(component);
       }
-      if (component.length) components.push(component);
     }
     const currentCampaignIds = new Set(trades.flatMap((trade) => trade.campaignMembership ? [trade.campaignMembership.campaignId] : []));
     const retainedCampaignIds = new Set<string>();

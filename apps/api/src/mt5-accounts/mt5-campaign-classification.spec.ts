@@ -9,7 +9,7 @@ const emptyAnalysis = () => ({
 
 function fixture(rows: Array<{
   id: string; open: number; close?: number; campaign: string; source?: 'AUTO' | 'MANUAL'; headSource?: 'AUTO' | 'MANUAL'; authored?: boolean;
-  ticket?: number; positionId?: number; side?: 'LONG' | 'SHORT';
+  ticket?: number; positionId?: number; side?: 'LONG' | 'SHORT'; symbol?: string;
 }>) {
   const campaigns = new Map<string, any>();
   for (const row of rows) {
@@ -24,7 +24,7 @@ function fixture(rows: Array<{
   const memberships = new Map(rows.map((row) => [row.id, { tradeId: row.id, campaignId: row.campaign, source: row.source ?? 'AUTO', headSource: row.headSource ?? 'AUTO', updatedAt: new Date(row.open) }]));
   const trades = rows.map((row) => ({
     id: row.id, openedAt: new Date(row.open), closedAt: row.close === undefined ? null : new Date(row.close),
-    mt5PositionId: BigInt(row.positionId ?? row.open), side: row.side ?? 'LONG', updatedAt: new Date(row.open),
+    mt5PositionId: BigInt(row.positionId ?? row.open), symbol: row.symbol ?? 'EURUSD', side: row.side ?? 'LONG', updatedAt: new Date(row.open),
     get campaignMembership() { const membership = memberships.get(row.id); return membership ? { ...membership, campaign: campaigns.get(membership.campaignId)! } : null; },
   }));
   const deleted: string[] = [];
@@ -98,6 +98,18 @@ describe('MT5 interval-overlap campaign classification', () => {
     expect(state.memberships.get('short')!.campaignId).toBe('split-short');
   });
 
+  it('separates overlapping trades with different symbols', async () => {
+    const state = fixture([
+      { id: 'gold', open: 100, campaign: 'mixed', symbol: 'GOLD#', side: 'SHORT' },
+      { id: 'nasdaq', open: 200, close: 300, campaign: 'mixed', symbol: 'US100Cash#', side: 'SHORT' },
+    ]);
+    await expect(service.reclassifyCampaigns(state.tx, 'owner', 'account')).resolves.toEqual({
+      moved: 1, deletedCampaigns: 0, conflicts: 0,
+    });
+    expect(state.memberships.get('gold')!.campaignId).toBe('mixed');
+    expect(state.memberships.get('nasdaq')!.campaignId).toBe('split-nasdaq');
+  });
+
   it('previews a direction split without mutating campaign memberships', async () => {
     const state = fixture([
       { id: 'long', open: 100, campaign: 'mixed', side: 'LONG' },
@@ -111,6 +123,23 @@ describe('MT5 interval-overlap campaign classification', () => {
       movedTrades: 1,
       createdCampaigns: 1,
       mergedCampaigns: 0,
+      hasChanges: true,
+    });
+    expect([...state.memberships.values()].map((membership) => membership.campaignId)).toEqual(['mixed', 'mixed']);
+  });
+
+  it('previews a symbol split without mutating campaign memberships', async () => {
+    const state = fixture([
+      { id: 'gold', open: 100, campaign: 'mixed', symbol: 'GOLD#', side: 'SHORT' },
+      { id: 'nasdaq', open: 200, close: 300, campaign: 'mixed', symbol: 'US100Cash#', side: 'SHORT' },
+    ]);
+    const previewService = new Mt5SyncService(state.tx, {} as never, {} as never);
+    await expect(previewService.previewCampaignReclassification('owner', 'account')).resolves.toMatchObject({
+      trades: 2,
+      currentCampaigns: 1,
+      proposedCampaigns: 2,
+      movedTrades: 1,
+      createdCampaigns: 1,
       hasChanges: true,
     });
     expect([...state.memberships.values()].map((membership) => membership.campaignId)).toEqual(['mixed', 'mixed']);
