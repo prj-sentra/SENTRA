@@ -3,10 +3,14 @@
   "kind": "api-package-test-report",
   "sourceHash": "sha256:bdd1e2272ebd7c3eff3140c934018ec294139d5672578592d8b8b192c2c26505",
   "status": "passed",
+  "verifiedAt": "2026-08-14T06:30:00.000Z",
+  "verificationRoot": "/tmp/sentra-frozen",
+  "deployedFromCleanFrozenSource": true,
   "commands": [
-    {"command":"pnpm test","status":"passed","result":"API 28 suites / 243 tests; web 19 files / 82 tests"},
-    {"command":"pnpm typecheck","status":"passed"},
-    {"command":"pnpm build","status":"passed"},
+    {"command":"cd /tmp/sentra-frozen && pnpm test","status":"passed","result":"API 28 suites / 243 tests; web 19 files / 82 tests"},
+    {"command":"cd /tmp/sentra-frozen && pnpm typecheck","status":"passed"},
+    {"command":"cd /tmp/sentra-frozen && pnpm build","status":"passed"},
+    {"command":"cd /tmp/sentra-frozen && docker compose -p trading-journal --env-file /home/hoya/trading-journal/.env up -d --build","status":"passed","result":"API, web, Caddy recreated from clean frozen source; health returned ok"},
     {"command":"GET /api/trade-log/stats?accountId=f68c487b1af315456fef2eeb4b4dc5bf&unit=campaign","status":"passed","result":"51 current successes; medians 9.65/-8.51; profitable capture median 76.23213969; reversal 13; profitable below 50% 13; risk-dominant 23"}
   ],
   "invariants": [

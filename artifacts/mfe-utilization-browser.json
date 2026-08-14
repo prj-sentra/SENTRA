@@ -6,6 +6,8 @@
   "sourceHashMethod": "sha256 of newline-delimited git tree/blob IDs for apps, packages, docker-compose.yml",
   "sourceCommit": "f56f95d3a680531d2a0af80c21ca29558abb170c",
   "sourceHash": "sha256:bdd1e2272ebd7c3eff3140c934018ec294139d5672578592d8b8b192c2c26505",
+  "verificationRoot": "/tmp/sentra-frozen",
+  "deployedFromCleanFrozenSource": true,
   "events": [
     {"action":"assert-dashboard-desktop","width":1440,"height":1000,"completed":"51 / 51","mfeMedian":"9.65 USD","maeMedian":"-8.51 USD","profitableCaptureMedian":"76.23%","opportunityReversal":"13 · 25.49%","lowCapture":"13 · 38.24%","riskDominant":"23 · 45.1%","distribution":true,"result":"passed"},
     {"action":"assert-detail-desktop","width":1440,"height":1000,"currency":true,"range":true,"eventOrder":true,"timing":true,"technicalCollapsed":true,"negativeMfeBoundaryTest":true,"outOfRangeMarkerTest":true,"outOfRangeLabelContained":true,"exactEndpointLabelsContained":true,"timestampTieTest":true,"result":"passed"},
@@ -13,14 +15,14 @@
     {"action":"assert-detail-mobile","width":390,"height":844,"bodyScrollWidth":375,"sectionWidth":317,"range":true,"technicalCollapsed":true,"result":"passed"}
   ],
   "actions": [
-    {"type":"navigate","timestamp":"2026-08-14T05:52:00.000Z","action":"navigate","url":"http://127.0.0.1/dashboard","selector":"url:http://127.0.0.1/dashboard"},
-    {"type":"assert","timestamp":"2026-08-14T05:52:02.000Z","action":"assert-dashboard-desktop","selector":"[aria-label='시장 진행 분석 요약']","width":1440,"height":1000},
-    {"type":"navigate","timestamp":"2026-08-14T05:52:10.000Z","action":"navigate","url":"http://127.0.0.1/journal","selector":"url:http://127.0.0.1/journal"},
-    {"type":"assert","timestamp":"2026-08-14T05:52:12.000Z","action":"assert-detail-desktop","selector":"[aria-label='매매 전체 시장 진행 분석']","width":1440,"height":1000},
-    {"type":"navigate","timestamp":"2026-08-14T05:53:00.000Z","action":"navigate","url":"http://127.0.0.1/dashboard","selector":"url:http://127.0.0.1/dashboard"},
-    {"type":"assert","timestamp":"2026-08-14T05:53:02.000Z","action":"assert-dashboard-mobile","selector":"[aria-label='시장 진행 분석 요약']","width":390,"height":844,"bodyScrollWidth":375},
-    {"type":"navigate","timestamp":"2026-08-14T05:53:10.000Z","action":"navigate","url":"http://127.0.0.1/journal","selector":"url:http://127.0.0.1/journal"},
-    {"type":"assert","timestamp":"2026-08-14T05:53:12.000Z","action":"assert-detail-mobile","selector":"[aria-label='매매 전체 시장 진행 분석']","width":390,"height":844,"bodyScrollWidth":375}
+    {"type":"navigate","timestamp":"2026-08-14T06:30:25.050Z","action":"navigate","url":"http://127.0.0.1/dashboard","selector":"url:http://127.0.0.1/dashboard"},
+    {"type":"assert","timestamp":"2026-08-14T06:30:25.050Z","action":"assert-dashboard-desktop","selector":"[aria-label='시장 진행 분석 요약']","width":1440,"height":1000},
+    {"type":"navigate","timestamp":"2026-08-14T06:30:26.769Z","action":"navigate","url":"http://127.0.0.1/journal","selector":"url:http://127.0.0.1/journal"},
+    {"type":"assert","timestamp":"2026-08-14T06:30:26.769Z","action":"assert-detail-desktop","selector":"[aria-label='매매 전체 시장 진행 분석']","width":1440,"height":1000},
+    {"type":"navigate","timestamp":"2026-08-14T06:30:44.829Z","action":"navigate","url":"http://127.0.0.1/dashboard","selector":"url:http://127.0.0.1/dashboard"},
+    {"type":"assert","timestamp":"2026-08-14T06:30:44.829Z","action":"assert-dashboard-mobile","selector":"[aria-label='시장 진행 분석 요약']","width":390,"height":844,"bodyScrollWidth":375},
+    {"type":"navigate","timestamp":"2026-08-14T06:30:46.512Z","action":"navigate","url":"http://127.0.0.1/journal","selector":"url:http://127.0.0.1/journal"},
+    {"type":"assert","timestamp":"2026-08-14T06:30:46.512Z","action":"assert-detail-mobile","selector":"[aria-label='매매 전체 시장 진행 분석']","width":390,"height":844,"bodyScrollWidth":375}
   ],
   "screenshots": [
     {"path":"artifacts/mfe-utilization-dashboard-desktop.png","sha256":"ce19f524c0f2c6e240cf43b8a24e891f383dce3b31fe853ce759afb2c3b09d23","width":1440,"height":1000,"nonUniform":true},
