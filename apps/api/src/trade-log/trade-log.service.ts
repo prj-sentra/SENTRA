@@ -577,6 +577,35 @@ export class TradeLogService {
       return { sampleCount: sorted.length, mean: round(sorted.reduce((sum, value) => sum + value, 0) / sorted.length), median: percentile(.5), q1: percentile(.25), q3: percentile(.75), bins };
     };
     const pair = (items: Array<{ mfe: number; mae: number }>) => ({ mfe: distribution(items.map((item) => item.mfe)), mae: distribution(items.map((item) => item.mae)) });
+    const rate = (count: number, total: number) => total ? new Prisma.Decimal(count).div(total).mul(100).toDecimalPlaces(2).toNumber() : 0;
+    const management = (items: Array<{ result: any; realizedPnl: number }>) => {
+      const current = items.filter((item) => item.result?.status === 'success' && item.result.metrics?.unrealizedPnl);
+      const profitable = current.filter((item) => item.realizedPnl > 0 && item.result.metrics.unrealizedPnl.mfe.value > 0 && item.result.metrics.captureRate !== undefined);
+      const opportunityReversalCount = current.filter((item) => item.result.metrics.unrealizedPnl.mfe.value > 0 && item.realizedPnl <= 0).length;
+      const riskDominantCount = current.filter((item) => Math.abs(item.result.metrics.unrealizedPnl.mae.value) > item.result.metrics.unrealizedPnl.mfe.value).length;
+      const belowFiftyCount = profitable.filter((item) => item.result.metrics.captureRate < 50).length;
+      const bandCount = (predicate: (item: typeof profitable[number]) => boolean) => profitable.filter(predicate).length;
+      return {
+        accountCurrency: current.map((item) => item.result.success?.accountCurrency).find((currency) => typeof currency === 'string'),
+        eligibleSuccessCount: current.length,
+        opportunityReversal: { count: opportunityReversalCount, rate: rate(opportunityReversalCount, current.length) },
+        riskDominant: { count: riskDominantCount, rate: rate(riskDominantCount, current.length) },
+        profitableCapture: {
+          eligibleCount: profitable.length,
+          distribution: distribution(profitable.map((item) => item.result.metrics.captureRate)),
+          belowFiftyCount,
+          belowFiftyRate: rate(belowFiftyCount, profitable.length),
+          bands: [
+            { key: 'opportunity_loss' as const, count: opportunityReversalCount },
+            { key: 'under_25' as const, count: bandCount((item) => item.result.metrics.captureRate < 25) },
+            { key: '25_50' as const, count: bandCount((item) => item.result.metrics.captureRate >= 25 && item.result.metrics.captureRate < 50) },
+            { key: '50_75' as const, count: bandCount((item) => item.result.metrics.captureRate >= 50 && item.result.metrics.captureRate < 75) },
+            { key: '75_100' as const, count: bandCount((item) => item.result.metrics.captureRate >= 75 && item.result.metrics.captureRate < 100) },
+            { key: '100_plus' as const, count: bandCount((item) => item.result.metrics.captureRate >= 100) },
+          ],
+        },
+      };
+    };
     const status = (items: Array<any>) => ({ success: items.filter((item) => item?.status === 'success').length, stale: items.filter((item) => item?.status === 'stale').length, failed: items.filter((item) => item?.status === 'failed').length, unsupported: items.filter((item) => item?.status === 'unsupported').length, missing: items.filter((item) => !item).length });
     const metricPair = (items: any[], family: string) => pair(items.filter((item) => item?.metrics?.[family]).map((item) => ({ mfe: item.metrics[family].mfe.value, mae: item.metrics[family].mae.value })));
     const selected = unit === 'trade'
@@ -585,7 +614,8 @@ export class TradeLogService {
     if (unit === 'trade') {
       const values = selected as Array<TradeExcursionResult | undefined>;
       const current = values.filter((value): value is Extract<TradeExcursionResult, { status: 'success' }> => value?.status === 'success');
-      return { unit: 'trade', families: [{ family: 'trade', status: status(values), price: metricPair(current, 'price'), percent: metricPair(current, 'percent'), unrealizedPnl: metricPair(current, 'unrealizedPnl'), r: metricPair(current.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(current.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), counts: { eligibleSuccessCount: current.length, riskUnavailableCount: current.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: current.filter((value) => value.metrics.captureRate !== undefined).length } }] };
+      const entries = samples.flatMap((sample) => sample.trades.map((trade) => ({ result: trade.excursion, realizedPnl: trade.realizedPnl ?? 0 })));
+      return { unit: 'trade', families: [{ family: 'trade', status: status(values), price: metricPair(current, 'price'), percent: metricPair(current, 'percent'), unrealizedPnl: metricPair(current, 'unrealizedPnl'), r: metricPair(current.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(current.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), management: management(entries), counts: { eligibleSuccessCount: current.length, riskUnavailableCount: current.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: current.filter((value) => value.metrics.captureRate !== undefined).length } }] };
     }
     const values = selected as Array<CampaignExcursionResult | undefined>;
     const price = values.map((value) => value?.price), pnl = values.map((value) => value?.unrealizedPnl);
@@ -593,7 +623,7 @@ export class TradeLogService {
     const pnlCurrent: any[] = pnl.filter((value) => value?.status === 'success');
     return { unit: 'campaign', families: [
       { family: 'campaign_price', status: status(price), price: metricPair(priceCurrent, 'price'), percent: metricPair(priceCurrent, 'percent'), counts: { eligibleSuccessCount: priceCurrent.length, heterogeneousUnavailableCount: price.filter((value) => value?.attempt.failureReason === 'HETEROGENEOUS_CAMPAIGN_PRICE_UNAVAILABLE').length } },
-      { family: 'campaign_unrealized_pnl', status: status(pnl), unrealizedPnl: metricPair(pnlCurrent, 'unrealizedPnl'), r: metricPair(pnlCurrent.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(pnlCurrent.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), counts: { eligibleSuccessCount: pnlCurrent.length, riskUnavailableCount: pnlCurrent.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: pnlCurrent.filter((value) => value.metrics.captureRate !== undefined).length, valuationUnavailableCount: pnl.filter((value) => value?.attempt.failureReason === 'VALUATION_UNSUPPORTED').length } },
+      { family: 'campaign_unrealized_pnl', status: status(pnl), unrealizedPnl: metricPair(pnlCurrent, 'unrealizedPnl'), r: metricPair(pnlCurrent.filter((value) => value.metrics.rAvailability === 'available'), 'r'), captureRate: distribution(pnlCurrent.flatMap((value) => value.metrics.captureRate === undefined ? [] : [value.metrics.captureRate])), management: management(samples.map((sample, index) => ({ result: pnl[index], realizedPnl: sample.realizedPnl }))), counts: { eligibleSuccessCount: pnlCurrent.length, riskUnavailableCount: pnlCurrent.filter((value) => value.metrics.rAvailability === 'risk_unavailable').length, captureEligibleCount: pnlCurrent.filter((value) => value.metrics.captureRate !== undefined).length, valuationUnavailableCount: pnl.filter((value) => value?.attempt.failureReason === 'VALUATION_UNSUPPORTED').length } },
     ] };
   }
   async getStatsPreferences(ownerId: string): Promise<TradeStatsPreferences> {

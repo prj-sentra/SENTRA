@@ -1335,8 +1335,44 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .excursion-card-grid small { color: var(--text-muted); font-size: .65rem; line-height: 1.35; }
 .excursion-card-grid .is-positive { color: #198038; }
 .excursion-card-grid .is-negative { color: var(--danger); }
+.excursion-quality-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.excursion-quality-grid article { display: grid; gap: 5px; padding: 14px; border-left: 3px solid var(--blue); background: var(--layer-01); }
+.excursion-quality-grid strong { font: 600 1.05rem 'IBM Plex Mono', ui-monospace, monospace; }
+.excursion-quality-grid span { color: var(--text-primary); font-size: .76rem; font-weight: 650; }
+.excursion-quality-grid small { color: var(--text-muted); font-size: .66rem; line-height: 1.4; }
+.excursion-distribution { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); background: var(--layer-01); }
+.excursion-distribution > header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 12px; }
+.excursion-distribution > header div { display: flex; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: .7rem; }
+.excursion-distribution > header div:last-child { flex-direction: row-reverse; }
+.excursion-distribution > header strong { color: var(--text-primary); font: 600 .78rem 'IBM Plex Mono', ui-monospace, monospace; }
+.excursion-distribution > header b { color: var(--text-muted); font-size: .65rem; }
+.excursion-mirrored-bars { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 8px; height: 90px; align-items: end; }
+.excursion-mirrored-bars > i { width: 1px; height: 100%; background: var(--border-strong); }
+.excursion-distribution-bars { display: flex; height: 100%; align-items: end; justify-content: stretch; gap: 2px; }
+.excursion-distribution-bars span { flex: 1; min-height: 8px; background: #78a9ff; }
+.excursion-mirrored-bars > .excursion-distribution-bars:first-child span { background: #fa4d56; }
+.excursion-distribution > p, .excursion-capture-bands > p { margin: 0; color: var(--text-muted); font-size: .66rem; }
+.excursion-capture-bands { display: grid; gap: 9px; }
+.excursion-capture-bands h3 { margin: 0; font-size: .82rem; }
+.excursion-capture-bands > div { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.excursion-capture-bands article { display: grid; gap: 4px; padding: 10px 6px; border: 1px solid var(--border); text-align: center; }
+.excursion-capture-bands strong { font: 600 1rem 'IBM Plex Mono', ui-monospace, monospace; }
+.excursion-capture-bands span { color: var(--text-secondary); font-size: .64rem; }
 .excursion-interpretation { margin: 0; padding: 10px 12px; border-left: 3px solid var(--blue); background: var(--layer-01); font-size: .8rem; }
 .excursion-interpretation.is-warning { border-left-color: #f1c21b; }
+.excursion-range { display: grid; gap: 8px; margin: 0; padding: 14px 12px; border: 1px solid var(--border); background: var(--layer-01); }
+.excursion-range figcaption { font-size: .76rem; font-weight: 650; }
+.excursion-range-labels { display: flex; justify-content: space-between; color: var(--text-secondary); font: .68rem 'IBM Plex Mono', ui-monospace, monospace; }
+.excursion-range-track { position: relative; height: 34px; margin: 18px 4px 24px; border-bottom: 2px solid var(--border-strong); }
+.excursion-range-track > span { position: absolute; bottom: -2px; height: 6px; }
+.excursion-range-track .range-loss { background: #fa4d56; }
+.excursion-range-track .range-profit { background: #42be65; }
+.excursion-range-track > i { position: absolute; bottom: -7px; width: 2px; height: 16px; background: var(--text-secondary); transform: translateX(-1px); }
+.excursion-range-track > i > span { position: absolute; top: 19px; left: 50%; color: var(--text-secondary); font: normal .64rem 'IBM Plex Mono', ui-monospace, monospace; transform: translateX(-50%); white-space: nowrap; }
+.excursion-range-track .range-realized { bottom: -9px; width: 4px; height: 22px; background: var(--blue); }
+.excursion-range-track .range-realized.is-positive { background: #198038; }
+.excursion-range-track .range-realized.is-negative { background: var(--danger); }
+.excursion-range p, .excursion-range small { margin: 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.4; }
 .excursion-panel details, .excursion-summary details { border-top: 1px solid var(--border); padding-top: 10px; color: var(--text-secondary); font-size: .75rem; }
 .excursion-panel summary, .excursion-summary summary { cursor: pointer; font-weight: 650; }
 .excursion-panel dl { display: grid; gap: 8px; margin: 12px 0 0; }
@@ -1347,12 +1383,15 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .excursion-diagnostic-family h3, .excursion-diagnostic-family p { margin: 4px 0; }
 @media (max-width: 700px) {
   .excursion-panel, .excursion-summary { padding: 14px; }
-  .excursion-card-grid { grid-template-columns: 1fr; }
+  .excursion-card-grid, .excursion-quality-grid { grid-template-columns: 1fr; }
+  .excursion-capture-bands > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .excursion-panel > header, .excursion-summary > header { align-items: stretch; flex-direction: column; }
   .excursion-status { align-self: flex-start; }
 }
 @container (max-width: 560px) {
   .excursion-card-grid { grid-template-columns: 1fr; }
+  .excursion-quality-grid { grid-template-columns: 1fr; }
+  .excursion-capture-bands > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .excursion-card-grid strong { overflow: visible; text-overflow: clip; }
 }
 .trade-calendar-counts { align-self: end; color: var(--text-secondary); font-size: .62rem; white-space: nowrap; }

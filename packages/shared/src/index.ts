@@ -107,9 +107,23 @@ export type CampaignExcursionResult = { scope: 'campaign'; price: CampaignPriceF
 export type ExcursionDistribution = { sampleCount: number; mean?: number; median?: number; q1?: number; q3?: number; bins: Array<{ min: number; max: number; includeMax: boolean; count: number }>; };
 export type ExcursionPair = { mfe: ExcursionDistribution; mae: ExcursionDistribution; };
 export type ExcursionStatusCounts = { success: number; stale: number; failed: number; missing: number; unsupported: number; };
-export type TradeExcursionStatsFamily = { family: 'trade'; status: ExcursionStatusCounts; price: ExcursionPair; percent: ExcursionPair; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; }; };
+export type ExcursionCaptureBandKey = 'opportunity_loss' | 'under_25' | '25_50' | '50_75' | '75_100' | '100_plus';
+export type ExcursionManagementStats = {
+  accountCurrency?: string;
+  eligibleSuccessCount: number;
+  opportunityReversal: { count: number; rate: number };
+  riskDominant: { count: number; rate: number };
+  profitableCapture: {
+    eligibleCount: number;
+    distribution: ExcursionDistribution;
+    belowFiftyCount: number;
+    belowFiftyRate: number;
+    bands: Array<{ key: ExcursionCaptureBandKey; count: number }>;
+  };
+};
+export type TradeExcursionStatsFamily = { family: 'trade'; status: ExcursionStatusCounts; price: ExcursionPair; percent: ExcursionPair; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; management: ExcursionManagementStats; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; }; };
 export type CampaignPriceExcursionStatsFamily = { family: 'campaign_price'; status: ExcursionStatusCounts; price: ExcursionPair; percent: ExcursionPair; counts: { eligibleSuccessCount: number; heterogeneousUnavailableCount: number; }; };
-export type CampaignUnrealizedPnlExcursionStatsFamily = { family: 'campaign_unrealized_pnl'; status: ExcursionStatusCounts; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; valuationUnavailableCount: number; }; };
+export type CampaignUnrealizedPnlExcursionStatsFamily = { family: 'campaign_unrealized_pnl'; status: ExcursionStatusCounts; unrealizedPnl: ExcursionPair; r: ExcursionPair; captureRate: ExcursionDistribution; management: ExcursionManagementStats; counts: { eligibleSuccessCount: number; riskUnavailableCount: number; captureEligibleCount: number; valuationUnavailableCount: number; }; };
 export type TradeStatsExcursions = { unit: 'trade'; families: [TradeExcursionStatsFamily]; } | { unit: 'campaign'; families: [CampaignPriceExcursionStatsFamily, CampaignUnrealizedPnlExcursionStatsFamily]; };
 export type TradeStatsUnit = 'campaign' | 'trade';
 export type TradeStatsSession = 'asia' | 'london' | 'new-york' | 'off-session';

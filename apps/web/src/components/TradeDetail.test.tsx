@@ -22,6 +22,9 @@ describe('TradeDetail split execution ownership', () => {
     expect(screen.getAllByText('재계산 필요').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/MT5에서 해당 기간의 가격 기록을 가져오지 못했습니다/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/수익 실현률/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('보유 중 손익 범위').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('최대 손실 -20 USD, 실제 손익 120 USD, 최대 수익 기회 30 USD').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('경로: 최대 손실 위험 → 최대 수익 기회').length).toBeGreaterThan(0);
     expect(screen.queryByText(/TICK_UNAVAILABLE/, { selector: 'summary' })).not.toBeInTheDocument();
   });
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {

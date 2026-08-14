@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { TradeStatsDimension, TradeStatsGranularity, TradeStatsOverview, TradeStatsQuery, TradeStatsResponse, TradeStatsUnit } from '@trading-journal/shared';
+import type { ExcursionCaptureBandKey, ExcursionDistribution, TradeStatsDimension, TradeStatsGranularity, TradeStatsOverview, TradeStatsQuery, TradeStatsResponse, TradeStatsUnit } from '@trading-journal/shared';
 import { StatsLineChart } from './StatsLineChart';
 
 export interface StatsPageProps { accountId: string; request: <T>(path: string, init?: RequestInit) => Promise<T>; onOpenRecord: (record: TradeStatsResponse['drilldown'][number]) => void; }
@@ -153,6 +153,21 @@ function DashboardFilterSidebar({ unit, setUnit, filters, setFilters, throughLat
     </div> : null}
   </aside>;
 }
+function DistributionBars({ distribution, reverse = false, label }: { distribution: ExcursionDistribution; reverse?: boolean; label: string }) {
+  const bins = reverse ? [...distribution.bins].reverse() : distribution.bins;
+  const maxCount = Math.max(1, ...bins.map((bin) => bin.count));
+  return <div className="excursion-distribution-bars" role="img" aria-label={`${label} 분포. 표본 ${distribution.sampleCount}건, 중앙값 ${format(distribution.median)}`}>
+    {bins.map((bin, index) => <span key={`${bin.min}:${bin.max}:${index}`} style={{ height: `${Math.max(8, bin.count / maxCount * 100)}%` }} title={`${format(bin.min)}~${format(bin.max)}: ${bin.count}건`} />)}
+  </div>;
+}
+const captureBandLabels: Record<ExcursionCaptureBandKey, string> = {
+  opportunity_loss: '기회 후 손실',
+  under_25: '25% 미만',
+  '25_50': '25~50%',
+  '50_75': '50~75%',
+  '75_100': '75~100%',
+  '100_plus': '100% 이상',
+};
 function Diagnostics({ diagnostics, excursions }: { diagnostics: TradeStatsResponse['diagnostics']; excursions?: TradeStatsResponse['excursions'] }) {
   const entries = [['시드 잔고', diagnostics.missingSeedCount, diagnostics.missingSeedIds], ['lot', diagnostics.missingLotsCount, diagnostics.missingLotsIds]] as const;
   const families = excursions?.families ?? [];
@@ -161,8 +176,28 @@ function Diagnostics({ diagnostics, excursions }: { diagnostics: TradeStatsRespo
   const status = headlineFamilies.reduce((sum, family) => ({ success: sum.success + family.status.success, stale: sum.stale + family.status.stale, failed: sum.failed + family.status.failed, unsupported: sum.unsupported + family.status.unsupported, missing: sum.missing + family.status.missing }), { success: 0, stale: 0, failed: 0, unsupported: 0, missing: 0 });
   const opportunity = pnlFamily && 'unrealizedPnl' in pnlFamily ? pnlFamily.unrealizedPnl.mfe : undefined;
   const risk = pnlFamily && 'unrealizedPnl' in pnlFamily ? pnlFamily.unrealizedPnl.mae : undefined;
-  const capture = pnlFamily && 'captureRate' in pnlFamily ? pnlFamily.captureRate : undefined;
-  return <><section className="excursion-summary" aria-label="시장 진행 분석 요약"><header><div><h2>시장 진행 분석</h2><p>보유 중 있었던 최대 수익 기회와 손실 위험을 요약합니다.</p></div><span>계산 완료 {status.success}건</span></header><div className="excursion-card-grid"><article><span>평균 최대 수익 기회</span><strong className="is-positive">{format(opportunity?.mean)}</strong><small>보유 중 최대 평가수익</small></article><article><span>평균 최대 손실 위험</span><strong className="is-negative">{format(risk?.mean)}</strong><small>보유 중 최대 평가손실</small></article><article><span>평균 수익 실현률</span><strong>{format(capture?.mean, '%')}</strong><small>실제 손익 ÷ 최대 기회</small></article></div><details><summary>데이터 품질 및 상세 분포</summary><p>재계산 필요 {status.stale} · 자동 계산 중단 {status.failed} · 계산 불가 {status.unsupported} · 아직 없음 {status.missing}</p>{status.failed > 0 ? <p className="muted">거래 기록에는 영향이 없으며, 시장 진행 분석 계산만 중단된 상태입니다.</p> : null}{families.map((family) => <div className="excursion-diagnostic-family" key={family.family}><h3>{family.family === 'trade' ? '분할 진입' : family.family === 'campaign_price' ? '매매 전체 가격' : '매매 전체 평가손익'}</h3>{'price' in family ? <p>가격 최대 유리 변동 평균 {format(family.price.mfe.mean)} · 최대 불리 변동 평균 {format(family.price.mae.mean)} · 표본 {family.price.mfe.sampleCount}</p> : null}{'unrealizedPnl' in family ? <p>평가손익 최대 수익 평균 {format(family.unrealizedPnl.mfe.mean)} · 최대 손실 평균 {format(family.unrealizedPnl.mae.mean)} · 표본 {family.unrealizedPnl.mfe.sampleCount}</p> : null}</div>)}</details></section>{entries.filter(([, count]) => count > 0).map(([label, count, ids]) => <p key={label} className="error-banner" role="alert">{label} 누락/주의 {count}건: {ids.join(', ')}</p>)}</>;
+  const management = pnlFamily && 'management' in pnlFamily ? pnlFamily.management : undefined;
+  const money = (value?: number) => `${format(value)}${management?.accountCurrency ? ` ${management.accountCurrency}` : ''}`;
+  return <><section className="excursion-summary" aria-label="시장 진행 분석 요약">
+    <header><div><h2>시장 진행 분석</h2><p>보유 중 있었던 최대 수익 기회와 손실 위험, 실제 청산 효율을 요약합니다.</p></div><span>계산 완료 {status.success} / {status.success + status.stale + status.failed + status.unsupported + status.missing}</span></header>
+    <div className="excursion-card-grid">
+      <article><span>최대 수익 기회 중앙값</span><strong className="is-positive">{money(opportunity?.median)}</strong><small>계산 완료 표본 {opportunity?.sampleCount ?? 0}건</small></article>
+      <article><span>최대 손실 위험 중앙값</span><strong className="is-negative">{money(risk?.median)}</strong><small>계산 완료 표본 {risk?.sampleCount ?? 0}건</small></article>
+      <article><span>수익 거래 실현률 중앙값</span><strong>{format(management?.profitableCapture.distribution.median, '%')}</strong><small>수익 거래 {management?.profitableCapture.eligibleCount ?? 0}건만 집계</small></article>
+    </div>
+    {management ? <div className="excursion-quality-grid" aria-label="청산 및 경로 품질">
+      <article><strong>{management.opportunityReversal.count}건 · {format(management.opportunityReversal.rate, '%')}</strong><span>수익 기회 후 손실 전환</span><small>수익 기회가 있었지만 손실 또는 본전으로 종료</small></article>
+      <article><strong>{management.profitableCapture.belowFiftyCount}건 · {format(management.profitableCapture.belowFiftyRate, '%')}</strong><span>낮은 수익 실현률</span><small>수익 거래 중 최대 기회의 50% 미만 실현</small></article>
+      <article><strong>{management.riskDominant.count}건 · {format(management.riskDominant.rate, '%')}</strong><span>손실 위험 우세</span><small>최대 손실 위험이 최대 수익 기회보다 큼</small></article>
+    </div> : null}
+    {opportunity && risk ? <section className="excursion-distribution" aria-label="최대 수익 기회와 최대 손실 위험 분포">
+      <header><div><span>최대 손실 위험</span><strong>{money(risk.median)}</strong></div><b>0</b><div><span>최대 수익 기회</span><strong>{money(opportunity.median)}</strong></div></header>
+      <div className="excursion-mirrored-bars"><DistributionBars distribution={risk} reverse label="최대 손실 위험" /><i aria-hidden="true" /><DistributionBars distribution={opportunity} label="최대 수익 기회" /></div>
+      <p>굵은 값은 중앙값이며 막대는 각 손익 구간의 표본 수를 나타냅니다.</p>
+    </section> : null}
+    {management ? <section className="excursion-capture-bands" aria-label="수익 실현률 구간"><h3>수익 실현률 구간</h3><div>{management.profitableCapture.bands.map((band) => <article key={band.key}><strong>{band.count}</strong><span>{captureBandLabels[band.key]}</span></article>)}</div><p>손실 전환은 별도 집계하고, 나머지 구간은 수익 거래만 포함합니다.</p></section> : null}
+    <details><summary>데이터 품질 및 기술 통계</summary><p>재계산 필요 {status.stale} · 자동 계산 중단 {status.failed} · 계산 불가 {status.unsupported} · 아직 없음 {status.missing}</p>{status.failed > 0 ? <p className="muted">거래 기록에는 영향이 없으며, 시장 진행 분석 계산만 중단된 상태입니다.</p> : null}{families.map((family) => <div className="excursion-diagnostic-family" key={family.family}><h3>{family.family === 'trade' ? '분할 진입' : family.family === 'campaign_price' ? '매매 전체 가격' : '매매 전체 평가손익'}</h3>{'price' in family ? <p>가격 최대 유리 변동 평균 {format(family.price.mfe.mean)} · 최대 불리 변동 평균 {format(family.price.mae.mean)} · 표본 {family.price.mfe.sampleCount}</p> : null}{'unrealizedPnl' in family ? <p>평가손익 최대 수익 평균 {format(family.unrealizedPnl.mfe.mean)} · 최대 손실 평균 {format(family.unrealizedPnl.mae.mean)} · 표본 {family.unrealizedPnl.mfe.sampleCount}</p> : null}</div>)}</details>
+  </section>{entries.filter(([, count]) => count > 0).map(([label, count, ids]) => <p key={label} className="error-banner" role="alert">{label} 누락/주의 {count}건: {ids.join(', ')}</p>)}</>;
 }
 function Series({ series, granularity, setGranularity, unit }: { series: TradeStatsResponse['timeSeries']; granularity: TradeStatsGranularity; setGranularity: (value: TradeStatsGranularity) => void; unit: TradeStatsUnit }) {
   const [chartType, setChartType] = useState<'equity' | 'winRate' | 'oneLotPnl'>('equity');

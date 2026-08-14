@@ -824,4 +824,50 @@ describe('TradeLogService stats range and risk coverage', () => {
     const constant = service.statsExcursions([{ trades: [{ excursion: success(1) }, { excursion: success(1) }] }], new Map(), 'trade').families[0].price.mfe;
     expect(constant.bins).toEqual([{ min: 1, max: 1, includeMax: true, count: 2 }]);
   });
+  it('separates profitable capture quality from opportunity reversals', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const result = (mfe: number, mae: number, captureRate: number, realizedPnl: number) => ({
+      realizedPnl,
+      excursion: {
+        scope: 'trade', status: 'success', attempt: {}, success: { accountCurrency: 'USD' },
+        metrics: {
+          price: { mfe: { value: mfe }, mae: { value: mae } },
+          percent: { mfe: { value: mfe }, mae: { value: mae } },
+          unrealizedPnl: { mfe: { value: mfe }, mae: { value: mae } },
+          captureRate,
+          rAvailability: 'risk_unavailable',
+        },
+      },
+    });
+    const samples = [{ trades: [
+      result(10, -5, -20, -2),
+      result(20, -4, 40, 8),
+      result(30, -40, 80, 24),
+      result(0, -1, 0, -1),
+    ] }];
+    const management = service.statsExcursions(samples, new Map(), 'trade').families[0].management;
+    expect(management).toEqual({
+      accountCurrency: 'USD',
+      eligibleSuccessCount: 4,
+      opportunityReversal: { count: 1, rate: 25 },
+      riskDominant: { count: 2, rate: 50 },
+      profitableCapture: {
+        eligibleCount: 2,
+        distribution: {
+          sampleCount: 2, mean: 60, median: 60, q1: 50, q3: 70,
+          bins: expect.arrayContaining([expect.objectContaining({ count: 1 })]),
+        },
+        belowFiftyCount: 1,
+        belowFiftyRate: 50,
+        bands: [
+          { key: 'opportunity_loss', count: 1 },
+          { key: 'under_25', count: 0 },
+          { key: '25_50', count: 1 },
+          { key: '50_75', count: 0 },
+          { key: '75_100', count: 1 },
+          { key: '100_plus', count: 0 },
+        ],
+      },
+    });
+  });
 });
