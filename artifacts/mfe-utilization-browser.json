@@ -4,11 +4,11 @@
   "status": "passed",
   "tool": "GJC Chromium",
   "sourceHashMethod": "sha256 of newline-delimited git tree/blob IDs for apps, packages, docker-compose.yml",
-  "sourceCommit": "8bc389eeb9868d50c4eea5379475e4a3002e6169",
-  "sourceHash": "sha256:134fc5aa19a173c08cdae81651beb11d0cc751977f699f8f206f1b750728a186",
+  "sourceCommit": "e26bdc63a87caf129bf4014d6d690e7e1b25e641",
+  "sourceHash": "sha256:633047c12bdd00739abed008772f1f3b737075f714ef38d929c0c1385fe7d2bc",
   "events": [
     {"action":"assert-dashboard-desktop","width":1440,"height":1000,"completed":"51 / 51","mfeMedian":"9.65 USD","maeMedian":"-8.51 USD","profitableCaptureMedian":"76.23%","opportunityReversal":"13 · 25.49%","lowCapture":"13 · 38.24%","riskDominant":"23 · 45.1%","distribution":true,"result":"passed"},
-    {"action":"assert-detail-desktop","width":1440,"height":1000,"currency":true,"range":true,"eventOrder":true,"timing":true,"technicalCollapsed":true,"negativeMfeBoundaryTest":true,"outOfRangeMarkerTest":true,"timestampTieTest":true,"result":"passed"},
+    {"action":"assert-detail-desktop","width":1440,"height":1000,"currency":true,"range":true,"eventOrder":true,"timing":true,"technicalCollapsed":true,"negativeMfeBoundaryTest":true,"outOfRangeMarkerTest":true,"outOfRangeLabelContained":true,"timestampTieTest":true,"result":"passed"},
     {"action":"assert-dashboard-mobile","width":390,"height":844,"bodyScrollWidth":375,"sectionWidth":351,"captureBands":6,"result":"passed"},
     {"action":"assert-detail-mobile","width":390,"height":844,"bodyScrollWidth":375,"sectionWidth":317,"range":true,"technicalCollapsed":true,"result":"passed"}
   ],
