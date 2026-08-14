@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "kind": "api-package-test-report",
-  "sourceHash": "sha256:633047c12bdd00739abed008772f1f3b737075f714ef38d929c0c1385fe7d2bc",
+  "sourceHash": "sha256:bdd1e2272ebd7c3eff3140c934018ec294139d5672578592d8b8b192c2c26505",
   "status": "passed",
   "commands": [
-    {"command":"pnpm test","status":"passed","result":"API 28 suites / 243 tests; web 19 files / 81 tests"},
+    {"command":"pnpm test","status":"passed","result":"API 28 suites / 243 tests; web 19 files / 82 tests"},
     {"command":"pnpm typecheck","status":"passed"},
     {"command":"pnpm build","status":"passed"},
     {"command":"GET /api/trade-log/stats?accountId=f68c487b1af315456fef2eeb4b4dc5bf&unit=campaign","status":"passed","result":"51 current successes; medians 9.65/-8.51; profitable capture median 76.23213969; reversal 13; profitable below 50% 13; risk-dominant 23"}
@@ -16,6 +16,6 @@
     "All rates use explicit eligible denominators and round to two decimals.",
     "No drilldown, new route, or filter was introduced.",
     "MAE bins stay ascending toward the zero line; exact capture boundaries are assigned once.",
-    "Negative-MFE, out-of-range realized PnL, equal-timestamp, endpoint, and zero-span detail ranges are covered."
+    "Negative-MFE, out-of-range realized PnL, equal-timestamp, exact-endpoint, and zero-span detail ranges are covered."
   ]
 }
