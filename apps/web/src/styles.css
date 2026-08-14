@@ -1369,9 +1369,12 @@ button.trade-calendar-day.is-selected { background: #edf5ff; }
 .excursion-range-track .range-profit { background: #42be65; }
 .excursion-range-track > i { position: absolute; bottom: -7px; width: 2px; height: 16px; background: var(--text-secondary); transform: translateX(-1px); }
 .excursion-range-track > i > span { position: absolute; top: 19px; left: 50%; color: var(--text-secondary); font: normal .64rem 'IBM Plex Mono', ui-monospace, monospace; transform: translateX(-50%); white-space: nowrap; }
+.excursion-range-track .range-risk { background: #da1e28; }
+.excursion-range-track .range-opportunity { background: #198038; }
 .excursion-range-track .range-realized { bottom: -9px; width: 4px; height: 22px; background: var(--blue); }
 .excursion-range-track .range-realized.is-positive { background: #198038; }
 .excursion-range-track .range-realized.is-negative { background: var(--danger); }
+.excursion-range-track .range-realized.is-outside { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px currentColor; }
 .excursion-range p, .excursion-range small { margin: 0; color: var(--text-secondary); font-size: .68rem; line-height: 1.4; }
 .excursion-panel details, .excursion-summary details { border-top: 1px solid var(--border); padding-top: 10px; color: var(--text-secondary); font-size: .75rem; }
 .excursion-panel summary, .excursion-summary summary { cursor: pointer; font-weight: 650; }

@@ -153,11 +153,12 @@ function DashboardFilterSidebar({ unit, setUnit, filters, setFilters, throughLat
     </div> : null}
   </aside>;
 }
-function DistributionBars({ distribution, reverse = false, label }: { distribution: ExcursionDistribution; reverse?: boolean; label: string }) {
-  const bins = reverse ? [...distribution.bins].reverse() : distribution.bins;
+function DistributionBars({ distribution, label }: { distribution: ExcursionDistribution; label: string }) {
+  const bins = distribution.bins;
   const maxCount = Math.max(1, ...bins.map((bin) => bin.count));
-  return <div className="excursion-distribution-bars" role="img" aria-label={`${label} 분포. 표본 ${distribution.sampleCount}건, 중앙값 ${format(distribution.median)}`}>
-    {bins.map((bin, index) => <span key={`${bin.min}:${bin.max}:${index}`} style={{ height: `${Math.max(8, bin.count / maxCount * 100)}%` }} title={`${format(bin.min)}~${format(bin.max)}: ${bin.count}건`} />)}
+  const binDescription = bins.map((bin) => `${format(bin.min)}에서 ${format(bin.max)}까지 ${bin.count}건`).join(', ');
+  return <div className="excursion-distribution-bars" role="img" aria-label={`${label} 분포. 표본 ${distribution.sampleCount}건, 중앙값 ${format(distribution.median)}. ${binDescription}`}>
+    {bins.map((bin, index) => <span aria-hidden="true" key={`${bin.min}:${bin.max}:${index}`} style={{ height: `${Math.max(8, bin.count / maxCount * 100)}%` }} title={`${format(bin.min)}~${format(bin.max)}: ${bin.count}건`} />)}
   </div>;
 }
 const captureBandLabels: Record<ExcursionCaptureBandKey, string> = {
@@ -192,7 +193,7 @@ function Diagnostics({ diagnostics, excursions }: { diagnostics: TradeStatsRespo
     </div> : null}
     {opportunity && risk ? <section className="excursion-distribution" aria-label="최대 수익 기회와 최대 손실 위험 분포">
       <header><div><span>최대 손실 위험</span><strong>{money(risk.median)}</strong></div><b>0</b><div><span>최대 수익 기회</span><strong>{money(opportunity.median)}</strong></div></header>
-      <div className="excursion-mirrored-bars"><DistributionBars distribution={risk} reverse label="최대 손실 위험" /><i aria-hidden="true" /><DistributionBars distribution={opportunity} label="최대 수익 기회" /></div>
+      <div className="excursion-mirrored-bars"><DistributionBars distribution={risk} label="최대 손실 위험" /><i aria-hidden="true" /><DistributionBars distribution={opportunity} label="최대 수익 기회" /></div>
       <p>굵은 값은 중앙값이며 막대는 각 손익 구간의 표본 수를 나타냅니다.</p>
     </section> : null}
     {management ? <section className="excursion-capture-bands" aria-label="수익 실현률 구간"><h3>수익 실현률 구간</h3><div>{management.profitableCapture.bands.map((band) => <article key={band.key}><strong>{band.count}</strong><span>{captureBandLabels[band.key]}</span></article>)}</div><p>손실 전환은 별도 집계하고, 나머지 구간은 수익 거래만 포함합니다.</p></section> : null}

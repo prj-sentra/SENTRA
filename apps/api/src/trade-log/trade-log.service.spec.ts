@@ -870,4 +870,30 @@ describe('TradeLogService stats range and risk coverage', () => {
       },
     });
   });
+  it('assigns exact capture boundaries once and excludes equal MFE/MAE magnitude from risk dominance', () => {
+    const service = new TradeLogService(prisma() as never) as any;
+    const result = (captureRate: number) => ({
+      realizedPnl: captureRate / 10,
+      excursion: {
+        scope: 'trade', status: 'success', attempt: {}, success: { accountCurrency: 'USD' },
+        metrics: {
+          price: { mfe: { value: 10 }, mae: { value: -10 } },
+          percent: { mfe: { value: 10 }, mae: { value: -10 } },
+          unrealizedPnl: { mfe: { value: 10 }, mae: { value: -10 } },
+          captureRate,
+          rAvailability: 'risk_unavailable',
+        },
+      },
+    });
+    const management = service.statsExcursions([{ trades: [result(25), result(50), result(75), result(100)] }], new Map(), 'trade').families[0].management;
+    expect(management.riskDominant).toEqual({ count: 0, rate: 0 });
+    expect(management.profitableCapture.bands).toEqual([
+      { key: 'opportunity_loss', count: 0 },
+      { key: 'under_25', count: 0 },
+      { key: '25_50', count: 1 },
+      { key: '50_75', count: 1 },
+      { key: '75_100', count: 1 },
+      { key: '100_plus', count: 1 },
+    ]);
+  });
 });

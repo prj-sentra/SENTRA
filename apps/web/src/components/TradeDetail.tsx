@@ -68,24 +68,36 @@ function OpportunityInterpretation({ realizedPnl, opportunity, risk, captureRate
   if (missed > 0) return <p className="excursion-interpretation">최대 수익 기회 중 {money(missed, currency)}를 반납하고 {money(realizedPnl, currency)}를 실현했습니다.{riskNote}</p>;
   return <p className="excursion-interpretation">최대 수익 기회의 {captureRate === undefined ? '대부분' : `${excursionValue(captureRate)}%`}를 실현했습니다.{riskNote}</p>;
 }
-function ExcursionRange({ opportunity, risk, realizedPnl, currency, openedAt, closedAt, opportunityAt, riskAt }: { opportunity: number; risk: number; realizedPnl: number; currency?: string; openedAt: string; closedAt?: string; opportunityAt: string; riskAt: string }) {
-  const min = Math.min(risk, realizedPnl, 0), max = Math.max(opportunity, realizedPnl, 0), span = max - min || 1;
-  const position = (value: number) => `${(value - min) / span * 100}%`;
+export function ExcursionRange({ opportunity, risk, realizedPnl, currency, openedAt, closedAt, opportunityAt, riskAt }: { opportunity: number; risk: number; realizedPnl: number; currency?: string; openedAt: string; closedAt?: string; opportunityAt: string; riskAt: string }) {
+  const min = Math.min(risk, 0), max = Math.max(opportunity, 0), span = max - min;
+  const numericPosition = (value: number) => span ? (value - min) / span * 100 : 50;
+  const position = (value: number) => `${Math.min(100, Math.max(0, numericPosition(value)))}%`;
+  const zeroPosition = numericPosition(0);
+  const opportunityPosition = numericPosition(opportunity);
+  const realizedOutside = realizedPnl < min || realizedPnl > max;
   const events = [
     { label: '최대 손실 위험', at: riskAt },
     { label: '최대 수익 기회', at: opportunityAt },
     ...(closedAt ? [{ label: '청산', at: closedAt }] : []),
   ].sort((left, right) => Date.parse(left.at) - Date.parse(right.at));
+  const eventGroups = events.reduce<Array<{ at: string; labels: string[] }>>((groups, event) => {
+    const previous = groups.at(-1);
+    if (previous && Date.parse(previous.at) === Date.parse(event.at)) previous.labels.push(event.label);
+    else groups.push({ at: event.at, labels: [event.label] });
+    return groups;
+  }, []);
   return <figure className="excursion-range" aria-label={`최대 손실 ${money(risk, currency)}, 실제 손익 ${money(realizedPnl, currency)}, 최대 수익 기회 ${money(opportunity, currency)}`}>
     <figcaption>보유 중 손익 범위</figcaption>
-    <div className="excursion-range-labels"><span>{money(risk, currency)}</span><span>{money(opportunity, currency)}</span></div>
+    <div className="excursion-range-labels"><span>MAE {money(risk, currency)}</span><span>MFE {money(opportunity, currency)}</span></div>
     <div className="excursion-range-track">
-      <span className="range-loss" style={{ left: position(risk), width: `calc(${position(0)} - ${position(risk)})` }} />
-      <span className="range-profit" style={{ left: position(0), width: `calc(${position(opportunity)} - ${position(0)})` }} />
+      <span className="range-loss" style={{ left: '0%', width: `${Math.max(0, zeroPosition)}%` }} />
+      <span className="range-profit" style={{ left: `${zeroPosition}%`, width: `${Math.max(0, opportunityPosition - zeroPosition)}%` }} />
       <i className="range-zero" style={{ left: position(0) }}><span>0</span></i>
-      <i className={`range-realized ${realizedPnl >= 0 ? 'is-positive' : 'is-negative'}`} style={{ left: position(realizedPnl) }}><span>실제 {money(realizedPnl, currency)}</span></i>
+      <i className="range-risk" style={{ left: position(risk) }} title={`MAE ${money(risk, currency)}`} />
+      <i className="range-opportunity" style={{ left: position(opportunity) }} title={`MFE ${money(opportunity, currency)}`} />
+      <i className={`range-realized ${realizedPnl >= 0 ? 'is-positive' : 'is-negative'} ${realizedOutside ? 'is-outside' : ''}`} style={{ left: position(realizedPnl) }}><span>실제 {money(realizedPnl, currency)}{realizedOutside ? ' · 범위 밖' : ''}</span></i>
     </div>
-    <p>경로: {events.map((event) => event.label).join(' → ')}</p>
+    <p>경로: {eventGroups.map((group) => group.labels.join(' + ')).join(' → ')}</p>
     <small>수익 기회 {elapsedLabel(openedAt, opportunityAt)} · 손실 위험 {elapsedLabel(openedAt, riskAt)}</small>
   </figure>;
 }

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TradeDetail } from './TradeDetail';
+import { ExcursionRange, TradeDetail } from './TradeDetail';
 
 afterEach(() => cleanup());
 
@@ -24,8 +24,27 @@ describe('TradeDetail split execution ownership', () => {
     expect(screen.getAllByText(/수익 실현률/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('보유 중 손익 범위').length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('최대 손실 -20 USD, 실제 손익 120 USD, 최대 수익 기회 30 USD').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('경로: 최대 손실 위험 → 최대 수익 기회').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('경로: 최대 손실 위험 + 최대 수익 기회').length).toBeGreaterThan(0);
     expect(screen.queryByText(/TICK_UNAVAILABLE/, { selector: 'summary' })).not.toBeInTheDocument();
+  });
+  it('renders negative MFE without a negative-width profit segment and groups timestamp ties', () => {
+    const { container } = render(<ExcursionRange opportunity={-1} risk={-10} realizedPnl={-2} currency="USD" openedAt="2026-08-10T12:00:00.000Z" closedAt="2026-08-10T13:00:00.000Z" opportunityAt="2026-08-10T12:30:00.000Z" riskAt="2026-08-10T12:30:00.000Z" />);
+    expect(container.querySelector<HTMLElement>('.range-profit')).toHaveStyle({ width: '0%' });
+    expect(screen.getByText('경로: 최대 손실 위험 + 최대 수익 기회 → 청산')).toBeInTheDocument();
+    expect(container.querySelector<HTMLElement>('.range-opportunity')).toHaveStyle({ left: '90%' });
+  });
+  it('pins an out-of-range realized result to the edge and labels it truthfully', () => {
+    const { container } = render(<ExcursionRange opportunity={10} risk={-5} realizedPnl={20} currency="USD" openedAt="2026-08-10T12:00:00.000Z" closedAt="2026-08-10T13:00:00.000Z" opportunityAt="2026-08-10T12:20:00.000Z" riskAt="2026-08-10T12:10:00.000Z" />);
+    const marker = container.querySelector<HTMLElement>('.range-realized')!;
+    expect(marker).toHaveStyle({ left: '100%' });
+    expect(marker).toHaveClass('is-outside');
+    expect(screen.getByText('실제 20 USD · 범위 밖')).toBeInTheDocument();
+  });
+  it('keeps a zero-span range finite', () => {
+    const { container } = render(<ExcursionRange opportunity={0} risk={0} realizedPnl={0} currency="USD" openedAt="2026-08-10T12:00:00.000Z" opportunityAt="2026-08-10T12:00:00.000Z" riskAt="2026-08-10T12:00:00.000Z" />);
+    expect(container.querySelector<HTMLElement>('.range-zero')).toHaveStyle({ left: '50%' });
+    expect(container.innerHTML).not.toContain('NaN');
+    expect(container.innerHTML).not.toContain('Infinity');
   });
   it('uses the desktop selection for the one desktop editor and keeps selected state on its navigation item', () => {
     const { container } = render(<TradeDetail campaign={campaign} onPatchAnalysis={vi.fn()} onPatchCampaignAnalysis={vi.fn()} />);

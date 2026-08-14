@@ -578,12 +578,16 @@ export class TradeLogService {
     };
     const pair = (items: Array<{ mfe: number; mae: number }>) => ({ mfe: distribution(items.map((item) => item.mfe)), mae: distribution(items.map((item) => item.mae)) });
     const rate = (count: number, total: number) => total ? new Prisma.Decimal(count).div(total).mul(100).toDecimalPlaces(2).toNumber() : 0;
-    const management = (items: Array<{ result: any; realizedPnl: number }>) => {
-      const current = items.filter((item) => item.result?.status === 'success' && item.result.metrics?.unrealizedPnl);
-      const profitable = current.filter((item) => item.realizedPnl > 0 && item.result.metrics.unrealizedPnl.mfe.value > 0 && item.result.metrics.captureRate !== undefined);
+    type ManagementResult = Extract<TradeExcursionResult, { status: 'success' }> | Extract<CampaignExcursionResult['unrealizedPnl'], { status: 'success' }>;
+    const management = (items: Array<{ result?: TradeExcursionResult | CampaignExcursionResult['unrealizedPnl']; realizedPnl: number }>) => {
+      const current = items.filter((item): item is { result: ManagementResult; realizedPnl: number } => item.result?.status === 'success');
+      const profitable = current.flatMap((item) => {
+        const captureRate = item.result.metrics.captureRate;
+        return item.realizedPnl > 0 && item.result.metrics.unrealizedPnl.mfe.value > 0 && captureRate !== undefined ? [{ ...item, captureRate }] : [];
+      });
       const opportunityReversalCount = current.filter((item) => item.result.metrics.unrealizedPnl.mfe.value > 0 && item.realizedPnl <= 0).length;
       const riskDominantCount = current.filter((item) => Math.abs(item.result.metrics.unrealizedPnl.mae.value) > item.result.metrics.unrealizedPnl.mfe.value).length;
-      const belowFiftyCount = profitable.filter((item) => item.result.metrics.captureRate < 50).length;
+      const belowFiftyCount = profitable.filter((item) => item.captureRate < 50).length;
       const bandCount = (predicate: (item: typeof profitable[number]) => boolean) => profitable.filter(predicate).length;
       return {
         accountCurrency: current.map((item) => item.result.success?.accountCurrency).find((currency) => typeof currency === 'string'),
@@ -592,16 +596,16 @@ export class TradeLogService {
         riskDominant: { count: riskDominantCount, rate: rate(riskDominantCount, current.length) },
         profitableCapture: {
           eligibleCount: profitable.length,
-          distribution: distribution(profitable.map((item) => item.result.metrics.captureRate)),
+          distribution: distribution(profitable.map((item) => item.captureRate)),
           belowFiftyCount,
           belowFiftyRate: rate(belowFiftyCount, profitable.length),
           bands: [
             { key: 'opportunity_loss' as const, count: opportunityReversalCount },
-            { key: 'under_25' as const, count: bandCount((item) => item.result.metrics.captureRate < 25) },
-            { key: '25_50' as const, count: bandCount((item) => item.result.metrics.captureRate >= 25 && item.result.metrics.captureRate < 50) },
-            { key: '50_75' as const, count: bandCount((item) => item.result.metrics.captureRate >= 50 && item.result.metrics.captureRate < 75) },
-            { key: '75_100' as const, count: bandCount((item) => item.result.metrics.captureRate >= 75 && item.result.metrics.captureRate < 100) },
-            { key: '100_plus' as const, count: bandCount((item) => item.result.metrics.captureRate >= 100) },
+            { key: 'under_25' as const, count: bandCount((item) => item.captureRate < 25) },
+            { key: '25_50' as const, count: bandCount((item) => item.captureRate >= 25 && item.captureRate < 50) },
+            { key: '50_75' as const, count: bandCount((item) => item.captureRate >= 50 && item.captureRate < 75) },
+            { key: '75_100' as const, count: bandCount((item) => item.captureRate >= 75 && item.captureRate < 100) },
+            { key: '100_plus' as const, count: bandCount((item) => item.captureRate >= 100) },
           ],
         },
       };
