@@ -8,6 +8,7 @@ import { lockOwnedMt5Account } from './mt5-account-lock';
 import { Mt5AccountAuthorizationRejected, Mt5BridgeClient, Mt5BridgeUnauthorized, Mt5DealFact, Mt5OrderFact, Mt5PositionEntryPlanFact } from './mt5-bridge.client';
 import { Mt5BridgeActivityService } from './mt5-bridge-activity.service';
 import { calculateTradePlanMetrics } from '../trade-log/trade-plan-metrics';
+import { EXCURSION_CALCULATION_VERSION, EXCURSION_INPUT_FINGERPRINT_VERSION, EXCURSION_TRIGGER_FINGERPRINT_VERSION } from '../excursions/excursion-work.service';
 
 const LEASE_MS = 5 * 60_000;
 const UNCORRECTED_TIME_LOOKAHEAD_MS = 24 * 60 * 60 * 1000;
@@ -190,6 +191,10 @@ export class Mt5SyncService {
         && status.openPositionIds.every((value): value is string => typeof value === 'string')
         ? status.openPositionIds
         : undefined;
+      const persistedExcursionDirtyPositionIds = Array.isArray(status?.excursionDirtyPositionIds)
+        && status.excursionDirtyPositionIds.every((value): value is string => typeof value === 'string')
+        ? status.excursionDirtyPositionIds
+        : undefined;
       const openPositionIds = mode === 'incremental'
         ? resumed && persistedOpenPositionIds
           ? persistedOpenPositionIds
@@ -239,8 +244,12 @@ export class Mt5SyncService {
         });
         if (!liveAccount) throw new StaleSyncResult();
 
-        const changedPositions = new Set<string>();
-        for (const deal of payload.deals) if (await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0, rebuildStartedAt !== null)) changedPositions.add(deal.positionId);
+        const changedPositions = new Set<string>(persistedExcursionDirtyPositionIds ?? []);
+        for (const deal of payload.deals) {
+          for (const positionId of await this.upsertDeal(tx, accountId, account.canonicalServer, account.accountLogin, deal, syncedAt, account.timeCorrectionHours ?? 0, rebuildStartedAt !== null)) {
+            changedPositions.add(positionId);
+          }
+        }
         for (const order of payload.orders) if (await this.upsertOrder(tx, accountId, account.canonicalServer, account.accountLogin, order, syncedAt, account.timeCorrectionHours ?? 0, rebuildStartedAt !== null)) changedPositions.add(order.positionId);
         receivedCount += payload.deals.length;
         if (payload.page.hasMore) {
@@ -271,8 +280,8 @@ export class Mt5SyncService {
           }
           await tx.mt5SyncStatus.upsert({
             where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
-            create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, lastReceivedDealCount: payload.deals.length },
-            update: { mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, lastReceivedDealCount: payload.deals.length, lastError: null },
+            create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, excursionDirtyPositionIds: [...changedPositions], lastReceivedDealCount: payload.deals.length },
+            update: { mode, snapshotToMsc: BigInt(snapshotToMsc), pageCursor: payload.page.nextCursor, changedSinceMsc: changedSinceMsc === undefined ? null : BigInt(changedSinceMsc), openPositionIds: openPositionIds ?? Prisma.JsonNull, excursionDirtyPositionIds: [...changedPositions], lastReceivedDealCount: payload.deals.length, lastError: null },
           });
           const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
           if (deleted.count !== 1) throw new StaleSyncResult();
@@ -280,6 +289,12 @@ export class Mt5SyncService {
         }
         let fullRebuild: Mt5SyncResponse['fullRebuild'];
         if (rebuildStartedAt) {
+          const removedPositions = await tx.mt5Deal.findMany({
+            where: { accountId, fetchedAt: { lt: rebuildStartedAt }, positionId: { gt: 0 } },
+            distinct: ['positionId'],
+            select: { positionId: true },
+          });
+          for (const row of removedPositions) changedPositions.add(row.positionId.toString());
           const [removedDeals, removedOrders] = await Promise.all([
             tx.mt5Deal.deleteMany({ where: { accountId, fetchedAt: { lt: rebuildStartedAt } } }),
             tx.mt5Order.deleteMany({ where: { accountId, fetchedAt: { lt: rebuildStartedAt } } }),
@@ -306,6 +321,10 @@ export class Mt5SyncService {
         }
         const ledger = await this.rebuildBalanceLedger(tx, accountId, account.canonicalServer, account.accountLogin, payload.account.currency, payload.account.currencyDigits, payload.account.currentBalance, { fromMsc: mode === 'bootstrap' ? FULL_HISTORY_FROM_MSC : changedSinceMsc!, toMsc: snapshotToMsc }, syncedAt);
         if (rebuildStartedAt && !ledger.verified) throw new Error('MT5 full rebuild balance verification failed');
+        if (mode === 'bootstrap') {
+          for (const positionId of ledger.positionIds) changedPositions.add(positionId);
+        }
+        const excursionChangedPositionIds = [...changedPositions];
         if (mode === 'bootstrap' || ledger.verified) {
           for (const positionId of ledger.positionIds) changedPositions.add(positionId);
         }
@@ -314,10 +333,10 @@ export class Mt5SyncService {
         await tx.mt5SyncStatus.upsert({
           where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
           create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, lastReceivedDealCount: payload.deals.length },
-          update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, rebuildStartedAt: null, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
+          update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, excursionDirtyPositionIds: [...changedPositions], rebuildStartedAt: null, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
         const excursions = this.excursionWorkProducer
-          ? await this.enqueueFinalExcursionWork(tx, accountId, BigInt(snapshotToMsc), 'SYNC_CHANGED')
+          ? await this.enqueueFinalExcursionWork(tx, accountId, BigInt(snapshotToMsc), 'SYNC_CHANGED', excursionChangedPositionIds)
           : {
             mode: 'disabled' as const,
             queued: 0,
@@ -328,6 +347,12 @@ export class Mt5SyncService {
             deferred: 0,
             reasons: [],
           };
+        if (excursions.mode !== 'disabled') {
+          await tx.mt5SyncStatus.update({
+            where: { accountId },
+            data: { excursionDirtyPositionIds: Prisma.JsonNull },
+          });
+        }
         const deleted = await tx.mt5SyncLease.deleteMany({ where: { accountId, leaseId, expiresAt: { gt: new Date() } } });
         if (deleted.count !== 1) throw new StaleSyncResult();
         return { importedCount: projected, ledger, excursions, fullRebuild };
@@ -348,7 +373,7 @@ export class Mt5SyncService {
           stale: 0, failed: 0, deferred: 0, reasons: [],
         };
         let excursions: Mt5SyncResponse['excursions'] = queuedExcursions;
-        if (this.excursionWorkerWake && queuedExcursions.mode !== 'disabled') {
+        if (this.excursionWorkerWake && queuedExcursions.mode !== 'disabled' && queuedExcursions.queued > 0) {
           try {
             const summary = await this.excursionWorkerWake.runOne();
             excursions = {
@@ -411,16 +436,40 @@ export class Mt5SyncService {
     accountId: string,
     snapshotToMsc: bigint,
     reason: string,
+    changedPositionIds?: string[],
   ): Promise<NonNullable<Mt5SyncResponse['excursions']>> {
     if (process.env.MT5_EXCURSION_WRITE_ENABLED !== 'true') {
       return { mode: 'disabled', queued: 0, processed: 0, succeeded: 0, stale: 0, failed: 0, deferred: 0, reasons: [] };
     }
+    await tx.excursionWorkItem.updateMany({
+      where: {
+        accountId,
+        state: { in: ['PENDING', 'CLAIMED', 'RETRY_WAIT', 'BLOCKED'] },
+        OR: [
+          { scope: 'TRADE', trade: { is: { closedAt: null } } },
+          { scope: 'CAMPAIGN', campaign: { is: { memberships: { some: { trade: { closedAt: null } } } } } },
+        ],
+      },
+      data: {
+        state: 'CANCELLED',
+        reason: 'TARGET_OPEN',
+        claimId: null,
+        claimExpiresAt: null,
+        notBefore: null,
+      },
+    });
     const trades = await tx.trade.findMany({
       where: { mt5AccountId: accountId, closedAt: { not: null } },
       select: {
-        id: true, updatedAt: true, openedAt: true, closedAt: true, status: true, side: true, symbol: true,
-        quantityLots: true, entryPrice: true, exitPrice: true, riskAmount: true, riskPercent: true,
+        id: true, mt5PositionId: true, openedAt: true, closedAt: true, status: true, side: true, symbol: true,
+        quantityLots: true, entryPrice: true, exitPrice: true, realizedPnl: true, riskAmount: true, riskPercent: true,
         initialPlanId: true, initialPlanMetricContractVersion: true,
+        excursionResult: {
+          select: {
+            status: true, attemptCalculationVersion: true, attemptInputFingerprint: true,
+            successCalculationVersion: true, successInputFingerprint: true,
+          },
+        },
       },
     });
     const campaigns = await tx.tradeCampaign.findMany({
@@ -428,31 +477,142 @@ export class Mt5SyncService {
         mt5AccountId: accountId,
         memberships: { some: {}, every: { trade: { closedAt: { not: null } } } },
       },
-      select: { id: true, version: true, updatedAt: true, rootTradeId: true },
+      select: {
+        id: true, version: true, rootTradeId: true,
+        memberships: { select: { tradeId: true } },
+        excursionResult: {
+          select: {
+            status: true, attemptCalculationVersion: true, attemptInputFingerprint: true,
+            successCalculationVersion: true, successInputFingerprint: true,
+          },
+        },
+      },
     });
     const existing = await tx.excursionWorkItem.findMany({
       where: { accountId, OR: [{ targetId: { in: trades.map((trade) => trade.id) } }, { targetId: { in: campaigns.map((campaign) => campaign.id) } }] },
-      select: { targetId: true, generation: true, baseInputFingerprint: true, tickSnapshotToMsc: true },
+      select: { scope: true, targetId: true, generation: true, baseInputFingerprint: true, tickSnapshotToMsc: true, state: true },
     });
-    const previous = new Map(existing.map((work) => [work.targetId, work]));
-    const target = (scope: SyncExcursionTarget['scope'], targetId: string, basis: unknown): SyncExcursionTarget => {
-      const baseInputFingerprint = createHash('sha256').update(JSON.stringify(basis, (_, value) =>
+    const key = (scope: SyncExcursionTarget['scope'], targetId: string) => `${scope}:${targetId}`;
+    const previous = new Map(existing.map((work) => [key(work.scope, work.targetId), work]));
+    const fingerprintPrefix = `${EXCURSION_INPUT_FINGERPRINT_VERSION}:calc-${EXCURSION_CALCULATION_VERSION}:`;
+    const triggerFingerprintPrefix = `${EXCURSION_TRIGGER_FINGERPRINT_VERSION}:calc-${EXCURSION_CALCULATION_VERSION}:`;
+    const hasCurrentFingerprint = (value: string | null) =>
+      value?.startsWith(fingerprintPrefix) === true || value?.startsWith(triggerFingerprintPrefix) === true;
+    const currentTerminalResult = (result: {
+      status: string;
+      attemptCalculationVersion: number | null;
+      attemptInputFingerprint: string | null;
+      successCalculationVersion: number | null;
+      successInputFingerprint: string | null;
+    } | null) => {
+      if (result?.status === 'SUCCESS') {
+        return result.successCalculationVersion === EXCURSION_CALCULATION_VERSION
+          && hasCurrentFingerprint(result.successInputFingerprint);
+      }
+      return (result?.status === 'FAILED' || result?.status === 'UNSUPPORTED')
+        && result.attemptCalculationVersion === EXCURSION_CALCULATION_VERSION
+        && hasCurrentFingerprint(result.attemptInputFingerprint);
+    };
+    const changedPositions = new Set(changedPositionIds ?? []);
+    const scanAll = reason !== 'SYNC_CHANGED' || changedPositionIds === undefined;
+    const candidateTrades = trades.filter((trade) =>
+      scanAll
+      || (trade.mt5PositionId != null && changedPositions.has(trade.mt5PositionId.toString()))
+      || previous.has(key('TRADE', trade.id))
+      || !currentTerminalResult(trade.excursionResult));
+    const candidateTradeIds = new Set(candidateTrades.map((trade) => trade.id));
+    const candidateDeals = await tx.mt5Deal.findMany({
+      where: { accountId, positionId: { in: candidateTrades.flatMap((trade) => trade.mt5PositionId == null ? [] : [trade.mt5PositionId]) } },
+      orderBy: [{ positionId: 'asc' }, { timeMsc: 'asc' }, { ticket: 'asc' }],
+      select: { ticket: true, positionId: true, symbol: true, timeMsc: true, entry: true, type: true, volume: true, price: true },
+    });
+    const dealsByPosition = new Map<string, typeof candidateDeals>();
+    for (const deal of candidateDeals) {
+      const positionId = deal.positionId.toString();
+      const positionDeals = dealsByPosition.get(positionId) ?? [];
+      positionDeals.push(deal);
+      dealsByPosition.set(positionId, positionDeals);
+    }
+    const fingerprint = (basis: unknown) => `${fingerprintPrefix}${
+      createHash('sha256').update(JSON.stringify(basis, (_, value) =>
         typeof value === 'bigint' ? value.toString() : value,
-      )).digest('hex');
-      const prior = previous.get(targetId);
-      const unchanged = prior?.baseInputFingerprint === baseInputFingerprint && prior.tickSnapshotToMsc === snapshotToMsc;
+      )).digest('hex')
+    }`;
+    const tradeFingerprints = new Map(trades.map((trade) => {
+      if (!candidateTradeIds.has(trade.id)) {
+        return [trade.id, trade.excursionResult!.successInputFingerprint ?? trade.excursionResult!.attemptInputFingerprint!];
+      }
+      const { excursionResult: _result, ...input } = trade;
+      return [trade.id, fingerprint({
+        input,
+        deals: trade.mt5PositionId == null ? [] : dealsByPosition.get(trade.mt5PositionId.toString()) ?? [],
+      })];
+    }));
+    const driftedTradeIds = new Set(candidateTrades.filter((trade) => {
+      const currentFingerprint = tradeFingerprints.get(trade.id)!;
+      const prior = previous.get(key('TRADE', trade.id));
+      if (prior?.baseInputFingerprint === currentFingerprint) return false;
+      const resultFingerprint = trade.excursionResult?.successInputFingerprint
+        ?? trade.excursionResult?.attemptInputFingerprint;
+      return resultFingerprint !== currentFingerprint;
+    }).map((trade) => trade.id));
+    const candidateCampaignIds = new Set(campaigns.filter((campaign) =>
+      scanAll
+      || previous.has(key('CAMPAIGN', campaign.id))
+      || campaign.memberships.some((membership) => candidateTradeIds.has(membership.tradeId))
+      || !currentTerminalResult(campaign.excursionResult)).map((campaign) => campaign.id));
+    const target = (
+      scope: SyncExcursionTarget['scope'],
+      targetId: string,
+      baseInputFingerprint: string,
+      result: {
+        status: string;
+        attemptCalculationVersion: number | null;
+        attemptInputFingerprint: string | null;
+        successCalculationVersion: number | null;
+        successInputFingerprint: string | null;
+      } | null,
+      preserveTriggerWork = false,
+    ): SyncExcursionTarget | undefined => {
+      const prior = previous.get(key(scope, targetId));
+      if (preserveTriggerWork
+        && prior?.baseInputFingerprint.startsWith(triggerFingerprintPrefix)
+        && prior.state !== 'CANCELLED') return undefined;
+      const unchangedWork = prior?.baseInputFingerprint === baseInputFingerprint;
+      if (unchangedWork && prior.state !== 'CANCELLED') return undefined;
+      const successful = result?.status === 'SUCCESS'
+        && result.successCalculationVersion === EXCURSION_CALCULATION_VERSION
+        && result.successInputFingerprint === baseInputFingerprint;
+      const terminalAttempt = (result?.status === 'FAILED' || result?.status === 'UNSUPPORTED')
+        && result.attemptCalculationVersion === EXCURSION_CALCULATION_VERSION
+        && result.attemptInputFingerprint === baseInputFingerprint;
+      if (!prior && (successful || terminalAttempt)) return undefined;
       return {
         scope,
         targetId,
-        generation: unchanged ? prior!.generation : (prior?.generation ?? 0) + 1,
+        generation: unchangedWork ? prior!.generation : (prior?.generation ?? 0) + 1,
         baseInputFingerprint,
         tickSnapshotToMsc: snapshotToMsc,
       };
     };
     const targets = [
-      ...trades.map((trade) => target('TRADE', trade.id, trade)),
-      ...campaigns.map((campaign) => target('CAMPAIGN', campaign.id, campaign)),
-    ];
+      ...candidateTrades.map((trade) => target('TRADE', trade.id, tradeFingerprints.get(trade.id)!, trade.excursionResult)),
+      ...campaigns.filter((campaign) => candidateCampaignIds.has(campaign.id)).map((campaign) => {
+        const memberInputChanged = campaign.memberships.some((membership) => driftedTradeIds.has(membership.tradeId));
+        const memberFingerprints = campaign.memberships
+          .map((membership) => tradeFingerprints.get(membership.tradeId))
+          .filter((value): value is string => value !== undefined)
+          .sort();
+        return target('CAMPAIGN', campaign.id, fingerprint({
+          version: campaign.version,
+          rootTradeId: campaign.rootTradeId,
+          memberFingerprints,
+        }), campaign.excursionResult, !memberInputChanged);
+      }),
+    ].filter((value): value is SyncExcursionTarget => value !== undefined);
+    if (!targets.length) {
+      return { mode: 'queued', queued: 0, processed: 0, succeeded: 0, stale: 0, failed: 0, deferred: 0, reasons: [] };
+    }
     const result = await this.excursionWorkProducer!.dirtyTargets(tx, accountId, snapshotToMsc, targets, reason);
     return {
       mode: 'queued',
@@ -497,6 +657,7 @@ export class Mt5SyncService {
             pageCursor: null,
             changedSinceMsc: null,
             openPositionIds: Prisma.JsonNull,
+            excursionDirtyPositionIds: Prisma.JsonNull,
             rebuildStartedAt: now,
             lastError: null,
           },
@@ -513,8 +674,11 @@ export class Mt5SyncService {
     if (existing && canonicalFact(existing.rawJson, DEAL_FACT_FIELDS) === canonicalFact(deal, DEAL_FACT_FIELDS)
       && existing.timeMscUtc.getTime() === correctedTimeMsc.getTime()) {
       if (touchFetchedAt) await tx.mt5Deal.update({ where: key, data: { fetchedAt } });
-      return false;
+      return [];
     }
+    const previousPositionId = existing && typeof existing.rawJson === 'object' && existing.rawJson !== null && 'positionId' in existing.rawJson
+      ? String((existing.rawJson as Record<string, unknown>).positionId)
+      : undefined;
     const data = {
       accountId, server, accountLogin, ticket: BigInt(deal.ticket), order: BigInt(deal.order), positionId: BigInt(deal.positionId),
       time: BigInt(deal.time), timeMsc: BigInt(deal.timeMsc), timeUtc: new Date(deal.time * 1000 + correctionHours * 3_600_000), timeMscUtc: correctedTimeMsc,
@@ -523,7 +687,8 @@ export class Mt5SyncService {
       externalId: deal.externalId, fetchedAt, rawJson: deal as unknown as Prisma.InputJsonValue,
     };
     await tx.mt5Deal.upsert({ where: key, create: data, update: data });
-    return true;
+    return [...new Set([previousPositionId, deal.positionId].filter((value): value is string =>
+      value !== undefined && BigInt(value) > 0n))];
   }
 
   private async upsertOrder(tx: Prisma.TransactionClient, accountId: string, server: string, accountLogin: bigint, order: Mt5OrderFact, fetchedAt: Date, correctionHours: number, touchFetchedAt = false) {

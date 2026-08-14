@@ -62,6 +62,10 @@ function statefulDb() {
         state.status = state.status ? { ...state.status, ...update } : create;
         return state.status;
       }),
+      update: jest.fn(async ({ data }: any) => {
+        state.status = { ...state.status, ...data };
+        return state.status;
+      }),
       updateMany: jest.fn(async ({ data }: any) => {
         if (!state.status) return { count: 0 };
         state.status = { ...state.status, ...data };
@@ -199,6 +203,7 @@ function statefulDb() {
     },
     excursionWorkItem: {
       findMany: jest.fn(async () => []),
+      updateMany: jest.fn(async () => ({ count: 0 })),
     },
   };
   return { db, state };
@@ -262,6 +267,316 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     );
     expect(wake.runOne).toHaveBeenCalledTimes(1);
     expect(state.lease).toBeUndefined();
+  });
+
+  it('does not enqueue a successful unchanged excursion for a newer sync snapshot', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: null, entryPrice: null,
+        exitPrice: null, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null, excursionResult: null as any,
+      };
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([]);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 1 });
+      const fingerprint = producer.dirtyTargets.mock.calls[0][3][0].baseInputFingerprint;
+      trade.excursionResult = {
+        status: 'SUCCESS', attemptCalculationVersion: 1, attemptInputFingerprint: fingerprint,
+        successCalculationVersion: 1, successInputFingerprint: fingerprint,
+      };
+      producer.dirtyTargets.mockClear();
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+
+      trade.realizedPnl = 6;
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', ['10'])).resolves.toMatchObject({ queued: 1 });
+      expect(producer.dirtyTargets).toHaveBeenCalledWith(
+        db, 'account-1', 300n,
+        [expect.objectContaining({ targetId: 'closed-trade', generation: 1, tickSnapshotToMsc: 300n })],
+        'SYNC_CHANGED',
+      );
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('invalidates both a trade and its campaign when a raw deal input changes', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: 1, entryPrice: 1,
+        exitPrice: 2, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null, excursionResult: null as any,
+      };
+      const campaign = {
+        id: 'campaign-1', version: 1, rootTradeId: trade.id,
+        memberships: [{ tradeId: trade.id }], excursionResult: null as any,
+      };
+      const deals = [{ ticket: 1n, positionId: 10n, symbol: 'EURUSD', timeMsc: 1n, entry: 0, type: 0, volume: '1', price: '1' }];
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([campaign]);
+      db.mt5Deal.findMany.mockResolvedValue(deals);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 2 });
+      const initialTargets = producer.dirtyTargets.mock.calls[0][3];
+      const tradeFingerprint = initialTargets.find((target: any) => target.scope === 'TRADE').baseInputFingerprint;
+      const campaignFingerprint = initialTargets.find((target: any) => target.scope === 'CAMPAIGN').baseInputFingerprint;
+      trade.excursionResult = {
+        status: 'SUCCESS', attemptCalculationVersion: 1, attemptInputFingerprint: tradeFingerprint,
+        successCalculationVersion: 1, successInputFingerprint: tradeFingerprint,
+      };
+      campaign.excursionResult = {
+        status: 'SUCCESS', attemptCalculationVersion: 1, attemptInputFingerprint: campaignFingerprint,
+        successCalculationVersion: 1, successInputFingerprint: campaignFingerprint,
+      };
+      producer.dirtyTargets.mockClear();
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+      deals[0].price = '1.1';
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', ['10'])).resolves.toMatchObject({ queued: 2 });
+      expect(producer.dirtyTargets.mock.calls[0][3]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ scope: 'TRADE', targetId: trade.id }),
+        expect.objectContaining({ scope: 'CAMPAIGN', targetId: campaign.id }),
+      ]));
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('preserves compatible durable work but revives cancellation and fences version drift', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: 1, entryPrice: 1,
+        exitPrice: 2, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null, excursionResult: null,
+      };
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([]);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', []);
+      const fingerprint = producer.dirtyTargets.mock.calls[0][3][0].baseInputFingerprint;
+      const work = {
+        scope: 'TRADE', targetId: trade.id, generation: 5, baseInputFingerprint: fingerprint,
+        tickSnapshotToMsc: 100n, state: 'RETRY_WAIT',
+      };
+      db.excursionWorkItem.findMany.mockResolvedValue([work]);
+      producer.dirtyTargets.mockClear();
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+
+      work.state = 'CANCELLED';
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 1 });
+      expect(producer.dirtyTargets.mock.calls[0][3][0]).toMatchObject({ generation: 5, baseInputFingerprint: fingerprint, tickSnapshotToMsc: 300n });
+
+      work.state = 'BLOCKED';
+      work.baseInputFingerprint = fingerprint.replace(':calc-1:', ':calc-0:');
+      producer.dirtyTargets.mockClear();
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 400n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 1 });
+      expect(producer.dirtyTargets.mock.calls[0][3][0]).toMatchObject({ generation: 6, baseInputFingerprint: fingerprint, tickSnapshotToMsc: 400n });
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('keeps a current unsupported result terminal but recovers an orphaned stale result', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: 1, entryPrice: 1,
+        exitPrice: 2, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null, excursionResult: null as any,
+      };
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([]);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', []);
+      const fingerprint = producer.dirtyTargets.mock.calls[0][3][0].baseInputFingerprint;
+      trade.excursionResult = {
+        status: 'UNSUPPORTED', attemptCalculationVersion: 1, attemptInputFingerprint: fingerprint,
+        successCalculationVersion: null, successInputFingerprint: null,
+      };
+      producer.dirtyTargets.mockClear();
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+
+      trade.excursionResult.status = 'STALE';
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 1 });
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('preserves current membership-trigger campaign work across ordinary sync', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: 1, entryPrice: 1,
+        exitPrice: 2, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null, excursionResult: null as any,
+      };
+      const campaign = {
+        id: 'campaign-1', version: 2, rootTradeId: trade.id,
+        memberships: [{ tradeId: trade.id }], excursionResult: null as any,
+      };
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([campaign]);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', []);
+      const initial = producer.dirtyTargets.mock.calls[0][3];
+      const tradeFingerprint = initial.find((target: any) => target.scope === 'TRADE').baseInputFingerprint;
+      const campaignFingerprint = initial.find((target: any) => target.scope === 'CAMPAIGN').baseInputFingerprint;
+      trade.excursionResult = {
+        status: 'SUCCESS', attemptCalculationVersion: 1, attemptInputFingerprint: tradeFingerprint,
+        successCalculationVersion: 1, successInputFingerprint: tradeFingerprint,
+      };
+      campaign.excursionResult = {
+        status: 'STALE', attemptCalculationVersion: 1, attemptInputFingerprint: campaignFingerprint,
+        successCalculationVersion: 1, successInputFingerprint: campaignFingerprint,
+      };
+      const work = {
+        scope: 'CAMPAIGN', targetId: campaign.id, generation: 3,
+        baseInputFingerprint: 'excursion-trigger-v1:calc-1:membership',
+        tickSnapshotToMsc: 100n, state: 'PENDING',
+      };
+      db.excursionWorkItem.findMany.mockResolvedValue([work]);
+
+      for (const state of ['PENDING', 'CLAIMED', 'RETRY_WAIT', 'BLOCKED']) {
+        work.state = state;
+        producer.dirtyTargets.mockClear();
+        await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+        expect(producer.dirtyTargets).not.toHaveBeenCalled();
+      }
+
+      db.excursionWorkItem.findMany.mockResolvedValue([
+        {
+          scope: 'TRADE', targetId: trade.id, generation: 2, baseInputFingerprint: tradeFingerprint,
+          tickSnapshotToMsc: 100n, state: 'RETRY_WAIT',
+        },
+        work,
+      ]);
+      producer.dirtyTargets.mockClear();
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('cancels worker work for open trades and campaigns before selecting closed targets', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const producer = { dirtyTargets: jest.fn() };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 100n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+
+      expect(db.excursionWorkItem.updateMany).toHaveBeenCalledWith({
+        where: {
+          accountId: 'account-1',
+          state: { in: ['PENDING', 'CLAIMED', 'RETRY_WAIT', 'BLOCKED'] },
+          OR: [
+            { scope: 'TRADE', trade: { is: { closedAt: null } } },
+            { scope: 'CAMPAIGN', campaign: { is: { memberships: { some: { trade: { closedAt: null } } } } } },
+          ],
+        },
+        data: {
+          state: 'CANCELLED',
+          reason: 'TARGET_OPEN',
+          claimId: null,
+          claimExpiresAt: null,
+          notBefore: null,
+        },
+      });
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('does not wake the excursion worker when final sync has no changed targets', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db, state } = statefulDb();
+      const producer = { dirtyTargets: jest.fn() };
+      const wake = { runOne: jest.fn() };
+      const service = new Mt5SyncService(db, cipher as never, bridge([{}]) as never, producer as never, wake as never);
+
+      await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+        state: 'completed',
+        excursions: { mode: 'queued', queued: 0, processed: 0 },
+      });
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+      expect(wake.runOne).not.toHaveBeenCalled();
+      expect(state.status.excursionDirtyPositionIds).toBe(Prisma.JsonNull);
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('retains durable dirty positions while excursion writes are disabled', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'false';
+    try {
+      const { db, state } = statefulDb();
+      state.status = {
+        accountId: account.id, server: account.canonicalServer, accountLogin: account.accountLogin,
+        lastSuccessfulSnapshotMsc: 1000n, mode: null, snapshotToMsc: null, pageCursor: null,
+        changedSinceMsc: null, excursionDirtyPositionIds: ['9'],
+      };
+      const producer = { dirtyTargets: jest.fn() };
+      const wake = { runOne: jest.fn() };
+      const service = new Mt5SyncService(db, cipher as never, bridge([{}]) as never, producer as never, wake as never);
+
+      await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+        state: 'completed',
+        excursions: { mode: 'disabled', queued: 0 },
+      });
+      expect(state.status.excursionDirtyPositionIds).toEqual(['9']);
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
+      expect(wake.runOne).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
   });
 
   it('reconstructs a verified ledger from zero and projects the position entry seed', async () => {
@@ -419,6 +734,34 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(state.status.lastError).toBeDefined();
   });
 
+  it('passes positions removed by a full rebuild to excursion invalidation', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db, state } = statefulDb();
+      const producer = { dirtyTargets: jest.fn(async () => ({ queued: 0 })) };
+      const service = new Mt5SyncService(db, cipher as never, bridge([
+        { deals: [deposit, deal] },
+        { deals: [deposit, deal] },
+      ]) as never, producer as never) as any;
+      await service.sync('owner-1', 'account-1');
+      state.deals.push({
+        ...state.deals.find((row) => row.ticket === 11n),
+        ticket: 99n,
+        positionId: 99n,
+        fetchedAt: new Date(0),
+      });
+      const enqueue = jest.spyOn(service, 'enqueueFinalExcursionWork');
+
+      await expect(service.sync('owner-1', 'account-1', true)).resolves.toMatchObject({ state: 'completed' });
+
+      expect(enqueue.mock.calls.at(-1)?.[4]).toEqual(expect.arrayContaining(['99']));
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
 
   it('projects the latest MT5 closing deal reason onto the trade and exit', async () => {
     const { db, state } = statefulDb();
@@ -549,6 +892,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     expect(first).toMatchObject({ state: 'in_progress', progress: { mode: 'incremental', pageCursor: 'incremental-page-2' } });
     expect(state.trade).toBeDefined();
     expect(state.status.lastSuccessfulSnapshotMsc).toBe(BigInt(priorWatermark));
+    expect(state.status.excursionDirtyPositionIds).toEqual(expect.arrayContaining(['9']));
     expect(upstream.sync.mock.calls[0][0]).toMatchObject({
       mode: 'incremental',
       changedSinceMsc: priorWatermark - 72 * 60 * 60 * 1000,
@@ -556,6 +900,7 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
 
     await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({ state: 'completed' });
     expect(state.status.lastSuccessfulSnapshotMsc).toBe(BigInt(first.progress!.snapshotToMsc));
+    expect(state.status.excursionDirtyPositionIds).toEqual(['9']);
   });
 
   it('records divergence and withholds every derived seed instead of guessing', async () => {

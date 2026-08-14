@@ -7,7 +7,7 @@ import { Mt5BridgeActivityService } from '../mt5-accounts/mt5-bridge-activity.se
 import { EXCURSION_WORKER_PORT } from './excursion-worker.service';
 import { ExcursionPrismaAdapter } from './excursion-prisma.adapter';
 import { ExcursionWorkerService } from './excursion-worker.service';
-import { ExcursionWorkService } from './excursion-work.service';
+import { EXCURSION_CALCULATION_VERSION, ExcursionWorkService } from './excursion-work.service';
 
 @Module({
   providers: [
@@ -32,7 +32,7 @@ import { ExcursionWorkService } from './excursion-work.service';
               await tx.excursionWorkProgress.deleteMany({ where: { workItemId: current.id } });
               const attempted = {
                 status: 'STALE',
-                attemptCalculationVersion: 1,
+                attemptCalculationVersion: EXCURSION_CALCULATION_VERSION,
                 attemptInputFingerprint: target.baseInputFingerprint,
                 lastAttemptedAt: new Date(),
                 failureReason: reason,

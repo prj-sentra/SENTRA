@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
+export const EXCURSION_CALCULATION_VERSION = 1;
+export const EXCURSION_INPUT_FINGERPRINT_VERSION = 'excursion-input-v2';
+export const EXCURSION_TRIGGER_FINGERPRINT_VERSION = 'excursion-trigger-v1';
 export type ExcursionScope = 'TRADE' | 'CAMPAIGN';
 export type ExcursionWorkState = 'PENDING' | 'CLAIMED' | 'RETRY_WAIT' | 'BLOCKED' | 'CANCELLED';
 export type ExcursionStatus = 'SUCCESS' | 'STALE' | 'FAILED' | 'UNSUPPORTED';

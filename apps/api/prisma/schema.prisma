@@ -593,6 +593,7 @@ model Mt5SyncStatus {
   pageCursor                   String?    @map("page_cursor")
   changedSinceMsc              BigInt?    @map("changed_since_msc")
   openPositionIds              Json?      @map("open_position_ids")
+  excursionDirtyPositionIds    Json?      @map("excursion_dirty_position_ids")
   lastReceivedDealCount Int        @default(0) @map("last_received_deal_count")
   lastError             String?    @map("last_error")
   rebuildStartedAt      DateTime?  @map("rebuild_started_at")

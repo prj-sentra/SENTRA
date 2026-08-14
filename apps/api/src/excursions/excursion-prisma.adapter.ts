@@ -7,9 +7,7 @@ import { Mt5BridgeClient, Mt5BridgeTickError } from '../mt5-accounts/mt5-bridge.
 import { Mt5BridgeActivityService } from '../mt5-accounts/mt5-bridge-activity.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExcursionWorkerLimits, ExcursionWorkerPort, ExcursionWorkerUnitResult } from './excursion-worker.service';
-import { ExcursionClaim, ExcursionProgress, ExcursionScope, ExcursionWork, ExcursionWorkTransactionPort } from './excursion-work.service';
-
-const CALCULATION_VERSION = 1;
+import { EXCURSION_CALCULATION_VERSION as CALCULATION_VERSION, ExcursionClaim, ExcursionProgress, ExcursionScope, ExcursionWork, ExcursionWorkTransactionPort } from './excursion-work.service';
 export class SyncPriorityYieldError extends Error {
   constructor() { super('MT5 sync priority yield'); }
 }
