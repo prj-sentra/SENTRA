@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "kind": "api-package-test-report",
-  "sourceHash": "sha256:eb3df3b3223ef771136ef90da91d5df6420ca1710acea30fc94b9351eab6cb01",
+  "sourceHash": "sha256:134fc5aa19a173c08cdae81651beb11d0cc751977f699f8f206f1b750728a186",
   "status": "passed",
   "commands": [
-    {"command":"pnpm test","status":"passed","result":"API 28 suites / 242 tests; web 19 files / 78 tests"},
+    {"command":"pnpm test","status":"passed","result":"API 28 suites / 243 tests; web 19 files / 81 tests"},
     {"command":"pnpm typecheck","status":"passed"},
     {"command":"pnpm build","status":"passed"},
     {"command":"GET /api/trade-log/stats?accountId=f68c487b1af315456fef2eeb4b4dc5bf&unit=campaign","status":"passed","result":"51 current successes; medians 9.65/-8.51; profitable capture median 76.23213969; reversal 13; profitable below 50% 13; risk-dominant 23"}
@@ -14,6 +14,8 @@
     "Profitable capture includes only realizedPnl > 0, MFE > 0, and defined capture rate.",
     "Opportunity-to-loss reversals remain separate from profitable capture bands.",
     "All rates use explicit eligible denominators and round to two decimals.",
-    "No drilldown, new route, or filter was introduced."
+    "No drilldown, new route, or filter was introduced.",
+    "MAE bins stay ascending toward the zero line; exact capture boundaries are assigned once.",
+    "Negative-MFE, out-of-range realized PnL, equal-timestamp, endpoint, and zero-span detail ranges are covered."
   ]
 }

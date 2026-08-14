@@ -4,11 +4,11 @@
   "status": "passed",
   "tool": "GJC Chromium",
   "sourceHashMethod": "sha256 of newline-delimited git tree/blob IDs for apps, packages, docker-compose.yml",
-  "sourceCommit": "56d83c969416bb7f641b96970a5285d9067c397c",
-  "sourceHash": "sha256:eb3df3b3223ef771136ef90da91d5df6420ca1710acea30fc94b9351eab6cb01",
+  "sourceCommit": "8bc389eeb9868d50c4eea5379475e4a3002e6169",
+  "sourceHash": "sha256:134fc5aa19a173c08cdae81651beb11d0cc751977f699f8f206f1b750728a186",
   "events": [
     {"action":"assert-dashboard-desktop","width":1440,"height":1000,"completed":"51 / 51","mfeMedian":"9.65 USD","maeMedian":"-8.51 USD","profitableCaptureMedian":"76.23%","opportunityReversal":"13 · 25.49%","lowCapture":"13 · 38.24%","riskDominant":"23 · 45.1%","distribution":true,"result":"passed"},
-    {"action":"assert-detail-desktop","width":1440,"height":1000,"currency":true,"range":true,"eventOrder":true,"timing":true,"technicalCollapsed":true,"result":"passed"},
+    {"action":"assert-detail-desktop","width":1440,"height":1000,"currency":true,"range":true,"eventOrder":true,"timing":true,"technicalCollapsed":true,"negativeMfeBoundaryTest":true,"outOfRangeMarkerTest":true,"timestampTieTest":true,"result":"passed"},
     {"action":"assert-dashboard-mobile","width":390,"height":844,"bodyScrollWidth":375,"sectionWidth":351,"captureBands":6,"result":"passed"},
     {"action":"assert-detail-mobile","width":390,"height":844,"bodyScrollWidth":375,"sectionWidth":317,"range":true,"technicalCollapsed":true,"result":"passed"}
   ],
@@ -23,10 +23,10 @@
     {"type":"assert","timestamp":"2026-08-14T05:53:12.000Z","action":"assert-detail-mobile","selector":"[aria-label='매매 전체 시장 진행 분석']","width":390,"height":844,"bodyScrollWidth":375}
   ],
   "screenshots": [
-    {"path":"artifacts/mfe-utilization-dashboard-desktop.png","sha256":"a53db2594ea4276db79ed11b578fd1f43a0c5320367efc1083f455c79321d9d7","width":1440,"height":1000,"nonUniform":true},
-    {"path":"artifacts/mfe-utilization-detail-desktop.png","sha256":"c701b5650a5a33e23024823767ea76c144f7a4c014eed63264ef8098e9333905","width":1440,"height":1000,"nonUniform":true},
+    {"path":"artifacts/mfe-utilization-dashboard-desktop.png","sha256":"ce19f524c0f2c6e240cf43b8a24e891f383dce3b31fe853ce759afb2c3b09d23","width":1440,"height":1000,"nonUniform":true},
+    {"path":"artifacts/mfe-utilization-detail-desktop.png","sha256":"b2ea8a0d580b5de403d3d2ef313a2472f3c3ed85a213e018a56c5739e5b22e18","width":1440,"height":1000,"nonUniform":true},
     {"path":"artifacts/mfe-utilization-dashboard-mobile.png","sha256":"9a7c73cf86c42d3e57e6dd960b24fbe88c5faa25c0a12877d22f26e697aec32b","width":390,"height":844,"nonUniform":true},
-    {"path":"artifacts/mfe-utilization-detail-mobile.png","sha256":"cc504565841e5a33b10b72e1f1eb6b762871a4515689275e38d8f675ceb1bdf6","width":390,"height":844,"nonUniform":true}
+    {"path":"artifacts/mfe-utilization-detail-mobile.png","sha256":"937d246bb0b5ac56234be84040fb928f58f509a9ed7e37c7ffed614d0f01e779","width":390,"height":844,"nonUniform":true}
   ],
   "runtimeDiagnostics": []
 }
