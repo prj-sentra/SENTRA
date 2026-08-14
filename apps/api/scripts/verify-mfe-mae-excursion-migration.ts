@@ -35,7 +35,12 @@ async function main(): Promise<void> {
   const client = new Client({ connectionString });
   await client.connect();
   try {
-    await client.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;');
+    const existing = await client.query<{ count: string }>(`
+      SELECT count(*)::text count
+      FROM information_schema.tables
+      WHERE table_schema='public'
+    `);
+    if (existing.rows[0]?.count !== '0') throw new Error('MIGRATION_VERIFY_DATABASE_URL must reference an empty isolated database');
     for (const name of names) await migrate(client, name);
     const tables = await client.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('trade_excursion_results','trade_campaign_excursion_results','excursion_work_items','excursion_work_progress') ORDER BY table_name`);
     if (JSON.stringify(tables.rows.map((row) => row.table_name)) !== JSON.stringify(['excursion_work_items', 'excursion_work_progress', 'trade_campaign_excursion_results', 'trade_excursion_results'])) throw new Error('excursion tables are missing');
@@ -45,7 +50,7 @@ async function main(): Promise<void> {
     }
     await client.query(`
       INSERT INTO "app_users" ("id", "username", "normalized_username", "password_hash", "updated_at") VALUES ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'verify-user', 'verify-user', 'hash', CURRENT_TIMESTAMP);
-      INSERT INTO "mt5_accounts" ("id", "owner_id", "nickname", "server", "canonical_server", "account_login", "credential_ciphertext", "credential_iv", "credential_tag", "updated_at") VALUES ('verify-account', 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'Verifier', 'broker', 'broker', 42, '\x00', '\x00', '\x00', CURRENT_TIMESTAMP);
+      INSERT INTO "mt5_accounts" ("id", "owner_id", "nickname", "server", "canonical_server", "account_login", "credential_ciphertext", "credential_iv", "credential_tag", "updated_at") VALUES ('verify-account', 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'Verifier', 'broker', 'broker', 42, '\\x00', '\\x00', '\\x00', CURRENT_TIMESTAMP);
       INSERT INTO "mt5_sync_status" ("account_id", "server", "account_login", "last_successful_snapshot_msc", "updated_at") VALUES ('verify-account', 'broker', 42, 1000, CURRENT_TIMESTAMP);
       INSERT INTO "trades" ("id", "symbol", "side", "status", "owner_id", "mt5_account_id", "opened_at", "closed_at", "updatedAt") VALUES ('verify-trade', 'EURUSD', 'long', 'closed', 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'verify-account', CURRENT_TIMESTAMP - INTERVAL '1 hour', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
       INSERT INTO "trade_analyses" ("id", "trade_id", "updated_at") VALUES ('verify-analysis', 'verify-trade', CURRENT_TIMESTAMP);
@@ -56,12 +61,49 @@ async function main(): Promise<void> {
     await client.query(`UPDATE "trades" SET "seed_balance"=1000 WHERE "id"='verify-trade'`);
     const unchanged = await client.query<{ status: string; work: string }>(`SELECT r."status", (SELECT count(*)::text FROM "excursion_work_items" w WHERE w."trade_id"='verify-trade') work FROM "trade_excursion_results" r WHERE r."trade_id"='verify-trade'`);
     if (unchanged.rows[0]?.status !== 'SUCCESS' || unchanged.rows[0]?.work !== '0') throw new Error('non-excursion trade update invalidated excursion result');
+    await client.query(`
+      INSERT INTO "excursion_work_items" ("id","scope","target_id","trade_id","account_id","generation","tick_snapshot_to_msc","base_input_fingerprint","reason","state","claim_id","claim_expires_at","updated_at")
+      VALUES ('verify-trade-work','TRADE','verify-trade','verify-trade','verify-account',7,1000,'excursion-trigger-v1:calc-1:old','verify','CLAIMED','old-claim',CURRENT_TIMESTAMP + INTERVAL '1 hour',CURRENT_TIMESTAMP);
+      INSERT INTO "excursion_work_progress" ("work_item_id","generation","raw_from_msc","raw_to_msc","next_raw_from_msc","fifo_state","extrema_state","path_digest_state","valuation_digests")
+      VALUES ('verify-trade-work',7,1,2,1,'{}','{}','digest','{}');
+    `);
     await client.query(`UPDATE "trades" SET "realized_pnl"=1 WHERE "id"='verify-trade'`);
-    const changed = await client.query<{ status: string; work: string }>(`SELECT r."status", (SELECT count(*)::text FROM "excursion_work_items" w WHERE w."trade_id"='verify-trade') work FROM "trade_excursion_results" r WHERE r."trade_id"='verify-trade'`);
-    if (changed.rows[0]?.status !== 'STALE' || changed.rows[0]?.work !== '0') throw new Error('excursion input update did not invalidate result without legacy work');
+    const changed = await client.query<{ status: string; state: string; generation: number; claim: string | null; progress: string; fingerprint: string }>(`
+      SELECT r."status", w."state", w."generation", w."claim_id" claim,
+             (SELECT count(*)::text FROM "excursion_work_progress" p WHERE p."work_item_id"=w."id") progress,
+             w."base_input_fingerprint" fingerprint
+      FROM "trade_excursion_results" r
+      JOIN "excursion_work_items" w ON w."trade_id"=r."trade_id"
+      WHERE r."trade_id"='verify-trade'
+    `);
+    if (changed.rows[0]?.status !== 'STALE'
+      || changed.rows[0]?.state !== 'PENDING'
+      || changed.rows[0]?.generation <= 7
+      || changed.rows[0]?.claim !== null
+      || changed.rows[0]?.progress !== '0'
+      || !changed.rows[0]?.fingerprint.startsWith('excursion-trigger-v1:calc-1:')) {
+      throw new Error('excursion input update did not fence and replace claimed work');
+    }
+    await client.query(`DELETE FROM "excursion_work_items" WHERE "trade_id"='verify-trade'`);
     await client.query(`INSERT INTO "campaign_memberships" ("id","trade_id","campaign_id","source","updated_at") VALUES ('verify-membership','verify-trade','verify-campaign','auto',CURRENT_TIMESTAMP)`);
     const membershipWork = await client.query<{ fingerprint: string }>(`SELECT "base_input_fingerprint" fingerprint FROM "excursion_work_items" WHERE "campaign_id"='verify-campaign'`);
     if (!membershipWork.rows[0]?.fingerprint.startsWith('excursion-trigger-v1:calc-1:')) throw new Error('membership trigger did not use versioned fingerprint');
+    await client.query(`
+      UPDATE "excursion_work_items"
+      SET "state"='CLAIMED',"claim_id"='campaign-claim',"claim_expires_at"=CURRENT_TIMESTAMP + INTERVAL '1 hour'
+      WHERE "campaign_id"='verify-campaign';
+      INSERT INTO "excursion_work_progress" ("work_item_id","generation","raw_from_msc","raw_to_msc","next_raw_from_msc","fifo_state","extrema_state","path_digest_state","valuation_digests")
+      SELECT "id","generation",1,2,1,'{}','{}','digest','{}' FROM "excursion_work_items" WHERE "campaign_id"='verify-campaign';
+      UPDATE "trades" SET "status"='open',"closed_at"=NULL WHERE "id"='verify-trade';
+    `);
+    const opened = await client.query<{ state: string; claim: string | null; progress: string }>(`
+      SELECT w."state",w."claim_id" claim,
+             (SELECT count(*)::text FROM "excursion_work_progress" p WHERE p."work_item_id"=w."id") progress
+      FROM "excursion_work_items" w WHERE w."campaign_id"='verify-campaign'
+    `);
+    if (opened.rows[0]?.state !== 'CANCELLED' || opened.rows[0]?.claim !== null || opened.rows[0]?.progress !== '0') {
+      throw new Error('closed-to-open mutation did not fence campaign work');
+    }
     await client.query(`UPDATE "mt5_accounts" SET "nickname"='Renamed' WHERE "id"='verify-account'`);
     const accountWork = await client.query<{ count: string }>(`SELECT count(*)::text count FROM "excursion_work_items" WHERE "account_id"='verify-account'`);
     if (accountWork.rows[0]?.count !== '1') throw new Error('irrelevant account update created excursion work');
@@ -73,7 +115,7 @@ async function main(): Promise<void> {
     const cascaded = await client.query<{ results: string; campaign: string }>(`SELECT (SELECT count(*)::text FROM "trade_excursion_results") results, (SELECT count(*)::text FROM "trade_campaign_excursion_results") campaign`);
     if (cascaded.rows[0]?.results !== '0' || cascaded.rows[0]?.campaign !== '0') throw new Error('trade cascade did not remove excursion results');
   } finally {
-    try { await client.query('DROP SCHEMA IF EXISTS public CASCADE;'); } finally { await client.end(); }
+    await client.end();
   }
   console.log('MFE/MAE excursion migration verification passed');
 }

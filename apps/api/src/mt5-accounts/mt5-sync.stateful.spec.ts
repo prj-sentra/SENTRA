@@ -496,6 +496,51 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
     }
   });
 
+  it('preserves current trade-trigger work until an actual raw position change', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
+    try {
+      const { db } = statefulDb();
+      const trade = {
+        id: 'closed-trade', mt5PositionId: 10n, openedAt: new Date(1), closedAt: new Date(2),
+        status: 'CLOSED', side: 'LONG', symbol: 'EURUSD', quantityLots: 1, entryPrice: 1,
+        exitPrice: 2, realizedPnl: 5, riskAmount: null, riskPercent: null,
+        initialPlanId: null, initialPlanMetricContractVersion: null,
+        excursionResult: {
+          status: 'STALE', attemptCalculationVersion: 1,
+          attemptInputFingerprint: 'excursion-trigger-v1:calc-1:trade',
+          successCalculationVersion: 1, successInputFingerprint: 'old-success',
+        },
+      };
+      const work = {
+        scope: 'TRADE', targetId: trade.id, generation: 4,
+        baseInputFingerprint: 'excursion-trigger-v1:calc-1:trade',
+        tickSnapshotToMsc: 100n, state: 'PENDING',
+      };
+      db.trade.findMany.mockResolvedValue([trade]);
+      db.tradeCampaign.findMany.mockResolvedValue([]);
+      db.excursionWorkItem.findMany.mockResolvedValue([work]);
+      const producer = { dirtyTargets: jest.fn(async (_tx: any, _accountId: string, _snapshot: bigint, targets: any[]) => ({ queued: targets.length })) };
+      const service = new Mt5SyncService(db, cipher as never, {} as never, producer as never) as any;
+
+      for (const state of ['PENDING', 'CLAIMED', 'RETRY_WAIT', 'BLOCKED']) {
+        work.state = state;
+        producer.dirtyTargets.mockClear();
+        await expect(service.enqueueFinalExcursionWork(db, 'account-1', 200n, 'SYNC_CHANGED', [])).resolves.toMatchObject({ queued: 0 });
+        expect(producer.dirtyTargets).not.toHaveBeenCalled();
+      }
+
+      producer.dirtyTargets.mockClear();
+      await expect(service.enqueueFinalExcursionWork(db, 'account-1', 300n, 'SYNC_CHANGED', ['10'])).resolves.toMatchObject({ queued: 1 });
+      expect(producer.dirtyTargets.mock.calls[0][3][0]).toMatchObject({
+        scope: 'TRADE', targetId: trade.id, generation: 5,
+      });
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
   it('cancels worker work for open trades and campaigns before selecting closed targets', async () => {
     const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
     process.env.MT5_EXCURSION_WRITE_ENABLED = 'true';
@@ -573,6 +618,32 @@ describe('Mt5SyncService account-scoped balance ledger', () => {
       expect(state.status.excursionDirtyPositionIds).toEqual(['9']);
       expect(producer.dirtyTargets).not.toHaveBeenCalled();
       expect(wake.runOne).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
+      else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;
+    }
+  });
+
+  it('persists bootstrap dirty positions on the final status create when writes are disabled', async () => {
+    const previous = process.env.MT5_EXCURSION_WRITE_ENABLED;
+    process.env.MT5_EXCURSION_WRITE_ENABLED = 'false';
+    try {
+      const { db, state } = statefulDb();
+      const producer = { dirtyTargets: jest.fn() };
+      const service = new Mt5SyncService(
+        db,
+        cipher as never,
+        bridge([{ deals: [deposit, deal] }]) as never,
+        producer as never,
+      );
+
+      await expect(service.sync('owner-1', 'account-1')).resolves.toMatchObject({
+        state: 'completed',
+        excursions: { mode: 'disabled', queued: 0 },
+      });
+
+      expect(state.status.excursionDirtyPositionIds).toEqual(['9']);
+      expect(producer.dirtyTargets).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) delete process.env.MT5_EXCURSION_WRITE_ENABLED;
       else process.env.MT5_EXCURSION_WRITE_ENABLED = previous;

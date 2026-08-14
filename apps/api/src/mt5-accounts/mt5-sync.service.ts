@@ -332,7 +332,7 @@ export class Mt5SyncService {
         const lastDealTime = payload.deals.length ? new Date(Math.max(...payload.deals.map((deal) => deal.timeMsc))) : undefined;
         await tx.mt5SyncStatus.upsert({
           where: { server_accountLogin: { server: account.canonicalServer, accountLogin: account.accountLogin } },
-          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, lastReceivedDealCount: payload.deals.length },
+          create: { accountId, server: account.canonicalServer, accountLogin: account.accountLogin, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), lastDealTime, excursionDirtyPositionIds: [...changedPositions], lastReceivedDealCount: payload.deals.length },
           update: { mode: null, snapshotToMsc: null, pageCursor: null, changedSinceMsc: null, openPositionIds: Prisma.JsonNull, excursionDirtyPositionIds: [...changedPositions], rebuildStartedAt: null, lastSyncAt: syncedAt, lastSuccessfulSnapshotMsc: BigInt(snapshotToMsc), ...(lastDealTime && { lastDealTime }), lastReceivedDealCount: payload.deals.length, lastError: null },
         });
         const excursions = this.excursionWorkProducer
@@ -596,7 +596,14 @@ export class Mt5SyncService {
       };
     };
     const targets = [
-      ...candidateTrades.map((trade) => target('TRADE', trade.id, tradeFingerprints.get(trade.id)!, trade.excursionResult)),
+      ...candidateTrades.map((trade) => target(
+        'TRADE',
+        trade.id,
+        tradeFingerprints.get(trade.id)!,
+        trade.excursionResult,
+        reason === 'SYNC_CHANGED'
+          && (trade.mt5PositionId == null || !changedPositions.has(trade.mt5PositionId.toString())),
+      )),
       ...campaigns.filter((campaign) => candidateCampaignIds.has(campaign.id)).map((campaign) => {
         const memberInputChanged = campaign.memberships.some((membership) => driftedTradeIds.has(membership.tradeId));
         const memberFingerprints = campaign.memberships
